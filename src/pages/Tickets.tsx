@@ -169,7 +169,7 @@ export default function Tickets() {
         <div className="text-center py-20 glass rounded-[3rem]">
            <p className="text-neutral-500 font-bold">Nema tiketa za izabrani filter.</p>
            {isRealApiMode && tips.length === 0 && (
-             <p className="text-neutral-600 text-xs font-bold uppercase tracking-widest mt-3">Nema dostupnih realnih podataka.</p>
+             <p className="text-neutral-600 text-xs font-bold uppercase tracking-widest mt-3">Trenutno nema dostupnih tiketa.</p>
            )}
         </div>
       )}

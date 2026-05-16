@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { resultsProvider } from '../services/resultsProvider';
-import { footballApiService } from '../services/footballApiService';
 import { MatchResult, MatchStatus } from '../types';
 import { Calendar, RefreshCw, Trophy, AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 
 export default function LiveResults() {
-  const isRealApiMode = footballApiService.isRealApiMode();
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -45,15 +43,8 @@ export default function LiveResults() {
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
         <div className="max-w-2xl">
-          <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">UŽIVO <span className="gold-text">REZULTATI</span></h1>
-          <p className="text-neutral-400">Pratite najnovije rezultate i stats direktno sa terena. Podaci se ažuriraju u realnom vremenu.</p>
-          <div className={`inline-flex mt-5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-            isRealApiMode
-              ? 'bg-green-500/10 text-green-500 border-green-500/20'
-              : 'bg-gold-500/10 text-gold-500 border-gold-500/20'
-          }`}>
-            {isRealApiMode ? 'Real API mode' : 'Demo mode'}
-          </div>
+          <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">UZIVO <span className="gold-text">REZULTATI</span></h1>
+          <p className="text-neutral-400">Pratite najnovije rezultate i stats direktno sa terena. Podaci se azuriraju u realnom vremenu.</p>
         </div>
 
         <div className="flex items-center gap-4 bg-white/[0.02] p-2 rounded-2xl border border-white/5">
@@ -69,7 +60,7 @@ export default function LiveResults() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-40">
            <div className="w-12 h-12 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-           <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs">Učitavanje rezultata...</p>
+           <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs">Ucitavanje rezultata...</p>
         </div>
       ) : matches.length > 0 ? (
         <div className="space-y-4">
@@ -106,7 +97,7 @@ export default function LiveResults() {
                 <div className="hidden lg:flex w-1/4 justify-end">
                    {match.status === MatchStatus.FINISHED && (
                      <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-xl text-green-500 text-[10px] font-black uppercase">
-                        <Trophy size={14} /> Završen meč
+                        <Trophy size={14} /> Zavrsen mec
                      </div>
                    )}
                 </div>
@@ -117,19 +108,13 @@ export default function LiveResults() {
       ) : (
         <div className="text-center py-32 glass rounded-[3rem]">
            <AlertCircle className="text-neutral-700 mx-auto mb-4" size={48} />
-           <h3 className="text-xl font-bold mb-2">
-             {isRealApiMode ? 'Nema dostupnih realnih utakmica iz API-ja.' : 'Rezultati trenutno nisu dostupni'}
-           </h3>
-           <p className="text-neutral-500 max-w-sm mx-auto">
-             {isRealApiMode
-               ? `football-data.org nije vratio utakmice za izabrani datum (${selectedDate}).`
-               : `Za izabrani datum (${selectedDate}) nema podataka o mečevima u našoj bazi.`}
-           </p>
+           <h3 className="text-xl font-bold mb-2">Trenutno nema dostupnih rezultata.</h3>
+           <p className="text-neutral-500 max-w-sm mx-auto">Za izabrani datum ({selectedDate}) nema dostupnih rezultata.</p>
            <button
              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
              className="mt-8 text-gold-500 font-bold uppercase text-xs tracking-widest hover:underline"
            >
-             Vrati se na današnje rezultate
+             Vrati se na danasnje rezultate
            </button>
         </div>
       )}

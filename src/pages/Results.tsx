@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { AlertCircle, Calendar, CheckCircle2, Clock, RefreshCw, Search, Trophy } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, Clock, RefreshCw, Search } from 'lucide-react';
 import { footballApiService, SUPPORTED_COMPETITIONS } from '../services/footballApiService';
 import { MatchResult, MatchStatus } from '../types';
 
@@ -16,18 +16,17 @@ const MONTHS = [
 const getStatusMeta = (status: MatchStatus) => {
   switch (status) {
     case MatchStatus.LIVE:
-      return { label: 'Uživo', className: 'text-red-500', icon: <RefreshCw size={14} className="animate-spin" /> };
+      return { label: 'Uzivo', className: 'text-red-500', icon: <RefreshCw size={14} className="animate-spin" /> };
     case MatchStatus.FINISHED:
-      return { label: 'Završeno', className: 'text-green-500', icon: <CheckCircle2 size={14} /> };
+      return { label: 'Zavrseno', className: 'text-green-500', icon: <CheckCircle2 size={14} /> };
     case MatchStatus.POSTPONED:
-      return { label: 'Odloženo', className: 'text-red-400', icon: <AlertCircle size={14} /> };
+      return { label: 'Odlozeno', className: 'text-red-400', icon: <AlertCircle size={14} /> };
     default:
       return { label: 'Zakazano', className: 'text-neutral-500', icon: <Clock size={14} /> };
   }
 };
 
 export default function Results() {
-  const isRealApiMode = footballApiService.isRealApiMode();
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -75,19 +74,7 @@ export default function Results() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
         <div className="max-w-2xl">
           <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">PRETHODNI <span className="gold-text">REZULTATI</span></h1>
-          <p className="text-neutral-400">Završene utakmice povučene isključivo preko football-data.org API-ja.</p>
-          <div className={`inline-flex mt-5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-            isRealApiMode
-              ? 'bg-green-500/10 text-green-500 border-green-500/20'
-              : 'bg-gold-500/10 text-gold-500 border-gold-500/20'
-          }`}>
-            {isRealApiMode ? 'Real API mode' : 'Demo mode'}
-          </div>
-        </div>
-
-        <div className="text-right hidden md:block">
-          <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest">Izvor</div>
-          <div className="text-sm font-bold text-gold-500">football-data.org</div>
+          <p className="text-neutral-400">Pregled zavrsenih utakmica, rezultata i statusa po ligama.</p>
         </div>
       </div>
 
@@ -120,7 +107,7 @@ export default function Results() {
           className="bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-3 text-sm font-bold text-neutral-200 outline-none focus:border-gold-500/50"
         >
           <option value="all">Svi statusi</option>
-          <option value={MatchStatus.FINISHED}>Završeno</option>
+          <option value={MatchStatus.FINISHED}>Zavrseno</option>
         </select>
 
         <div className="relative">
@@ -137,7 +124,7 @@ export default function Results() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-32 glass rounded-[3rem]">
           <div className="w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs">Učitavanje realnih rezultata...</p>
+          <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs">Ucitavanje rezultata...</p>
         </div>
       ) : filteredMatches.length > 0 ? (
         <div className="space-y-4">
@@ -173,9 +160,6 @@ export default function Results() {
                     <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${status.className}`}>
                       {status.icon} {status.label}
                     </div>
-                    <span className="px-2 py-1 rounded-lg bg-white/5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
-                      football-data.org
-                    </span>
                   </div>
                 </div>
               </motion.div>
@@ -185,10 +169,8 @@ export default function Results() {
       ) : (
         <div className="text-center py-24 glass rounded-[3rem]">
           <AlertCircle className="text-neutral-700 mx-auto mb-4" size={44} />
-          <h3 className="text-xl font-bold mb-2">
-            {isRealApiMode ? 'Nema dostupnih realnih utakmica iz API-ja.' : 'Nema dostupnih realnih podataka.'}
-          </h3>
-          <p className="text-neutral-500 max-w-sm mx-auto">Promenite filtere ili pokušajte kasnije.</p>
+          <h3 className="text-xl font-bold mb-2">Trenutno nema dostupnih rezultata.</h3>
+          <p className="text-neutral-500 max-w-sm mx-auto">Promenite filtere ili pokusajte kasnije.</p>
         </div>
       )}
     </div>
