@@ -4,7 +4,7 @@ const API_BASE_URL = 'https://api.football-data.org/v4';
 const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY as string | undefined;
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
-const CACHE_PREFIX = 'elite_football_api_v2_';
+const CACHE_PREFIX = 'elite_football_api_v3_';
 const FETCH_ISSUES_KEY = `${CACHE_PREFIX}issues`;
 const CACHE_TTL_MS = 1000 * 60 * 30;
 
@@ -16,78 +16,6 @@ export const SUPPORTED_COMPETITIONS: FootballCompetition[] = [
   { id: 2015, code: 'FL1', name: 'Ligue 1', areaName: 'France' },
   { id: 2001, code: 'CL', name: 'Champions League', areaName: 'Europe' },
 ];
-
-const MOCK_MATCHES: MatchResult[] = [
-  {
-    id: 'previous-augsburg-monchengladbach-2026-05-09',
-    competitionCode: 'BL1',
-    source: 'mock',
-    homeTeam: 'Augsburg',
-    awayTeam: 'B. Monchengladbach',
-    league: 'Bundesliga',
-    date: '2026-05-09',
-    time: '15:30',
-    status: MatchStatus.FINISHED,
-    score: { home: 3, away: 1 },
-  },
-  {
-    id: 'previous-lazio-inter-2026-05-09',
-    competitionCode: 'SA',
-    source: 'mock',
-    homeTeam: 'Lazio',
-    awayTeam: 'Inter',
-    league: 'Serie A',
-    date: '2026-05-09',
-    time: '18:00',
-    status: MatchStatus.FINISHED,
-    score: { home: 0, away: 3 },
-  },
-  {
-    id: 'previous-lecce-juventus-2026-05-09',
-    competitionCode: 'SA',
-    source: 'mock',
-    homeTeam: 'Lecce',
-    awayTeam: 'Juventus',
-    league: 'Serie A',
-    date: '2026-05-09',
-    time: '20:45',
-    status: MatchStatus.FINISHED,
-    score: { home: 0, away: 1 },
-  },
-];
-
-const MOCK_STANDINGS_BY_COMPETITION: Record<string, FootballStanding[]> = {
-  PL: [
-    { position: 1, teamId: 64, teamName: 'Liverpool', playedGames: 38, won: 26, draw: 7, lost: 5, points: 85, goalsFor: 86, goalsAgainst: 41, goalDifference: 45 },
-    { position: 2, teamId: 57, teamName: 'Arsenal', playedGames: 38, won: 25, draw: 8, lost: 5, points: 83, goalsFor: 79, goalsAgainst: 34, goalDifference: 45 },
-    { position: 3, teamId: 65, teamName: 'Man City', playedGames: 38, won: 24, draw: 8, lost: 6, points: 80, goalsFor: 82, goalsAgainst: 38, goalDifference: 44 },
-  ],
-  PD: [
-    { position: 1, teamId: 81, teamName: 'Barcelona', playedGames: 38, won: 27, draw: 5, lost: 6, points: 86, goalsFor: 88, goalsAgainst: 39, goalDifference: 49 },
-    { position: 2, teamId: 86, teamName: 'Real Madrid', playedGames: 38, won: 26, draw: 6, lost: 6, points: 84, goalsFor: 78, goalsAgainst: 36, goalDifference: 42 },
-    { position: 3, teamId: 78, teamName: 'Atletico Madrid', playedGames: 38, won: 22, draw: 9, lost: 7, points: 75, goalsFor: 68, goalsAgainst: 34, goalDifference: 34 },
-  ],
-  SA: [
-    { position: 1, teamId: 108, teamName: 'Inter', playedGames: 38, won: 28, draw: 7, lost: 3, points: 91, goalsFor: 89, goalsAgainst: 22, goalDifference: 67 },
-    { position: 2, teamId: 98, teamName: 'Milan', playedGames: 38, won: 23, draw: 8, lost: 7, points: 77, goalsFor: 76, goalsAgainst: 49, goalDifference: 27 },
-    { position: 3, teamId: 109, teamName: 'Juventus', playedGames: 38, won: 20, draw: 13, lost: 5, points: 73, goalsFor: 59, goalsAgainst: 31, goalDifference: 28 },
-  ],
-  BL1: [
-    { position: 1, teamId: 5, teamName: 'Bayern Munich', playedGames: 34, won: 25, draw: 6, lost: 3, points: 81, goalsFor: 92, goalsAgainst: 32, goalDifference: 60 },
-    { position: 2, teamId: 4, teamName: 'Dortmund', playedGames: 34, won: 21, draw: 7, lost: 6, points: 70, goalsFor: 78, goalsAgainst: 42, goalDifference: 36 },
-    { position: 3, teamId: 721, teamName: 'Leipzig', playedGames: 34, won: 20, draw: 6, lost: 8, points: 66, goalsFor: 77, goalsAgainst: 39, goalDifference: 38 },
-  ],
-  FL1: [
-    { position: 1, teamId: 524, teamName: 'PSG', playedGames: 34, won: 22, draw: 10, lost: 2, points: 76, goalsFor: 81, goalsAgainst: 33, goalDifference: 48 },
-    { position: 2, teamId: 516, teamName: 'Monaco', playedGames: 34, won: 20, draw: 7, lost: 7, points: 67, goalsFor: 68, goalsAgainst: 42, goalDifference: 26 },
-    { position: 3, teamId: 523, teamName: 'Lyon', playedGames: 34, won: 18, draw: 7, lost: 9, points: 61, goalsFor: 67, goalsAgainst: 46, goalDifference: 21 },
-  ],
-  CL: [
-    { position: 1, teamId: 86, teamName: 'Real Madrid', playedGames: 8, won: 6, draw: 1, lost: 1, points: 19, goalsFor: 19, goalsAgainst: 8, goalDifference: 11 },
-    { position: 2, teamId: 65, teamName: 'Man City', playedGames: 8, won: 5, draw: 2, lost: 1, points: 17, goalsFor: 20, goalsAgainst: 10, goalDifference: 10 },
-    { position: 3, teamId: 5, teamName: 'Bayern Munich', playedGames: 8, won: 5, draw: 1, lost: 2, points: 16, goalsFor: 18, goalsAgainst: 11, goalDifference: 7 },
-  ],
-};
 
 type FetchMatchesOptions = {
   competitionCode?: string;
@@ -211,22 +139,14 @@ const mapMatch = (match: any): MatchResult => {
   };
 };
 
-const filterMockMatches = (options: FetchMatchesOptions = {}) => MOCK_MATCHES.filter((match) => {
-  const matchesCompetition = !options.competitionCode || match.competitionCode === options.competitionCode;
-  const matchesDateFrom = !options.dateFrom || match.date >= options.dateFrom;
-  const matchesDateTo = !options.dateTo || match.date <= options.dateTo;
-  const matchesStatus = !options.status || match.status === mapStatus(options.status);
-  return matchesCompetition && matchesDateFrom && matchesDateTo && matchesStatus;
-});
-
-const fallbackMatches = (cacheName: string, options: FetchMatchesOptions = {}) =>
-  readCache<MatchResult[]>(cacheName) || filterMockMatches(options);
+const fallbackMatches = (cacheName: string) =>
+  readCache<MatchResult[]>(cacheName) || [];
 
 const fallbackCompetitions = (cacheName: string) =>
   USE_REAL_API ? SUPPORTED_COMPETITIONS : readCache<FootballCompetition[]>(cacheName) || SUPPORTED_COMPETITIONS;
 
 const fallbackStandings = (cacheName: string, competitionCode: string) =>
-  USE_REAL_API ? [] : readCache<FootballStanding[]>(cacheName) || MOCK_STANDINGS_BY_COMPETITION[competitionCode] || [];
+  USE_REAL_API ? [] : readCache<FootballStanding[]>(cacheName) || [];
 
 export const footballApiService = {
   isRealApiMode: () => USE_REAL_API,
@@ -267,7 +187,7 @@ export const footballApiService = {
       writeCache(cacheName, matches);
       return matches;
     } catch {
-      return USE_REAL_API ? [] : fallbackMatches(cacheName, options);
+      return USE_REAL_API ? [] : fallbackMatches(cacheName);
     }
   },
 
@@ -278,7 +198,7 @@ export const footballApiService = {
       writeCache(cacheName, matches);
       return matches;
     } catch {
-      return USE_REAL_API ? [] : fallbackMatches(cacheName, { ...options, status: 'FINISHED' });
+      return USE_REAL_API ? [] : fallbackMatches(cacheName);
     }
   },
 
@@ -311,7 +231,7 @@ export const footballApiService = {
         competitionName: competition.name,
         message: 'Football API ključ nije podešen.',
       })));
-      return USE_REAL_API ? cached || [] : fallbackMatches(cacheName, { dateFrom: startDate, dateTo: endDate, status: 'FINISHED' });
+      return USE_REAL_API ? cached || [] : fallbackMatches(cacheName);
     }
 
     const results = await Promise.all(SUPPORTED_COMPETITIONS.map(fetchCompetition));
@@ -323,7 +243,7 @@ export const footballApiService = {
       return matches;
     }
 
-    return USE_REAL_API ? cached || [] : fallbackMatches(cacheName, { dateFrom: startDate, dateTo: endDate, status: 'FINISHED' });
+    return USE_REAL_API ? cached || [] : fallbackMatches(cacheName);
   },
 
   fetchStandings: async (competitionCode = 'PL'): Promise<FootballStanding[]> => {
@@ -354,7 +274,7 @@ export const footballApiService = {
   getCachedOrMockMatches: (): MatchResult[] => {
     if (USE_REAL_API) return [];
     const cached = readAnyCachedMatches();
-    return cached.length > 0 ? cached : MOCK_MATCHES;
+    return cached;
   },
 
   getFetchIssues: (): FootballApiIssue[] => readStoredIssues(),

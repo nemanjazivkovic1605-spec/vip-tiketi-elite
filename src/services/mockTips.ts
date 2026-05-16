@@ -1,9 +1,8 @@
 import { Tip, TicketStatus, GlobalStats } from '../types';
-import { DEMO_TIPS } from '../lib/demoData';
 
 const TIPS_KEY = 'elite_tips_data';
 const TIPS_SEED_VERSION_KEY = 'elite_tips_seed_version';
-const TIPS_SEED_VERSION = '2026-05-15-full-demo';
+const TIPS_SEED_VERSION = '2026-05-16-no-seed';
 const TIPS_UPDATED_EVENT = 'elite_tips_updated';
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
@@ -45,7 +44,7 @@ const writeTips = (tips: Tip[]) => {
   window.dispatchEvent(new Event(TIPS_UPDATED_EVENT));
 };
 
-const ensureDemoTips = (): Tip[] => {
+const ensureTips = (): Tip[] => {
   const storedTips = safeReadTips();
   const seedVersion = localStorage.getItem(TIPS_SEED_VERSION_KEY);
 
@@ -64,15 +63,14 @@ const ensureDemoTips = (): Tip[] => {
     return normalized;
   }
 
-  const demoTips = DEMO_TIPS.map(normalizeTip);
-  localStorage.setItem(TIPS_KEY, JSON.stringify(demoTips));
+  localStorage.setItem(TIPS_KEY, JSON.stringify([]));
   localStorage.setItem(TIPS_SEED_VERSION_KEY, TIPS_SEED_VERSION);
-  return demoTips;
+  return [];
 };
 
 export const mockTipsService = {
   getTips: async (): Promise<Tip[]> => {
-    return ensureDemoTips();
+    return ensureTips();
   },
 
   getVipTips: async (): Promise<Tip[]> => {
@@ -132,7 +130,7 @@ export const mockTipsService = {
   },
 
   resetTips: async (): Promise<void> => {
-    writeTips(USE_REAL_API ? [] : DEMO_TIPS);
+    writeTips([]);
   },
 
   addTip: async (tip: Tip): Promise<void> => {
