@@ -1,10 +1,70 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { AlertCircle, Calendar, CheckCircle2, Clock, RefreshCw, Search } from 'lucide-react';
-import { footballApiService, SUPPORTED_COMPETITIONS } from '../services/footballApiService';
 import { MatchResult, MatchStatus } from '../types';
 
 const today = new Date().toISOString().split('T')[0];
+
+type PreviousResult = MatchResult & {
+  prediction: string;
+  odds: number;
+  outcome: string;
+};
+
+const PREVIOUS_RESULTS: PreviousResult[] = [
+  {
+    id: 'previous-augsburg-monchengladbach-2026-05-09',
+    competitionCode: 'BL1',
+    homeTeam: 'Augsburg',
+    awayTeam: 'B. Monchengladbach',
+    league: 'Bundesliga',
+    date: '2026-05-09',
+    time: '15:30',
+    status: MatchStatus.FINISHED,
+    score: { home: 3, away: 1 },
+    prediction: '1',
+    odds: 1.98,
+    outcome: 'PROŠLO',
+  },
+  {
+    id: 'previous-lazio-inter-2026-05-09',
+    competitionCode: 'SA',
+    homeTeam: 'Lazio',
+    awayTeam: 'Inter',
+    league: 'Serie A',
+    date: '2026-05-09',
+    time: '18:00',
+    status: MatchStatus.FINISHED,
+    score: { home: 0, away: 3 },
+    prediction: '2',
+    odds: 1.9,
+    outcome: 'PROŠLO',
+  },
+  {
+    id: 'previous-lecce-juventus-2026-05-09',
+    competitionCode: 'SA',
+    homeTeam: 'Lecce',
+    awayTeam: 'Juventus',
+    league: 'Serie A',
+    date: '2026-05-09',
+    time: '20:45',
+    status: MatchStatus.FINISHED,
+    score: { home: 0, away: 1 },
+    prediction: '2',
+    odds: 1.42,
+    outcome: 'PROŠLO',
+  },
+];
+
+const COMPETITIONS = [
+  { code: 'BL1', name: 'Bundesliga' },
+  { code: 'SA', name: 'Serie A' },
+];
+
+const formatDate = (date: string) => {
+  const [year, month, day] = date.split('-');
+  return `${day}.${month}.${year}`;
+};
 
 const MONTHS = [
   { label: 'Februar 2026', value: '2026-02', start: '2026-02-01', end: '2026-02-28' },
@@ -27,37 +87,16 @@ const getStatusMeta = (status: MatchStatus) => {
 };
 
 export default function Results() {
-  const [matches, setMatches] = useState<MatchResult[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [selectedCompetition, setSelectedCompetition] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [teamFilter, setTeamFilter] = useState('');
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadMatches = async () => {
-      setLoading(true);
-      try {
-        const data = await footballApiService.fetchFinishedMatchesByDateRange('2026-02-01', today);
-        if (isMounted) setMatches(data);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    loadMatches();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   const filteredMatches = useMemo(() => {
     const normalizedTeam = teamFilter.trim().toLowerCase();
     const month = MONTHS.find((item) => item.value === selectedMonth);
 
-    return matches.filter((match) => {
+    return PREVIOUS_RESULTS.filter((match) => {
       const matchesMonth = !month || (match.date >= month.start && match.date <= month.end);
       const matchesCompetition = selectedCompetition === 'all' || match.competitionCode === selectedCompetition;
       const matchesStatus = selectedStatus === 'all' || match.status === selectedStatus;
@@ -67,7 +106,7 @@ export default function Results() {
 
       return matchesMonth && matchesCompetition && matchesStatus && matchesTeam;
     });
-  }, [matches, selectedCompetition, selectedMonth, selectedStatus, teamFilter]);
+  }, [selectedCompetition, selectedMonth, selectedStatus, teamFilter]);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
@@ -96,7 +135,7 @@ export default function Results() {
           className="bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-3 text-sm font-bold text-neutral-200 outline-none focus:border-gold-500/50"
         >
           <option value="all">Sve lige</option>
-          {SUPPORTED_COMPETITIONS.map((competition) => (
+          {COMPETITIONS.map((competition) => (
             <option key={competition.code} value={competition.code}>{competition.name}</option>
           ))}
         </select>
@@ -121,12 +160,7 @@ export default function Results() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-32 glass rounded-[3rem]">
-          <div className="w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs">Ucitavanje rezultata...</p>
-        </div>
-      ) : filteredMatches.length > 0 ? (
+      {filteredMatches.length > 0 ? (
         <div className="space-y-4">
           {filteredMatches.map((match) => {
             const status = getStatusMeta(match.status);
@@ -143,7 +177,7 @@ export default function Results() {
                   <div>
                     <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.league}</div>
                     <div className="flex items-center gap-3 text-xs text-neutral-500 font-bold">
-                      <Calendar size={12} /> {match.date}
+                      <Calendar size={12} /> {formatDate(match.date)}
                       <Clock size={12} /> {match.time}
                     </div>
                   </div>
@@ -157,6 +191,17 @@ export default function Results() {
                   </div>
 
                   <div className="flex md:justify-end items-center gap-3">
+                    <div className="flex flex-wrap md:justify-end items-center gap-2">
+                      <span className="px-3 py-1 rounded-lg bg-white/5 text-[10px] font-black uppercase tracking-widest text-neutral-300">
+                        Tip {match.prediction}
+                      </span>
+                      <span className="px-3 py-1 rounded-lg bg-white/5 text-[10px] font-black uppercase tracking-widest text-gold-500">
+                        {match.odds.toFixed(2)}
+                      </span>
+                      <span className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] font-black uppercase tracking-widest text-green-500">
+                        {match.outcome}
+                      </span>
+                    </div>
                     <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${status.className}`}>
                       {status.icon} {status.label}
                     </div>
