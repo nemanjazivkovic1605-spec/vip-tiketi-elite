@@ -1,0 +1,15 @@
+{
+  "short_name": "EliteTips",
+  "name": "Elite Viper Tips - Balkan Premium",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#f57c00",
+  "background_color": "#0a0a0a"
+}

@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "Ticket": {
+      "title": "Ticket",
+      "description": "A sports betting ticket with analysis and status.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "odds": { "type": "number" },
+        "stake": { "type": "number" },
+        "potentialWin": { "type": "number" },
+        "actualWin": { "type": "number" },
+        "status": { "type": "string", "enum": ["WON", "LOST", "PENDING"] },
+        "analysis": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "sport": { "type": "string" },
+        "isVip": { "type": "boolean" },
+        "matches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "teams": { "type": "string" },
+              "prediction": { "type": "string" },
+              "odds": { "type": "number" },
+              "time": { "type": "string" }
+            }
+          }
+        }
+      },
+      "required": ["title", "date", "odds", "status", "sport"]
+    },
+    "VipPackage": {
+      "title": "VIP Package",
+      "description": "Subscription package for VIP content.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "durationDays": { "type": "number" },
+        "features": { "type": "array", "items": { "type": "string" } },
+        "isPopular": { "type": "boolean" }
+      },
+      "required": ["name", "price", "durationDays"]
+    },
+    "Statistic": {
+      "title": "Global Statistics",
+      "description": "Platform performance statistics.",
+      "type": "object",
+      "properties": {
+        "totalTickets": { "type": "number" },
+        "successRate": { "type": "number" },
+        "maxOdds": { "type": "number" },
+        "weeklyProfit": { "type": "number" },
+        "monthlyProfit": { "type": "number" },
+        "roi": { "type": "number" },
+        "winStreak": { "type": "number" },
+        "loseStreak": { "type": "number" }
+      }
+    },
+    "Testimonial": {
+      "title": "Testimonial",
+      "description": "User feedback and reviews.",
+      "type": "object",
+      "properties": {
+        "userName": { "type": "string" },
+        "comment": { "type": "string" },
+        "date": { "type": "string" },
+        "rating": { "type": "number" }
+      }
+    },
+    "AppSetting": {
+      "title": "App Settings",
+      "description": "Global configuration for contacts and links.",
+      "type": "object",
+      "properties": {
+        "telegramLink": { "type": "string" },
+        "whatsappLink": { "type": "string" },
+        "instagramLink": { "type": "string" },
+        "viberLink": { "type": "string" },
+        "contactEmail": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "tickets": {
+      "schema": "Ticket",
+      "description": "Collection of all tickets."
+    },
+    "packages": {
+      "schema": "VipPackage",
+      "description": "Available VIP subscription tiers."
+    },
+    "stats": {
+      "schema": "Statistic",
+      "description": "Global stats document."
+    },
+    "testimonials": {
+      "schema": "Testimonial",
+      "description": "User feedbacks."
+    },
+    "settings": {
+      "schema": "AppSetting",
+      "description": "Global application settings."
+    }
+  }
+}
