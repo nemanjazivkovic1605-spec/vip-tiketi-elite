@@ -1,7 +1,6 @@
 import React, { FormEvent, useState } from 'react';
 import { CheckCircle2, Loader2, Mail, MessageSquare, Send, User } from 'lucide-react';
 import {
-  CONTACT_DISPLAY_EMAIL,
   sendContactMessage,
 } from '../services/contactService';
 
@@ -53,7 +52,8 @@ export default function Contact() {
       setForm(initialForm);
       setShowSuccess(true);
       window.setTimeout(() => setShowSuccess(false), 3500);
-    } catch {
+    } catch (sendError) {
+      console.error('EmailJS contact form failed:', sendError);
       setError('Došlo je do greške. Pokušajte ponovo.');
     } finally {
       setLoading(false);
@@ -79,12 +79,7 @@ export default function Contact() {
             Pišite VIP Tiketi Elite timu
           </h1>
           <p className="mt-6 max-w-xl text-base leading-8 text-neutral-400">
-            Za pitanja oko članarine, tipova ili naloga pošaljite poruku preko forme.
-            Na sajtu ostaje javna adresa{' '}
-            <a href={`mailto:${CONTACT_DISPLAY_EMAIL}`} className="font-bold text-gold-400 hover:text-gold-300">
-              {CONTACT_DISPLAY_EMAIL}
-            </a>
-            .
+            Za pitanja oko članarine, VIP tipova ili naloga pošaljite nam poruku preko forme.
           </p>
         </section>
 
