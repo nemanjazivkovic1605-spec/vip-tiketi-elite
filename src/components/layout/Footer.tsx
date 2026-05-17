@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Trophy, Instagram, Twitter, MessageSquare, Mail } from 'lucide-react';
+import { CONTACT_DISPLAY_EMAIL } from '../../services/contactService';
 
 export default function Footer() {
   return (
@@ -37,10 +38,15 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-black uppercase tracking-widest mb-6">Podrška</h4>
             <ul className="space-y-4 text-neutral-500 text-sm font-medium">
-              <li><a href="#" className="hover:text-gold-500 transition-colors">Kontakt</a></li>
+              <li><Link to="/contact" className="hover:text-gold-500 transition-colors">Kontakt</Link></li>
               <li><a href="#" className="hover:text-gold-500 transition-colors">Često postavljana pitanja</a></li>
               <li><a href="#" className="hover:text-gold-500 transition-colors">Pravila korišćenja</a></li>
-              <li className="flex items-center gap-2"><Mail size={16} className="text-gold-500" /> support@elitetips.com</li>
+              <li>
+                <a href={`mailto:${CONTACT_DISPLAY_EMAIL}`} className="flex items-center gap-2 hover:text-gold-500 transition-colors">
+                  <Mail size={16} className="text-gold-500" />
+                  {CONTACT_DISPLAY_EMAIL}
+                </a>
+              </li>
             </ul>
           </div>
         </div>

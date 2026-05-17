@@ -16,6 +16,7 @@ import Results from './pages/Results';
 import Tickets from './pages/Tickets';
 import LiveResults from './pages/LiveResults';
 import Stats from './pages/Stats';
+import Contact from './pages/Contact';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import AdminDashboard from './pages/Admin/AdminDashboard';
@@ -49,9 +50,13 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/tickets" element={<Tickets />} />
+              <Route path="/table" element={<Tickets />} />
               <Route path="/results" element={<Results />} />
               <Route path="/live-results" element={<LiveResults />} />
+              <Route path="/live" element={<LiveResults />} />
               <Route path="/stats" element={<Stats />} />
+              <Route path="/statistics" element={<Stats />} />
+              <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               
