@@ -307,36 +307,36 @@ const protectionSections: LegalSection[] = [
 
 const groups = [
   {
-    id: 'disclaimer',
-    eyebrow: 'Legal disclaimer',
-    title: 'Legal Disclaimer / Pravno odricanje odgovornosti',
-    description: 'Jasno definisana ograničenja odgovornosti i informativna priroda svih analiza.',
-    icon: Scale,
-    sections: disclaimerSections,
-  },
-  {
     id: 'protection',
-    eyebrow: 'Dodatna zaštita',
-    title: 'Dodatna pravna zaštita i uslovi',
-    description: 'Zaštita digitalnog sadržaja, intelektualne svojine, naloga i internih sistema.',
+    eyebrow: 'Dodatna za\u0161tita',
+    title: 'Dodatna pravna za\u0161tita i uslovi',
+    description: 'Za\u0161tita digitalnog sadr\u017eaja, intelektualne svojine, naloga i internih sistema.',
     icon: ShieldCheck,
     sections: protectionSections,
   },
   {
+    id: 'disclaimer',
+    eyebrow: 'Legal disclaimer',
+    title: 'Legal Disclaimer / Pravno odricanje odgovornosti',
+    description: 'Jasno definisana ograni\u010denja odgovornosti i informativna priroda svih analiza.',
+    icon: Scale,
+    sections: disclaimerSections,
+  },
+  {
     id: 'terms',
-    eyebrow: 'Pravila korišćenja',
-    title: 'Pravila korišćenja',
-    description: 'Osnovni uslovi za korišćenje platforme, VIP pristupa, sadržaja i naloga.',
+    eyebrow: 'Pravila kori\u0161\u0107enja',
+    title: 'Pravila kori\u0161\u0107enja',
+    description: 'Osnovni uslovi za kori\u0161\u0107enje platforme, VIP pristupa, sadr\u017eaja i naloga.',
     icon: FileText,
     sections: termsSections,
   },
 ];
 
 const revealProps = {
-  initial: { opacity: 0, y: 22 },
+  initial: { opacity: 0, y: 14 },
   whileInView: { opacity: 1, y: 0 },
   viewport: { once: true, amount: 0.18 },
-  transition: { duration: 0.45, ease: 'easeOut' },
+  transition: { duration: 0.35, ease: 'easeOut' },
 };
 
 function AccordionItem({
@@ -349,35 +349,35 @@ function AccordionItem({
   onToggle: () => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/35 transition-all duration-300 hover:border-gold-500/35 hover:shadow-lg hover:shadow-gold-500/10">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-black/30 transition-all duration-300 hover:border-gold-500/35 hover:shadow-md hover:shadow-gold-500/10">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
         aria-expanded={isOpen}
       >
-        <span className="text-sm font-black uppercase tracking-widest text-neutral-100 md:text-base">
+        <span className="text-xs font-black uppercase tracking-widest text-neutral-100 md:text-sm">
           {section.title}
         </span>
         <ChevronDown
-          size={20}
+          size={16}
           className={`shrink-0 text-gold-500 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
       <div className={`grid transition-all duration-300 ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className="overflow-hidden">
-          <div className="border-t border-white/5 px-5 pb-6 pt-5">
+          <div className="border-t border-white/5 px-4 pb-4 pt-3">
             {section.body && (
-              <p className="text-sm leading-7 text-neutral-400 md:text-base">
+              <p className="text-xs leading-6 text-neutral-400 md:text-sm">
                 {section.body}
               </p>
             )}
             {section.bullets && (
-              <ul className="mt-4 grid gap-2 text-sm text-neutral-400 md:text-base">
+              <ul className="mt-3 grid gap-1.5 text-xs text-neutral-400 md:text-sm">
                 {section.bullets.map((bullet) => (
                   <li key={bullet} className="flex gap-3">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-gold-500 shadow-[0_0_12px_rgba(245,124,0,0.8)]" />
+                    <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gold-500 shadow-[0_0_10px_rgba(245,124,0,0.7)]" />
                     <span>{bullet}</span>
                   </li>
                 ))}
@@ -400,50 +400,49 @@ export default function Terms() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 px-6 py-14 md:py-20">
-      <div className="mx-auto max-w-7xl">
+    <div className="min-h-screen bg-neutral-950 px-4 py-8 md:px-6 md:py-10">
+      <div className="mx-auto max-w-5xl">
         <motion.section
           {...revealProps}
-          className="relative overflow-hidden rounded-3xl border border-white/10 bg-black px-6 py-10 shadow-2xl shadow-black/40 md:px-10 md:py-14"
+          className="relative overflow-hidden rounded-2xl border border-white/10 bg-black px-5 py-6 shadow-xl shadow-black/30 md:px-7 md:py-7"
         >
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-500 to-transparent" />
-          <div className="absolute right-8 top-8 hidden h-40 w-40 rounded-full bg-gold-500/10 blur-3xl md:block" />
+          <div className="hidden" />
 
-          <div className="relative max-w-4xl">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-gold-500/25 bg-gold-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-gold-400">
-              <Scale size={15} />
-              Terms of Service / Pravila korišćenja / Legal Disclaimer
+          <div className="relative max-w-3xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-gold-500/20 bg-gold-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gold-400">
+              <Scale size={13} />
+              {'Terms of Service / Pravila kori\u0161\u0107enja / Legal Disclaimer'}
             </div>
-            <h1 className="font-display text-4xl font-black tracking-tight text-white md:text-6xl">
-              Pravila korišćenja i pravno odricanje odgovornosti
+            <h1 className="font-display text-2xl font-black tracking-tight text-white md:text-3xl">
+              {'Pravila kori\u0161\u0107enja i pravno odricanje odgovornosti'}
             </h1>
-            <p className="mt-6 max-w-3xl text-base leading-8 text-neutral-400 md:text-lg">
-              Ova stranica definiše pravila korišćenja, odricanje odgovornosti i dodatne pravne uslove za pristup
-              sportskoj analitici, VIP sadržaju i community platformi ELITE VIP TIPS.
+            <p className="mt-4 max-w-3xl text-xs leading-6 text-neutral-400 md:text-sm">
+              {'Ova stranica defini\u0161e pravila kori\u0161\u0107enja, odricanje odgovornosti i dodatne pravne uslove za pristup sportskoj analitici, VIP sadr\u017eaju i community platformi ELITE VIP TIPS.'}
             </p>
           </div>
         </motion.section>
 
-        <div className="mt-10 grid gap-8">
+        <div className="mt-6 grid gap-6">
           {groups.map(({ id, eyebrow, title, description, icon: Icon, sections }) => (
             <motion.section
               {...revealProps}
               key={id}
               id={id}
-              className="scroll-mt-36 rounded-3xl border border-white/10 bg-neutral-950/80 p-5 shadow-xl shadow-black/20 md:p-8"
+              className="scroll-mt-24 rounded-2xl border border-white/10 bg-neutral-950/80 p-4 shadow-lg shadow-black/20 md:p-5"
             >
-              <div className="sticky top-20 z-20 -mx-2 mb-6 flex flex-col gap-4 rounded-2xl border border-white/10 bg-neutral-950/95 p-3 shadow-xl shadow-black/30 backdrop-blur-xl md:-mx-3 md:flex-row md:items-end md:justify-between md:p-4">
+              <div className="mb-4 flex flex-col gap-2 border-b border-white/10 pb-4">
                 <div>
-                  <div className="mb-3 inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gold-400">
-                    <Icon size={16} />
+                  <div className="mb-2 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gold-400">
+                    <Icon size={14} />
                     {eyebrow}
                   </div>
-                  <h2 className="font-display text-2xl font-black text-white md:text-4xl">{title}</h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-500 md:text-base">{description}</p>
+                  <h2 className="font-display text-lg font-black text-white md:text-xl">{title}</h2>
+                  <p className="mt-2 max-w-3xl text-xs leading-5 text-neutral-500 md:text-sm">{description}</p>
                 </div>
               </div>
 
-              <div className="grid gap-3">
+              <div className="grid gap-2">
                 {sections.map((section) => (
                   <React.Fragment key={section.id}>
                     <AccordionItem
