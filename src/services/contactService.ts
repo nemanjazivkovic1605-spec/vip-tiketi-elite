@@ -34,16 +34,13 @@ export const sendContactMessage = async (payload: ContactFormPayload) => {
     EMAILJS_SERVICE_ID,
     EMAILJS_TEMPLATE_ID,
     {
-      from_name: payload.name,
-      from_email: payload.email,
-      reply_to: payload.email,
-      subject: payload.subject,
+      name: payload.name,
+      email: payload.email,
+      title: payload.subject,
       message: payload.message,
+      reply_to: payload.email,
       to_email: CONTACT_TO_EMAIL,
-      site_name: 'VIP Tiketi Elite',
     },
-    {
-      publicKey: EMAILJS_PUBLIC_KEY,
-    },
+    EMAILJS_PUBLIC_KEY,
   );
 };
