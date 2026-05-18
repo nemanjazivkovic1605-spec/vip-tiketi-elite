@@ -39,8 +39,8 @@ export default function Footer() {
             <h4 className="text-sm font-black uppercase tracking-widest mb-6">Podrška</h4>
             <ul className="space-y-4 text-neutral-500 text-sm font-medium">
               <li><Link to="/contact" className="hover:text-gold-500 transition-colors">Kontakt</Link></li>
-              <li><a href="#" className="hover:text-gold-500 transition-colors">Često postavljana pitanja</a></li>
-              <li><a href="#" className="hover:text-gold-500 transition-colors">Pravila korišćenja</a></li>
+              <li><Link to="/faq" className="hover:text-gold-500 transition-colors">Često postavljana pitanja</Link></li>
+              <li><Link to="/terms" className="hover:text-gold-500 transition-colors">Pravila korišćenja</Link></li>
               <li>
                 <a href={`mailto:${CONTACT_DISPLAY_EMAIL}`} className="flex items-center gap-2 hover:text-gold-500 transition-colors">
                   <Mail size={16} className="text-gold-500" />

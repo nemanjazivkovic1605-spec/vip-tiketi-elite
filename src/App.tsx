@@ -17,6 +17,8 @@ import Tickets from './pages/Tickets';
 import LiveResults from './pages/LiveResults';
 import Stats from './pages/Stats';
 import Contact from './pages/Contact';
+import Terms from './pages/Terms';
+import Faq from './pages/Faq';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import AdminDashboard from './pages/Admin/AdminDashboard';
@@ -57,6 +59,11 @@ export default function App() {
               <Route path="/stats" element={<Stats />} />
               <Route path="/statistics" element={<Stats />} />
               <Route path="/contact" element={<Contact />} />
+              <Route path="/faq" element={<Faq />} />
+              <Route path="/cesta-pitanja" element={<Faq />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/legal" element={<Terms />} />
+              <Route path="/pravila-koriscenja" element={<Terms />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               

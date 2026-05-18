@@ -22,6 +22,7 @@ export default function Navbar() {
     { label: 'Uživo', path: '/live-results' },
     { label: 'Statistika', path: '/stats' },
     { label: 'Kontakt', path: '/contact' },
+    { label: 'Pravila', path: '/terms' },
   ];
 
   if (user) {
