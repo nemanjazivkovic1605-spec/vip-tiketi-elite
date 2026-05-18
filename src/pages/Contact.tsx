@@ -49,6 +49,7 @@ export default function Contact() {
 
     try {
       await sendContactMessage(trimmedForm);
+      setError('');
       setForm(initialForm);
       setShowSuccess(true);
       window.setTimeout(() => setShowSuccess(false), 3500);
@@ -65,7 +66,7 @@ export default function Contact() {
       {showSuccess && (
         <div className="fixed right-6 top-24 z-50 flex items-center gap-3 rounded-xl border border-gold-500/30 bg-black/90 px-5 py-4 text-sm font-bold text-neutral-100 shadow-2xl shadow-gold-500/10 backdrop-blur-xl">
           <CheckCircle2 size={20} className="text-gold-500" />
-          Poruka uspešno poslata.
+          Hvala! Poruka je uspešno poslata.
         </div>
       )}
 
