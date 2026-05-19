@@ -1,4 +1,3 @@
-import readXlsxFile, { readSheet } from 'read-excel-file/browser';
 import { ImportedMatch } from '../types';
 
 const IMPORTED_MATCHES_KEY = 'elite_imported_matches';
@@ -201,6 +200,7 @@ const parseRowsFromCsv = (text: string): RawImportedMatch[] => {
 };
 
 const parseRowsFromWorkbook = async (file: File): Promise<RawImportedMatch[]> => {
+  const { default: readXlsxFile, readSheet } = await import('read-excel-file/browser');
   const sheets = await readXlsxFile(file);
   const normalizedSheets = Array.isArray(sheets) && sheets.some((sheet) => 'data' in (sheet as object))
     ? sheets as Array<{ sheet: string; data: unknown[][] }>

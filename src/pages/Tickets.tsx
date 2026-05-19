@@ -201,7 +201,7 @@ export default function Tickets() {
                               {m.homeTeam && m.awayTeam ? `${m.homeTeam} vs ${m.awayTeam}` : m.teams}
                             </div>
 
-                            {m.analysis && (
+                            {m.analysis?.trim() && (
                               <p className="mt-3 text-xs text-neutral-400 leading-relaxed">
                                 {m.analysis}
                               </p>
@@ -253,7 +253,9 @@ export default function Tickets() {
 
       {filteredTips.length === 0 && !loading && (
         <div className="text-center py-20 glass rounded-[3rem]">
-          <p className="text-neutral-500 font-bold">Nema tiketa za izabrani filter.</p>
+          <p className="text-neutral-500 font-bold">
+            {tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
+          </p>
           {isRealApiMode && tips.length === 0 && (
             <p className="text-neutral-600 text-xs font-bold uppercase tracking-widest mt-3">Trenutno nema dostupnih tiketa.</p>
           )}

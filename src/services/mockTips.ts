@@ -1,24 +1,32 @@
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { Tip, TicketStatus, GlobalStats, TipPublicationStatus } from '../types';
 
-const TIPS_KEY = 'elite_tips_data';
-const TIPS_SEED_VERSION_KEY = 'elite_tips_seed_version';
-const TIPS_SEED_VERSION = '2026-05-16-no-seed';
-const TIPS_UPDATED_EVENT = 'elite_tips_updated';
-const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
+const TICKETS_COLLECTION = 'tickets';
 
-const safeReadTips = (): Tip[] | null => {
-  try {
-    const stored = localStorage.getItem(TIPS_KEY);
-    if (!stored) return null;
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+const cleanAnalysis = (analysis?: string) => {
+  const value = (analysis || '').trim();
+  if (value.startsWith('Istorijski predlog') && value.endsWith('baze.')) return '';
+  if (value.startsWith('Automatski pripremljen') && value.includes('istorijski') && /\d{4}-\d{2}-\d{2}\.$/.test(value)) return '';
+  return value;
 };
 
 const normalizeTip = (tip: Tip): Tip => {
-  const matches = Array.isArray(tip.matches) ? tip.matches : [];
+  const matches = Array.isArray(tip.matches)
+    ? tip.matches.map((match) => ({
+      ...match,
+      analysis: cleanAnalysis(match.analysis),
+    }))
+    : [];
   const totalOdds = matches.reduce((acc, match) => {
     const odds = Number(match.odds);
     return acc * (Number.isFinite(odds) && odds > 0 ? odds : 1);
@@ -27,11 +35,12 @@ const normalizeTip = (tip: Tip): Tip => {
   return {
     ...tip,
     id: tip.id || Math.random().toString(36).slice(2, 11),
-    source: tip.source || 'admin',
+    source: 'admin',
     publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
     status: tip.status || TicketStatus.PENDING,
     isVip: Boolean(tip.isVip),
     date: tip.date || new Date().toISOString().split('T')[0],
+    analysis: cleanAnalysis(tip.analysis),
     matches,
     totalOdds: Number.isFinite(tip.totalOdds) && tip.totalOdds > 0
       ? Number(tip.totalOdds.toFixed(2))
@@ -39,50 +48,99 @@ const normalizeTip = (tip: Tip): Tip => {
   };
 };
 
+const sortTips = (tips: Tip[]) =>
+  [...tips].sort((a, b) => {
+    const dateCompare = b.date.localeCompare(a.date);
+    if (dateCompare !== 0) return dateCompare;
+    return (b.publishedAt || '').localeCompare(a.publishedAt || '');
+  });
+
 const publicOnly = (tips: Tip[]) =>
   tips.filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED);
 
-const writeTips = (tips: Tip[]) => {
-  localStorage.setItem(TIPS_KEY, JSON.stringify(tips.map(normalizeTip)));
-  localStorage.setItem(TIPS_SEED_VERSION_KEY, TIPS_SEED_VERSION);
-  window.dispatchEvent(new Event(TIPS_UPDATED_EVENT));
+const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
+
+const getTicketDoc = (id: string) => doc(db, TICKETS_COLLECTION, id);
+
+const removeUndefined = <T>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => removeUndefined(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, entry]) => {
+      if (entry !== undefined) {
+        acc[key] = removeUndefined(entry);
+      }
+      return acc;
+    }, {}) as T;
+  }
+
+  return value;
 };
 
-const ensureTips = (): Tip[] => {
-  const storedTips = safeReadTips();
-  const seedVersion = localStorage.getItem(TIPS_SEED_VERSION_KEY);
+const readAllTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(getTicketsCollection()));
+  return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
+    ...ticketDoc.data(),
+    id: ticketDoc.id,
+  } as Tip)));
+};
 
-  if (USE_REAL_API) {
-    const adminTips = (storedTips || [])
-      .filter((tip) => tip.source === 'admin')
-      .map(normalizeTip);
-    localStorage.setItem(TIPS_KEY, JSON.stringify(adminTips));
-    localStorage.setItem(TIPS_SEED_VERSION_KEY, 'real-api-admin-only');
-    return adminTips;
-  }
+const calculateStats = (tips: Tip[]): GlobalStats => {
+  const completed = tips.filter(t => t.status !== TicketStatus.PENDING);
+  const wins = completed.filter(t => t.status === TicketStatus.WON);
 
-  if (storedTips && storedTips.length > 0 && seedVersion === TIPS_SEED_VERSION) {
-    const normalized = storedTips.map(normalizeTip);
-    localStorage.setItem(TIPS_KEY, JSON.stringify(normalized));
-    return normalized;
-  }
+  const totalStaked = completed.reduce((acc, t) => acc + (t.stake || 100), 0);
+  const totalReturned = completed.reduce((acc, t) => {
+    if (t.status === TicketStatus.WON) {
+      return acc + ((t.stake || 100) * t.totalOdds);
+    }
+    return acc;
+  }, 0);
 
-  localStorage.setItem(TIPS_KEY, JSON.stringify([]));
-  localStorage.setItem(TIPS_SEED_VERSION_KEY, TIPS_SEED_VERSION);
-  return [];
+  const profit = totalReturned - totalStaked;
+  const roi = totalStaked > 0 ? (profit / totalStaked) * 100 : 0;
+  let winStreak = 0;
+  let loseStreak = 0;
+  let currentWin = 0;
+  let currentLose = 0;
+
+  [...completed].reverse().forEach(t => {
+    if (t.status === TicketStatus.WON) {
+      currentWin++;
+      currentLose = 0;
+      if (currentWin > winStreak) winStreak = currentWin;
+    } else {
+      currentLose++;
+      currentWin = 0;
+      if (currentLose > loseStreak) loseStreak = currentLose;
+    }
+  });
+
+  return {
+    totalTips: tips.length,
+    winCount: wins.length,
+    lossCount: completed.length - wins.length,
+    successRate: parseFloat(((wins.length / (completed.length || 1)) * 100).toFixed(1)),
+    monthlyProfit: parseFloat(profit.toFixed(2)),
+    roi: parseFloat(roi.toFixed(1)),
+    winStreak,
+    loseStreak,
+  };
 };
 
 export const mockTipsService = {
   getAllTips: async (): Promise<Tip[]> => {
-    return ensureTips();
+    return readAllTips();
   },
 
   getTips: async (): Promise<Tip[]> => {
-    return publicOnly(ensureTips());
+    return publicOnly(await readAllTips());
   },
 
   getPublishedTips: async (): Promise<Tip[]> => {
-    return publicOnly(ensureTips());
+    return publicOnly(await readAllTips());
   },
 
   getVipTips: async (): Promise<Tip[]> => {
@@ -96,113 +154,61 @@ export const mockTipsService = {
   },
 
   getStats: async (): Promise<GlobalStats> => {
-    const tips = await mockTipsService.getPublishedTips();
-    const completed = tips.filter(t => t.status !== TicketStatus.PENDING);
-    const wins = completed.filter(t => t.status === TicketStatus.WON);
-    
-    const totalStaked = completed.reduce((acc, t) => acc + (t.stake || 100), 0);
-    const totalReturned = completed.reduce((acc, t) => {
-      if (t.status === TicketStatus.WON) {
-        return acc + ((t.stake || 100) * t.totalOdds);
-      }
-      return acc;
-    }, 0);
-
-    const profit = totalReturned - totalStaked;
-    const roi = totalStaked > 0 ? (profit / totalStaked) * 100 : 0;
-
-    // Calculate streaks
-    let winStreak = 0;
-    let loseStreak = 0;
-    let currentWin = 0;
-    let currentLose = 0;
-
-    [...completed].reverse().forEach(t => {
-      if (t.status === TicketStatus.WON) {
-        currentWin++;
-        currentLose = 0;
-        if (currentWin > winStreak) winStreak = currentWin;
-      } else {
-        currentLose++;
-        currentWin = 0;
-        if (currentLose > loseStreak) loseStreak = currentLose;
-      }
-    });
-
-    return {
-      totalTips: tips.length,
-      winCount: wins.length,
-      lossCount: completed.length - wins.length,
-      successRate: parseFloat(((wins.length / (completed.length || 1)) * 100).toFixed(1)),
-      monthlyProfit: parseFloat(profit.toFixed(2)),
-      roi: parseFloat(roi.toFixed(1)),
-      winStreak,
-      loseStreak
-    };
+    return calculateStats(await mockTipsService.getPublishedTips());
   },
 
   resetTips: async (): Promise<void> => {
-    writeTips([]);
+    const tips = await readAllTips();
+    await Promise.all(tips.map((tip) => deleteDoc(getTicketDoc(tip.id))));
   },
 
   addTip: async (tip: Tip): Promise<void> => {
-    const tips = await mockTipsService.getAllTips();
-    writeTips([normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT }), ...tips]);
+    const normalized = normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT });
+    await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
   },
 
   addTips: async (newTips: Tip[]): Promise<void> => {
-    const tips = await mockTipsService.getAllTips();
-    const existingIds = new Set(tips.map((tip) => tip.id));
-    const normalizedNewTips = newTips
-      .filter((tip) => !existingIds.has(tip.id))
-      .map((tip) => normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT }));
+    const existingTips = await readAllTips();
+    const existingIds = new Set(existingTips.map((tip) => tip.id));
+    const uniqueTips = newTips.filter((tip) => !existingIds.has(tip.id));
 
-    writeTips([...normalizedNewTips, ...tips]);
+    await Promise.all(uniqueTips.map((tip) => {
+      const normalized = normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT });
+      return setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
+    }));
   },
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
-    const tips = await mockTipsService.getAllTips();
-    const index = tips.findIndex(t => t.id === updatedTip.id);
-    if (index !== -1) {
-      tips[index] = normalizeTip(updatedTip);
-      writeTips(tips);
-    }
+    const normalized = normalizeTip(updatedTip);
+    await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized), { merge: true });
   },
 
   deleteTip: async (id: string): Promise<void> => {
-    const tips = await mockTipsService.getAllTips();
-    writeTips(tips.filter(t => t.id !== id));
+    await deleteDoc(getTicketDoc(id));
   },
 
   publishTip: async (id: string): Promise<void> => {
-    const tips = await mockTipsService.getAllTips();
-    const tip = tips.find(t => t.id === id);
-    if (!tip) return;
-    await mockTipsService.updateTip({
-      ...tip,
+    await updateDoc(getTicketDoc(id), {
       publicationStatus: TipPublicationStatus.PUBLISHED,
-      publishedAt: tip.publishedAt || new Date().toISOString(),
+      publishedAt: new Date().toISOString(),
     });
   },
 
   unpublishTip: async (id: string): Promise<void> => {
-    const tips = await mockTipsService.getAllTips();
-    const tip = tips.find(t => t.id === id);
-    if (!tip) return;
-    await mockTipsService.updateTip({
-      ...tip,
+    await updateDoc(getTicketDoc(id), {
       publicationStatus: TipPublicationStatus.DRAFT,
-      publishedAt: undefined,
+      publishedAt: '',
     });
   },
 
   subscribe: (callback: () => void): (() => void) => {
-    const handler = () => callback();
-    window.addEventListener(TIPS_UPDATED_EVENT, handler);
-    window.addEventListener('storage', handler);
-    return () => {
-      window.removeEventListener(TIPS_UPDATED_EVENT, handler);
-      window.removeEventListener('storage', handler);
-    };
+    return onSnapshot(
+      query(getTicketsCollection()),
+      () => callback(),
+      (error) => {
+        console.error('Tickets shared store subscription failed:', error);
+        callback();
+      }
+    );
   },
 };

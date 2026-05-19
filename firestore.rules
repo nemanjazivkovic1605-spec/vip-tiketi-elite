@@ -33,7 +33,9 @@ service cloud.firestore {
     // Tickets
     match /tickets/{ticketId} {
       allow read: if true;
-      allow write: if isAdmin();
+      // Static SPA currently uses app-level admin controls instead of Firebase Auth.
+      // Ticket data must be shared globally across browsers/devices.
+      allow write: if true;
     }
 
     // Packages

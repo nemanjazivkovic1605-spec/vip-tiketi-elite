@@ -406,7 +406,7 @@ export default function AdminDashboard() {
           time: 'FT',
           result: `${pick.match.homeScore}:${pick.match.awayScore}`,
           status: pick.status,
-          analysis: 'Istorijski predlog iz importovane baze.',
+          analysis: '',
         }));
         const totalOdds = Number(ticketMatches.reduce((acc, match) => acc * match.odds, 1).toFixed(2));
         const status = rankedPicks.some((pick) => pick.status === TicketStatus.LOST) ? TicketStatus.LOST : TicketStatus.WON;
@@ -420,7 +420,7 @@ export default function AdminDashboard() {
           status,
           totalOdds,
           stake: 100,
-          analysis: `Automatski pripremljen istorijski ${getTicketKind(ticketMatches.length).toLowerCase()} tiket za ${date}.`,
+          analysis: '',
           matches: ticketMatches,
         });
       });

@@ -93,15 +93,16 @@ export default function VipTips() {
                    </div>
                 </div>
 
-                {/* Analysis Box */}
-                <div className="bg-white/[0.02] border-t border-white/5 p-8">
-                   <h4 className="text-sm font-black uppercase tracking-widest text-neutral-500 mb-4 flex items-center gap-2">
-                      <Info size={16} className="text-gold-500" /> Analiza Uz Tip
-                   </h4>
-                   <p className="text-neutral-400 text-sm leading-relaxed italic">
-                      "{tip.analysis}"
-                   </p>
-                </div>
+                {tip.analysis?.trim() && (
+                  <div className="bg-white/[0.02] border-t border-white/5 p-8">
+                     <h4 className="text-sm font-black uppercase tracking-widest text-neutral-500 mb-4 flex items-center gap-2">
+                        <Info size={16} className="text-gold-500" /> Analiza Uz Tip
+                     </h4>
+                     <p className="text-neutral-400 text-sm leading-relaxed italic">
+                        "{tip.analysis}"
+                     </p>
+                  </div>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>
