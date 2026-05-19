@@ -1,8 +1,10 @@
-import { readSheet } from 'read-excel-file/browser';
+import readXlsxFile, { readSheet } from 'read-excel-file/browser';
 import { ImportedMatch } from '../types';
 
 const IMPORTED_MATCHES_KEY = 'elite_imported_matches';
 const IMPORTED_MATCHES_UPDATED_EVENT = 'elite_imported_matches_updated';
+const IMPORTED_MATCHES_SEED_PATH = '/imported-matches-2025-2026.json';
+const IMPORTED_MATCHES_SEEDED_KEY = 'elite_imported_matches_seeded_2025_2026';
 
 type RawImportedMatch = Record<string, unknown>;
 
@@ -17,6 +19,31 @@ const REQUIRED_COLUMNS = [
   'oddsDraw',
   'oddsAway',
 ] as const;
+
+const LEAGUE_NAMES: Record<string, string> = {
+  E0: 'Premier League',
+  E1: 'Championship',
+  E2: 'League One',
+  E3: 'League Two',
+  EC: 'National League',
+  SP1: 'La Liga',
+  SP2: 'La Liga 2',
+  I1: 'Serie A',
+  I2: 'Serie B',
+  D1: 'Bundesliga',
+  D2: 'Bundesliga 2',
+  F1: 'Ligue 1',
+  F2: 'Ligue 2',
+  N1: 'Eredivisie',
+  P1: 'Primeira Liga',
+  B1: 'Belgian Pro League',
+  T1: 'Super Lig',
+  G1: 'Greek Super League',
+  SC0: 'Scottish Premiership',
+  SC1: 'Scottish Championship',
+  SC2: 'Scottish League One',
+  SC3: 'Scottish League Two',
+};
 
 const safeString = (value: unknown) => String(value ?? '').trim();
 
@@ -64,19 +91,22 @@ const createMatchId = (match: Omit<ImportedMatch, 'id' | 'importedAt'>) => {
 };
 
 const normalizeRow = (row: RawImportedMatch, importedAt: string): ImportedMatch | null => {
-  const missing = REQUIRED_COLUMNS.some((column) => row[column] === undefined || row[column] === null || safeString(row[column]) === '');
+  const isFootballDataRow = row.Div !== undefined || row.FTHG !== undefined || row.B365H !== undefined;
+  const missing = !isFootballDataRow && REQUIRED_COLUMNS.some((column) => row[column] === undefined || row[column] === null || safeString(row[column]) === '');
   if (missing) return null;
 
+  const leagueCode = safeString(row.Div);
+
   const match = {
-    date: normalizeDate(row.date),
-    league: safeString(row.league),
-    homeTeam: safeString(row.homeTeam),
-    awayTeam: safeString(row.awayTeam),
-    homeScore: safeNumber(row.homeScore),
-    awayScore: safeNumber(row.awayScore),
-    oddsHome: safeNumber(row.oddsHome),
-    oddsDraw: safeNumber(row.oddsDraw),
-    oddsAway: safeNumber(row.oddsAway),
+    date: normalizeDate(row.date ?? row.Date),
+    league: safeString(row.league) || LEAGUE_NAMES[leagueCode] || leagueCode,
+    homeTeam: safeString(row.homeTeam ?? row.HomeTeam),
+    awayTeam: safeString(row.awayTeam ?? row.AwayTeam),
+    homeScore: safeNumber(row.homeScore ?? row.FTHG),
+    awayScore: safeNumber(row.awayScore ?? row.FTAG),
+    oddsHome: safeNumber(row.oddsHome ?? row.B365H ?? row.AvgH ?? row.MaxH),
+    oddsDraw: safeNumber(row.oddsDraw ?? row.B365D ?? row.AvgD ?? row.MaxD),
+    oddsAway: safeNumber(row.oddsAway ?? row.B365A ?? row.AvgA ?? row.MaxA),
   };
 
   if (
@@ -113,7 +143,19 @@ const readMatches = (): ImportedMatch[] => {
 
 const writeMatches = (matches: ImportedMatch[]) => {
   localStorage.setItem(IMPORTED_MATCHES_KEY, JSON.stringify(matches));
+  localStorage.setItem(IMPORTED_MATCHES_SEEDED_KEY, 'true');
   window.dispatchEvent(new Event(IMPORTED_MATCHES_UPDATED_EVENT));
+};
+
+const loadSeedMatches = async (): Promise<ImportedMatch[]> => {
+  try {
+    const response = await fetch(IMPORTED_MATCHES_SEED_PATH, { cache: 'force-cache' });
+    if (!response.ok) return [];
+    const matches = await response.json();
+    return Array.isArray(matches) ? matches : [];
+  } catch {
+    return [];
+  }
 };
 
 const parseCsvLine = (line: string, delimiter: ',' | ';') => {
@@ -159,22 +201,42 @@ const parseRowsFromCsv = (text: string): RawImportedMatch[] => {
 };
 
 const parseRowsFromWorkbook = async (file: File): Promise<RawImportedMatch[]> => {
-  const rows = await readSheet(file);
-  const [headers, ...dataRows] = rows;
-  if (!headers) return [];
+  const sheets = await readXlsxFile(file);
+  const normalizedSheets = Array.isArray(sheets) && sheets.some((sheet) => 'data' in (sheet as object))
+    ? sheets as Array<{ sheet: string; data: unknown[][] }>
+    : [{ sheet: file.name, data: await readSheet(file) as unknown[][] }];
 
-  const normalizedHeaders = headers.map((header) => safeString(header));
-  return dataRows.map((cells) => {
-    return normalizedHeaders.reduce<RawImportedMatch>((row, header, index) => {
-      row[header] = cells[index] ?? '';
-      return row;
-    }, {});
+  return normalizedSheets.flatMap((sheet) => {
+    const [headers, ...dataRows] = sheet.data;
+    if (!headers) return [];
+
+    const normalizedHeaders = headers.map((header) => safeString(header));
+    return dataRows.map((cells) => {
+      return normalizedHeaders.reduce<RawImportedMatch>((row, header, index) => {
+        row[header] = cells[index] ?? '';
+        return row;
+      }, {});
+    });
   });
 };
 
 export const importedMatchesService = {
   getMatches: async (): Promise<ImportedMatch[]> => {
-    return readMatches().sort((a, b) => b.date.localeCompare(a.date));
+    const storedMatches = readMatches();
+    if (storedMatches.length > 0) {
+      return storedMatches.sort((a, b) => b.date.localeCompare(a.date));
+    }
+
+    if (localStorage.getItem(IMPORTED_MATCHES_SEEDED_KEY) === 'true') {
+      return [];
+    }
+
+    const seedMatches = await loadSeedMatches();
+    if (seedMatches.length > 0) {
+      writeMatches(seedMatches);
+    }
+
+    return seedMatches.sort((a, b) => b.date.localeCompare(a.date));
   },
 
   importFile: async (file: File): Promise<{ imported: number; skipped: number; total: number }> => {
@@ -188,16 +250,24 @@ export const importedMatchesService = {
     const valid = normalized.filter((match): match is ImportedMatch => Boolean(match));
     const existing = readMatches();
     const byId = new Map(existing.map((match) => [match.id, match]));
+    let added = 0;
+    let duplicates = 0;
 
     valid.forEach((match) => {
+      if (byId.has(match.id)) {
+        duplicates += 1;
+        return;
+      }
+
+      added += 1;
       byId.set(match.id, match);
     });
 
     writeMatches(Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date)));
 
     return {
-      imported: valid.length,
-      skipped: rows.length - valid.length,
+      imported: added,
+      skipped: rows.length - valid.length + duplicates,
       total: rows.length,
     };
   },

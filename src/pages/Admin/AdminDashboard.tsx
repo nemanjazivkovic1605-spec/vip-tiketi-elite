@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { 
@@ -44,6 +44,9 @@ export default function AdminDashboard() {
   const [userList, setUserList] = useState(DEMO_USERS);
   const [tips, setTips] = useState<Tip[]>([]);
   const [availableMatches, setAvailableMatches] = useState<ImportedMatch[]>([]);
+  const [matchTeamFilter, setMatchTeamFilter] = useState('');
+  const [matchLeagueFilter, setMatchLeagueFilter] = useState('all');
+  const [matchDateFilter, setMatchDateFilter] = useState('');
   const apiIssues: Array<{ competitionCode: string; competitionName: string; message: string }> = [];
   const [resultTipMatch, setResultTipMatch] = useState<ImportedMatch | null>(null);
   const [importMessage, setImportMessage] = useState('');
@@ -59,6 +62,24 @@ export default function AdminDashboard() {
   const [settings, setSettings] = useState<AppSettings>(() => mockSettingsService.getSettings());
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const availableLeagues = useMemo(() => {
+    return Array.from(new Set(availableMatches.map((match) => match.league).filter(Boolean))).sort();
+  }, [availableMatches]);
+
+  const filteredAvailableMatches = useMemo(() => {
+    const team = matchTeamFilter.trim().toLowerCase();
+
+    return availableMatches.filter((match) => {
+      const matchesTeam = !team
+        || match.homeTeam.toLowerCase().includes(team)
+        || match.awayTeam.toLowerCase().includes(team);
+      const matchesLeague = matchLeagueFilter === 'all' || match.league === matchLeagueFilter;
+      const matchesDate = !matchDateFilter || match.date === matchDateFilter;
+
+      return matchesTeam && matchesLeague && matchesDate;
+    });
+  }, [availableMatches, matchDateFilter, matchLeagueFilter, matchTeamFilter]);
 
   useEffect(() => {
     refreshData();
@@ -555,6 +576,46 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
+                    <div className="glass p-5 rounded-[2rem] border-white/5 mb-8">
+                      <div className="grid md:grid-cols-4 gap-3">
+                        <input
+                          value={matchTeamFilter}
+                          onChange={(e) => setMatchTeamFilter(e.target.value)}
+                          className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                          placeholder="Pretraga po timu..."
+                        />
+                        <select
+                          value={matchLeagueFilter}
+                          onChange={(e) => setMatchLeagueFilter(e.target.value)}
+                          className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                        >
+                          <option value="all">Sve lige</option>
+                          {availableLeagues.map((league) => (
+                            <option key={league} value={league}>{league}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="date"
+                          value={matchDateFilter}
+                          onChange={(e) => setMatchDateFilter(e.target.value)}
+                          className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                        />
+                        <button
+                          onClick={() => {
+                            setMatchTeamFilter('');
+                            setMatchLeagueFilter('all');
+                            setMatchDateFilter('');
+                          }}
+                          className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:border-gold-500/40 transition-all"
+                        >
+                          Reset filtera
+                        </button>
+                      </div>
+                      <div className="mt-4 text-[10px] text-neutral-500 font-black uppercase tracking-widest">
+                        Prikazano {Math.min(filteredAvailableMatches.length, 300)} od {filteredAvailableMatches.length} filtriranih / ukupno {availableMatches.length}
+                      </div>
+                    </div>
+
                     {resultTipMatch && (
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
@@ -649,7 +710,7 @@ export default function AdminDashboard() {
                     )}
 
                     <div className="grid gap-4">
-                      {availableMatches.map((match) => (
+                      {filteredAvailableMatches.slice(0, 300).map((match) => (
                         <div key={match.id} className="glass p-5 rounded-[2rem] border-white/5">
                           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
                             <div>
@@ -680,11 +741,24 @@ export default function AdminDashboard() {
                         </div>
                       ))}
 
+                      {filteredAvailableMatches.length > 300 && (
+                        <div className="glass p-6 rounded-[2rem] border-white/5 text-center">
+                          <p className="text-neutral-500 font-bold">Prikazano je prvih 300 utakmica.</p>
+                          <p className="text-xs text-neutral-600 mt-2">Koristite pretragu po timu, ligi ili datumu za precizniji izbor.</p>
+                        </div>
+                      )}
+
                       {availableMatches.length === 0 && (
                         <div className="glass p-10 rounded-[2rem] border-white/5 text-center">
                           <Database className="text-neutral-700 mx-auto mb-3" size={40} />
                           <p className="text-neutral-500 font-bold">Admin baza utakmica je prazna.</p>
                           <p className="text-xs text-neutral-600 mt-2">Uploadujte CSV ili Excel fajl da dodate istorijske rezultate.</p>
+                        </div>
+                      )}
+                      {availableMatches.length > 0 && filteredAvailableMatches.length === 0 && (
+                        <div className="glass p-10 rounded-[2rem] border-white/5 text-center">
+                          <Database className="text-neutral-700 mx-auto mb-3" size={40} />
+                          <p className="text-neutral-500 font-bold">Nema utakmica za izabrane filtere.</p>
                         </div>
                       )}
                     </div>
