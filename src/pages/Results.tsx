@@ -1,70 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { AlertCircle, Calendar, CheckCircle2, Clock, RefreshCw, Search } from 'lucide-react';
-import { MatchResult, MatchStatus } from '../types';
+import { AlertCircle, Calendar, CheckCircle2, Clock, Search, XCircle } from 'lucide-react';
+import { mockTipsService } from '../services/mockTips';
+import { Match, TicketStatus, Tip } from '../types';
+
+type PublishedResult = {
+  tip: Tip;
+  match: Match;
+};
 
 const today = new Date().toISOString().split('T')[0];
-
-type PreviousResult = MatchResult & {
-  prediction: string;
-  odds: number;
-  outcome: string;
-};
-
-const PREVIOUS_RESULTS: PreviousResult[] = [
-  {
-    id: 'previous-augsburg-monchengladbach-2026-05-09',
-    competitionCode: 'BL1',
-    homeTeam: 'Augsburg',
-    awayTeam: 'B. Monchengladbach',
-    league: 'Bundesliga',
-    date: '2026-05-09',
-    time: '15:30',
-    status: MatchStatus.FINISHED,
-    score: { home: 3, away: 1 },
-    prediction: '1',
-    odds: 1.98,
-    outcome: 'PROŠLO',
-  },
-  {
-    id: 'previous-lazio-inter-2026-05-09',
-    competitionCode: 'SA',
-    homeTeam: 'Lazio',
-    awayTeam: 'Inter',
-    league: 'Serie A',
-    date: '2026-05-09',
-    time: '18:00',
-    status: MatchStatus.FINISHED,
-    score: { home: 0, away: 3 },
-    prediction: '2',
-    odds: 1.9,
-    outcome: 'PROŠLO',
-  },
-  {
-    id: 'previous-lecce-juventus-2026-05-09',
-    competitionCode: 'SA',
-    homeTeam: 'Lecce',
-    awayTeam: 'Juventus',
-    league: 'Serie A',
-    date: '2026-05-09',
-    time: '20:45',
-    status: MatchStatus.FINISHED,
-    score: { home: 0, away: 1 },
-    prediction: '2',
-    odds: 1.42,
-    outcome: 'PROŠLO',
-  },
-];
-
-const COMPETITIONS = [
-  { code: 'BL1', name: 'Bundesliga' },
-  { code: 'SA', name: 'Serie A' },
-];
-
-const formatDate = (date: string) => {
-  const [year, month, day] = date.split('-');
-  return `${day}.${month}.${year}`;
-};
 
 const MONTHS = [
   { label: 'Februar 2026', value: '2026-02', start: '2026-02-01', end: '2026-02-28' },
@@ -73,47 +18,83 @@ const MONTHS = [
   { label: 'Maj 2026', value: '2026-05', start: '2026-05-01', end: today },
 ];
 
-const getStatusMeta = (status: MatchStatus) => {
-  switch (status) {
-    case MatchStatus.LIVE:
-      return { label: 'Uzivo', className: 'text-red-500', icon: <RefreshCw size={14} className="animate-spin" /> };
-    case MatchStatus.FINISHED:
-      return { label: 'Zavrseno', className: 'text-green-500', icon: <CheckCircle2 size={14} /> };
-    case MatchStatus.POSTPONED:
-      return { label: 'Odlozeno', className: 'text-red-400', icon: <AlertCircle size={14} /> };
-    default:
-      return { label: 'Zakazano', className: 'text-neutral-500', icon: <Clock size={14} /> };
+const formatDate = (date: string) => {
+  const [year, month, day] = date.split('-');
+  return `${day}.${month}.${year}`;
+};
+
+const statusLabel = (status: TicketStatus) => {
+  if (status === TicketStatus.WON) return 'PROSLO';
+  if (status === TicketStatus.LOST) return 'PALO';
+  return 'AKTIVAN';
+};
+
+const getStatusMeta = (status: TicketStatus) => {
+  if (status === TicketStatus.WON) {
+    return { className: 'text-green-500', badge: 'bg-green-500/10 border-green-500/20 text-green-500', icon: <CheckCircle2 size={14} /> };
   }
+
+  if (status === TicketStatus.LOST) {
+    return { className: 'text-red-500', badge: 'bg-red-500/10 border-red-500/20 text-red-500', icon: <XCircle size={14} /> };
+  }
+
+  return { className: 'text-neutral-500', badge: 'bg-white/5 border-white/10 text-neutral-400', icon: <Clock size={14} /> };
 };
 
 export default function Results() {
+  const [tips, setTips] = useState<Tip[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('all');
-  const [selectedCompetition, setSelectedCompetition] = useState('all');
+  const [selectedLeague, setSelectedLeague] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [teamFilter, setTeamFilter] = useState('');
 
-  const filteredMatches = useMemo(() => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const publishedTips = await mockTipsService.getPublishedTips();
+        setTips(publishedTips);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    return mockTipsService.subscribe(fetchData);
+  }, []);
+
+  const results = useMemo<PublishedResult[]>(() => {
+    return tips
+      .filter((tip) => tip.status === TicketStatus.WON || tip.status === TicketStatus.LOST)
+      .flatMap((tip) => tip.matches.map((match) => ({ tip, match })));
+  }, [tips]);
+
+  const leagues = useMemo(() => {
+    return Array.from(new Set(results.map(({ match }) => match.league).filter(Boolean))).sort();
+  }, [results]);
+
+  const filteredResults = useMemo(() => {
     const normalizedTeam = teamFilter.trim().toLowerCase();
     const month = MONTHS.find((item) => item.value === selectedMonth);
 
-    return PREVIOUS_RESULTS.filter((match) => {
-      const matchesMonth = !month || (match.date >= month.start && match.date <= month.end);
-      const matchesCompetition = selectedCompetition === 'all' || match.competitionCode === selectedCompetition;
-      const matchesStatus = selectedStatus === 'all' || match.status === selectedStatus;
+    return results.filter(({ tip, match }) => {
+      const matchesMonth = !month || (tip.date >= month.start && tip.date <= month.end);
+      const matchesLeague = selectedLeague === 'all' || match.league === selectedLeague;
+      const matchesStatus = selectedStatus === 'all' || tip.status === selectedStatus;
       const matchesTeam = !normalizedTeam
         || match.homeTeam.toLowerCase().includes(normalizedTeam)
         || match.awayTeam.toLowerCase().includes(normalizedTeam);
 
-      return matchesMonth && matchesCompetition && matchesStatus && matchesTeam;
+      return matchesMonth && matchesLeague && matchesStatus && matchesTeam;
     });
-  }, [selectedCompetition, selectedMonth, selectedStatus, teamFilter]);
+  }, [results, selectedLeague, selectedMonth, selectedStatus, teamFilter]);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
         <div className="max-w-2xl">
           <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">PRETHODNI <span className="gold-text">REZULTATI</span></h1>
-          <p className="text-neutral-400">Pregled zavrsenih utakmica, rezultata i statusa po ligama.</p>
+          <p className="text-neutral-400">Pregled objavljenih tipova i njihovih zavrsenih rezultata.</p>
         </div>
       </div>
 
@@ -130,13 +111,13 @@ export default function Results() {
         </select>
 
         <select
-          value={selectedCompetition}
-          onChange={(event) => setSelectedCompetition(event.target.value)}
+          value={selectedLeague}
+          onChange={(event) => setSelectedLeague(event.target.value)}
           className="bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-3 text-sm font-bold text-neutral-200 outline-none focus:border-gold-500/50"
         >
           <option value="all">Sve lige</option>
-          {COMPETITIONS.map((competition) => (
-            <option key={competition.code} value={competition.code}>{competition.name}</option>
+          {leagues.map((league) => (
+            <option key={league} value={league}>{league}</option>
           ))}
         </select>
 
@@ -146,7 +127,8 @@ export default function Results() {
           className="bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-3 text-sm font-bold text-neutral-200 outline-none focus:border-gold-500/50"
         >
           <option value="all">Svi statusi</option>
-          <option value={MatchStatus.FINISHED}>Zavrseno</option>
+          <option value={TicketStatus.WON}>PROSLO</option>
+          <option value={TicketStatus.LOST}>PALO</option>
         </select>
 
         <div className="relative">
@@ -160,14 +142,18 @@ export default function Results() {
         </div>
       </div>
 
-      {filteredMatches.length > 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      ) : filteredResults.length > 0 ? (
         <div className="space-y-4">
-          {filteredMatches.map((match) => {
-            const status = getStatusMeta(match.status);
+          {filteredResults.map(({ tip, match }) => {
+            const status = getStatusMeta(tip.status);
 
             return (
               <motion.div
-                key={match.id}
+                key={`${tip.id}-${match.id || match.homeTeam}-${match.awayTeam}`}
                 layout
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -177,7 +163,7 @@ export default function Results() {
                   <div>
                     <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.league}</div>
                     <div className="flex items-center gap-3 text-xs text-neutral-500 font-bold">
-                      <Calendar size={12} /> {formatDate(match.date)}
+                      <Calendar size={12} /> {formatDate(tip.date)}
                       <Clock size={12} /> {match.time}
                     </div>
                   </div>
@@ -185,7 +171,7 @@ export default function Results() {
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 text-right font-display text-xl font-bold">{match.homeTeam}</div>
                     <div className="bg-black/40 px-5 py-3 rounded-2xl border border-white/5 min-w-[90px] text-center font-display text-2xl font-black text-gold-500 tabular-nums">
-                      {match.score ? `${match.score.home} - ${match.score.away}` : 'v'}
+                      {match.result ? match.result.replace(':', ' - ') : '-'}
                     </div>
                     <div className="flex-1 text-left font-display text-xl font-bold">{match.awayTeam}</div>
                   </div>
@@ -196,14 +182,14 @@ export default function Results() {
                         Tip {match.prediction}
                       </span>
                       <span className="px-3 py-1 rounded-lg bg-white/5 text-[10px] font-black uppercase tracking-widest text-gold-500">
-                        {match.odds.toFixed(2)}
+                        {Number(match.odds).toFixed(2)}
                       </span>
-                      <span className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-[10px] font-black uppercase tracking-widest text-green-500">
-                        {match.outcome}
+                      <span className={`px-3 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest ${status.badge}`}>
+                        {statusLabel(tip.status)}
                       </span>
                     </div>
                     <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${status.className}`}>
-                      {status.icon} {status.label}
+                      {status.icon} {statusLabel(tip.status)}
                     </div>
                   </div>
                 </div>
@@ -215,7 +201,7 @@ export default function Results() {
         <div className="text-center py-24 glass rounded-[3rem]">
           <AlertCircle className="text-neutral-700 mx-auto mb-4" size={44} />
           <h3 className="text-xl font-bold mb-2">Trenutno nema dostupnih rezultata.</h3>
-          <p className="text-neutral-500 max-w-sm mx-auto">Promenite filtere ili pokusajte kasnije.</p>
+          <p className="text-neutral-500 max-w-sm mx-auto">Objavljeni rezultati ce biti prikazani ovde kada ih admin objavi.</p>
         </div>
       )}
     </div>

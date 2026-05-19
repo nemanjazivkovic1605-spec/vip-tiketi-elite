@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { Tip, Match, TicketStatus } from '../types';
+import { Tip, Match, TicketStatus, TipPublicationStatus } from '../types';
 import { motion } from 'motion/react';
 
 interface TipModalProps {
@@ -39,7 +39,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
   };
 
   const handleSave = () => {
-    if (!date || !analysis || matches.some(m => !m.homeTeam || !m.awayTeam || !m.prediction || !Number.isFinite(Number(m.odds)))) {
+    if (!date || matches.some(m => !m.homeTeam || !m.awayTeam || !m.prediction || !Number.isFinite(Number(m.odds)))) {
       alert('Molimo popunite sva polja.');
       return;
     }
@@ -57,6 +57,8 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
       ...initialData,
       id: initialData?.id || Math.random().toString(36).substr(2, 9),
       source: 'admin',
+      publicationStatus: initialData?.publicationStatus ?? TipPublicationStatus.DRAFT,
+      publishedAt: initialData?.publishedAt,
       date,
       isVip,
       status,
@@ -116,8 +118,8 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                   className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-gold-500/50 transition-all"
                 >
                   <option value={TicketStatus.PENDING}>Aktivan</option>
-                  <option value={TicketStatus.WON}>Prosao</option>
-                  <option value={TicketStatus.LOST}>Pao</option>
+                  <option value={TicketStatus.WON}>PROSLO</option>
+                  <option value={TicketStatus.LOST}>PALO</option>
                 </select>
               </div>
            </div>
@@ -175,12 +177,16 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                         onChange={(e) => updateMatch(i, 'league', e.target.value)}
                         className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
                       />
-                      <input 
-                        placeholder="Tip (GG, 3+, 1...)"
+                      <select
                         value={m.prediction}
                         onChange={(e) => updateMatch(i, 'prediction', e.target.value)}
                         className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
-                      />
+                      >
+                        <option value="">Tip igre</option>
+                        {['GG', '3+', '1', 'X', '2', '1X', 'X2'].map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
                       <input 
                         type="number"
                         step="0.01"

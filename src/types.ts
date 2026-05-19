@@ -5,6 +5,11 @@ export enum TicketStatus {
   PENDING = 'PENDING'
 }
 
+export enum TipPublicationStatus {
+  DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED'
+}
+
 export enum MembershipStatus {
   PENDING = 'pending',
   APPROVED = 'approved',
@@ -49,6 +54,20 @@ export interface MatchResult {
   status: MatchStatus;
 }
 
+export interface ImportedMatch {
+  id: string;
+  date: string;
+  league: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  oddsHome: number;
+  oddsDraw: number;
+  oddsAway: number;
+  importedAt: string;
+}
+
 export interface FootballCompetition {
   id: number;
   code: string;
@@ -73,6 +92,8 @@ export interface FootballStanding {
 export interface Tip {
   id: string;
   source?: 'admin' | 'demo';
+  publicationStatus?: TipPublicationStatus;
+  publishedAt?: string;
   date: string;
   matches: Match[];
   totalOdds: number;

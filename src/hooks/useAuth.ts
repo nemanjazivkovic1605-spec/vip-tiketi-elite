@@ -1,16 +1,26 @@
 import { useState, useEffect } from 'react';
 import { User, MembershipStatus } from '../types';
-import { mockAuthService } from '../services/mockAuth';
+import { AUTH_UPDATED_EVENT, mockAuthService } from '../services/mockAuth';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check local storage on mount
-    const currentUser = mockAuthService.getCurrentUser();
-    setUser(currentUser);
+    const syncCurrentUser = () => {
+      setUser(mockAuthService.getCurrentUser());
+    };
+
+    syncCurrentUser();
     setLoading(false);
+
+    window.addEventListener(AUTH_UPDATED_EVENT, syncCurrentUser);
+    window.addEventListener('storage', syncCurrentUser);
+
+    return () => {
+      window.removeEventListener(AUTH_UPDATED_EVENT, syncCurrentUser);
+      window.removeEventListener('storage', syncCurrentUser);
+    };
   }, []);
 
   const login = async (email: string, password: string) => {

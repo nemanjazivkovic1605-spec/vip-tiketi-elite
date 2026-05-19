@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, X, User, Trophy, LogOut, ChevronDown } from 'lucide-react';
+import { Menu, X, Trophy, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Navbar() {
@@ -110,12 +110,15 @@ export default function Navbar() {
               ))}
               <div className="h-px bg-white/5 my-2"></div>
               {user ? (
-                 <button 
-                  onClick={() => { logout(); setIsOpen(false); }}
-                  className="flex items-center gap-2 text-red-500 font-bold"
-                 >
-                   <LogOut size={20} /> ODJAVI SE
-                 </button>
+                <div className="flex flex-col gap-4">
+                  <div className="text-xs font-bold text-neutral-500 break-all">{user.email}</div>
+                  <button
+                    onClick={() => { logout(); setIsOpen(false); }}
+                    className="flex items-center gap-2 text-red-500 font-bold"
+                  >
+                    <LogOut size={20} /> ODJAVI SE
+                  </button>
+                </div>
               ) : (
                 <div className="flex flex-col gap-4">
                   <Link to="/login" onClick={() => setIsOpen(false)} className="py-4 text-center font-bold border border-white/10 rounded-2xl">PRIJAVA</Link>

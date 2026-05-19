@@ -1,4 +1,4 @@
-import { Tip, TicketStatus, GlobalStats } from '../types';
+import { Tip, TicketStatus, GlobalStats, TipPublicationStatus } from '../types';
 
 const TIPS_KEY = 'elite_tips_data';
 const TIPS_SEED_VERSION_KEY = 'elite_tips_seed_version';
@@ -27,7 +27,8 @@ const normalizeTip = (tip: Tip): Tip => {
   return {
     ...tip,
     id: tip.id || Math.random().toString(36).slice(2, 11),
-    source: tip.source || 'demo',
+    source: tip.source || 'admin',
+    publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
     status: tip.status || TicketStatus.PENDING,
     isVip: Boolean(tip.isVip),
     date: tip.date || new Date().toISOString().split('T')[0],
@@ -37,6 +38,9 @@ const normalizeTip = (tip: Tip): Tip => {
       : Number(totalOdds.toFixed(2)),
   };
 };
+
+const publicOnly = (tips: Tip[]) =>
+  tips.filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED);
 
 const writeTips = (tips: Tip[]) => {
   localStorage.setItem(TIPS_KEY, JSON.stringify(tips.map(normalizeTip)));
@@ -69,22 +73,30 @@ const ensureTips = (): Tip[] => {
 };
 
 export const mockTipsService = {
-  getTips: async (): Promise<Tip[]> => {
+  getAllTips: async (): Promise<Tip[]> => {
     return ensureTips();
   },
 
+  getTips: async (): Promise<Tip[]> => {
+    return publicOnly(ensureTips());
+  },
+
+  getPublishedTips: async (): Promise<Tip[]> => {
+    return publicOnly(ensureTips());
+  },
+
   getVipTips: async (): Promise<Tip[]> => {
-    const tips = await mockTipsService.getTips();
+    const tips = await mockTipsService.getPublishedTips();
     return tips.filter(t => t.isVip);
   },
 
   getFreeTips: async (): Promise<Tip[]> => {
-    const tips = await mockTipsService.getTips();
+    const tips = await mockTipsService.getPublishedTips();
     return tips.filter(t => !t.isVip);
   },
 
   getStats: async (): Promise<GlobalStats> => {
-    const tips = await mockTipsService.getTips();
+    const tips = await mockTipsService.getPublishedTips();
     const completed = tips.filter(t => t.status !== TicketStatus.PENDING);
     const wins = completed.filter(t => t.status === TicketStatus.WON);
     
@@ -134,12 +146,12 @@ export const mockTipsService = {
   },
 
   addTip: async (tip: Tip): Promise<void> => {
-    const tips = await mockTipsService.getTips();
-    writeTips([normalizeTip({ ...tip, source: 'admin' }), ...tips]);
+    const tips = await mockTipsService.getAllTips();
+    writeTips([normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT }), ...tips]);
   },
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
-    const tips = await mockTipsService.getTips();
+    const tips = await mockTipsService.getAllTips();
     const index = tips.findIndex(t => t.id === updatedTip.id);
     if (index !== -1) {
       tips[index] = normalizeTip(updatedTip);
@@ -148,8 +160,30 @@ export const mockTipsService = {
   },
 
   deleteTip: async (id: string): Promise<void> => {
-    const tips = await mockTipsService.getTips();
+    const tips = await mockTipsService.getAllTips();
     writeTips(tips.filter(t => t.id !== id));
+  },
+
+  publishTip: async (id: string): Promise<void> => {
+    const tips = await mockTipsService.getAllTips();
+    const tip = tips.find(t => t.id === id);
+    if (!tip) return;
+    await mockTipsService.updateTip({
+      ...tip,
+      publicationStatus: TipPublicationStatus.PUBLISHED,
+      publishedAt: tip.publishedAt || new Date().toISOString(),
+    });
+  },
+
+  unpublishTip: async (id: string): Promise<void> => {
+    const tips = await mockTipsService.getAllTips();
+    const tip = tips.find(t => t.id === id);
+    if (!tip) return;
+    await mockTipsService.updateTip({
+      ...tip,
+      publicationStatus: TipPublicationStatus.DRAFT,
+      publishedAt: undefined,
+    });
   },
 
   subscribe: (callback: () => void): (() => void) => {
