@@ -29,6 +29,7 @@ export interface Match {
   time: string;
   result?: string;
   status?: TicketStatus;
+  analysis?: string;
 }
 
 export enum MatchStatus {

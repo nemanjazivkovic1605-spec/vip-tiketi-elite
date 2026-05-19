@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { 
   BarChart3, Users, FileText, Settings, LogOut, ChevronRight, 
-  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2
+  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { mockAuthService } from '../../services/mockAuth';
@@ -14,7 +14,39 @@ import { DEMO_USERS } from '../../lib/demoData';
 import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus } from '../../types';
 import TipModal from '../../components/TipModal';
 
-const tipOptions = ['GG', '3+', '1', 'X', '2', '1X', 'X2'];
+const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
+
+type TicketBuilderItem = {
+  match: ImportedMatch;
+  prediction: string;
+  odds: string;
+  analysis: string;
+};
+
+type TicketAccessType = 'FREE' | 'VIP';
+
+type HistoricalPick = {
+  match: ImportedMatch;
+  prediction: '1' | 'X' | '2';
+  odds: number;
+  status: TicketStatus;
+};
+
+const getTicketKind = (matchCount: number) => {
+  if (matchCount === 1) return 'SINGL';
+  if (matchCount === 2) return 'DUBL';
+  if (matchCount === 3) return 'TREBL';
+  return 'KOMBINOVANI';
+};
+
+const getIsoDate = (date: Date) => date.toISOString().split('T')[0];
+
+const getSixMonthsAgo = () => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setMonth(date.getMonth() - 6);
+  return date;
+};
 
 const evaluatePrediction = (prediction: string, match: ImportedMatch): TicketStatus => {
   const home = match.homeScore;
@@ -50,6 +82,7 @@ export default function AdminDashboard() {
   const apiIssues: Array<{ competitionCode: string; competitionName: string; message: string }> = [];
   const [resultTipMatch, setResultTipMatch] = useState<ImportedMatch | null>(null);
   const [importMessage, setImportMessage] = useState('');
+  const [historyPrepMessage, setHistoryPrepMessage] = useState('');
   const [resultTipForm, setResultTipForm] = useState({
     prediction: 'GG',
     odds: '1.80',
@@ -58,6 +91,9 @@ export default function AdminDashboard() {
     analysis: '',
     isVip: true,
   });
+  const [ticketCart, setTicketCart] = useState<TicketBuilderItem[]>([]);
+  const [ticketAccessType, setTicketAccessType] = useState<TicketAccessType>('VIP');
+  const [ticketStatus, setTicketStatus] = useState<TicketStatus>(TicketStatus.PENDING);
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => mockSettingsService.getSettings());
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -80,6 +116,19 @@ export default function AdminDashboard() {
       return matchesTeam && matchesLeague && matchesDate;
     });
   }, [availableMatches, matchDateFilter, matchLeagueFilter, matchTeamFilter]);
+
+  const ticketTotalOdds = useMemo(() => {
+    const product = ticketCart.reduce((acc, item) => {
+      const odds = Number(item.odds);
+      return acc * (Number.isFinite(odds) && odds > 0 ? odds : 1);
+    }, 1);
+
+    return Number(product.toFixed(2));
+  }, [ticketCart]);
+
+  const draftTips = useMemo(() => {
+    return tips.filter((tip) => tip.publicationStatus !== TipPublicationStatus.PUBLISHED);
+  }, [tips]);
 
   useEffect(() => {
     refreshData();
@@ -175,6 +224,215 @@ export default function AdminDashboard() {
 
     await mockTipsService.addTip(tip);
     setResultTipMatch(null);
+    await refreshData();
+  };
+
+  const handleAddMatchToTicket = (match: ImportedMatch) => {
+    setTicketCart((current) => {
+      if (current.some((item) => item.match.id === match.id)) {
+        return current;
+      }
+
+      const prediction = '1';
+      return [
+        ...current,
+        {
+          match,
+          prediction,
+          odds: getDefaultOddsForPrediction(prediction, match).toFixed(2),
+          analysis: '',
+        },
+      ];
+    });
+  };
+
+  const handleUpdateTicketItem = (matchId: string, patch: Partial<Omit<TicketBuilderItem, 'match'>>) => {
+    setTicketCart((current) =>
+      current.map((item) => item.match.id === matchId ? { ...item, ...patch } : item)
+    );
+  };
+
+  const handleUpdateTicketPrediction = (matchId: string, prediction: string) => {
+    setTicketCart((current) =>
+      current.map((item) => {
+        if (item.match.id !== matchId) return item;
+        return {
+          ...item,
+          prediction,
+          odds: getDefaultOddsForPrediction(prediction, item.match).toFixed(2),
+        };
+      })
+    );
+  };
+
+  const handleRemoveTicketItem = (matchId: string) => {
+    setTicketCart((current) => current.filter((item) => item.match.id !== matchId));
+  };
+
+  const handlePublishTicket = async () => {
+    if (ticketCart.length === 0) {
+      alert('Dodajte bar jedan mec na tiket.');
+      return;
+    }
+
+    const invalidItem = ticketCart.find((item) => {
+      const odds = Number(item.odds);
+      return !item.prediction || !Number.isFinite(odds) || odds <= 1;
+    });
+
+    if (invalidItem) {
+      alert('Svaki mec mora imati tip igre i validnu kvotu vecu od 1.00.');
+      return;
+    }
+
+    const sortedDates = ticketCart.map((item) => item.match.date).sort();
+    const createdAt = new Date().toISOString();
+    const matches = ticketCart.map((item) => {
+      const odds = Number(item.odds);
+
+      return {
+        id: `ticket-match-${item.match.id}-${Date.now()}`,
+        externalMatchId: item.match.id,
+        teams: `${item.match.homeTeam} - ${item.match.awayTeam}`,
+        homeTeam: item.match.homeTeam,
+        awayTeam: item.match.awayTeam,
+        league: item.match.league,
+        prediction: item.prediction,
+        odds: Number(odds.toFixed(2)),
+        time: 'FT',
+        result: `${item.match.homeScore}:${item.match.awayScore}`,
+        status: ticketStatus,
+        analysis: item.analysis.trim(),
+      };
+    });
+
+    const ticket: Tip = {
+      id: `ticket-${Date.now()}`,
+      source: 'admin',
+      publicationStatus: TipPublicationStatus.PUBLISHED,
+      publishedAt: createdAt,
+      date: sortedDates[0] || createdAt.split('T')[0],
+      isVip: ticketAccessType === 'VIP',
+      status: ticketStatus,
+      totalOdds: ticketTotalOdds,
+      stake: 100,
+      analysis: ticketCart
+        .map((item) => item.analysis.trim())
+        .filter(Boolean)
+        .join('\n'),
+      matches,
+    };
+
+    await mockTipsService.addTip(ticket);
+    setTicketCart([]);
+    setTicketAccessType('VIP');
+    setTicketStatus(TicketStatus.PENDING);
+    await refreshData();
+  };
+
+  const pickHistoricalFavorite = (match: ImportedMatch): HistoricalPick | null => {
+    const rawOptions: Array<{ prediction: '1' | 'X' | '2'; odds: number }> = [
+      { prediction: '1', odds: Number(match.oddsHome) },
+      { prediction: 'X', odds: Number(match.oddsDraw) },
+      { prediction: '2', odds: Number(match.oddsAway) },
+    ];
+    const options = rawOptions.filter((option) => Number.isFinite(option.odds) && option.odds > 1);
+
+    if (options.length === 0) return null;
+
+    const sorted = [...options].sort((a, b) => a.odds - b.odds);
+    const preferred = sorted.find((option) => option.prediction !== 'X' && option.odds <= 2.35) || sorted[0];
+
+    return {
+      match,
+      prediction: preferred.prediction,
+      odds: Number(preferred.odds.toFixed(2)),
+      status: evaluatePrediction(preferred.prediction, match),
+    };
+  };
+
+  const handlePrepareHistory = async () => {
+    if (availableMatches.length === 0) {
+      setHistoryPrepMessage('Admin baza utakmica je prazna. Prvo importujte Excel/CSV bazu.');
+      return;
+    }
+
+    const fromDate = getSixMonthsAgo();
+    const toDate = new Date();
+    const fromIso = getIsoDate(fromDate);
+    const toIso = getIsoDate(toDate);
+    const existingIds = new Set(tips.map((tip) => tip.id));
+    const grouped = new Map<string, HistoricalPick[]>();
+
+    availableMatches
+      .filter((match) => {
+        return match.date >= fromIso
+          && match.date <= toIso
+          && Number.isFinite(match.homeScore)
+          && Number.isFinite(match.awayScore);
+      })
+      .forEach((match) => {
+        const pick = pickHistoricalFavorite(match);
+        if (!pick) return;
+
+        const current = grouped.get(match.date) || [];
+        current.push(pick);
+        grouped.set(match.date, current);
+      });
+
+    const generatedTips: Tip[] = [];
+
+    Array.from(grouped.entries())
+      .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+      .forEach(([date, picks]) => {
+        const id = `history-6m-${date}`;
+        if (existingIds.has(id)) return;
+
+        const rankedPicks = picks
+          .sort((a, b) => a.odds - b.odds)
+          .slice(0, 5);
+
+        if (rankedPicks.length < 3) return;
+
+        const ticketMatches = rankedPicks.map((pick) => ({
+          id: `history-match-${pick.match.id}`,
+          externalMatchId: pick.match.id,
+          teams: `${pick.match.homeTeam} - ${pick.match.awayTeam}`,
+          homeTeam: pick.match.homeTeam,
+          awayTeam: pick.match.awayTeam,
+          league: pick.match.league,
+          prediction: pick.prediction,
+          odds: pick.odds,
+          time: 'FT',
+          result: `${pick.match.homeScore}:${pick.match.awayScore}`,
+          status: pick.status,
+          analysis: 'Istorijski predlog iz importovane baze.',
+        }));
+        const totalOdds = Number(ticketMatches.reduce((acc, match) => acc * match.odds, 1).toFixed(2));
+        const status = rankedPicks.some((pick) => pick.status === TicketStatus.LOST) ? TicketStatus.LOST : TicketStatus.WON;
+
+        generatedTips.push({
+          id,
+          source: 'admin',
+          publicationStatus: TipPublicationStatus.DRAFT,
+          date,
+          isVip: true,
+          status,
+          totalOdds,
+          stake: 100,
+          analysis: `Automatski pripremljen istorijski ${getTicketKind(ticketMatches.length).toLowerCase()} tiket za ${date}.`,
+          matches: ticketMatches,
+        });
+      });
+
+    if (generatedTips.length === 0) {
+      setHistoryPrepMessage('Nema novih draft tiketa za poslednjih 6 meseci. Moguce je da su vec pripremljeni ili nema dovoljno meceva po danu.');
+      return;
+    }
+
+    await mockTipsService.addTips(generatedTips);
+    setActiveTab('tips');
+    setHistoryPrepMessage(`Pripremljeno ${generatedTips.length} DRAFT tiketa za period ${fromIso} - ${toIso}. Nista nije objavljeno.`);
     await refreshData();
   };
 
@@ -340,6 +598,137 @@ export default function AdminDashboard() {
     const updatedTip = { ...tip, matches: updatedMatches };
     await mockTipsService.updateTip(updatedTip);
     await refreshData();
+  };
+
+  const renderTicketBuilderPanel = () => {
+    if (ticketCart.length === 0) return null;
+
+    return (
+      <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8 shadow-[0_0_35px_rgba(245,124,0,0.08)]">
+        <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-5 mb-6">
+          <div>
+            <div className="text-[10px] text-gold-500 font-black uppercase tracking-[0.24em] mb-2">
+              Trenutni tiket
+            </div>
+            <h3 className="text-2xl font-display font-bold">
+              {getTicketKind(ticketCart.length)} · {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
+            </h3>
+            <p className="text-xs text-neutral-500 mt-2">
+              Podesite tip, kvotu i komentar za svaki mec, pa objavite tiket javno.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <button
+              onClick={() => setTicketAccessType('FREE')}
+              className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${ticketAccessType === 'FREE' ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-500'}`}
+            >
+              FREE
+            </button>
+            <button
+              onClick={() => setTicketAccessType('VIP')}
+              className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${ticketAccessType === 'VIP' ? 'bg-gold-500 text-black border-gold-500' : 'bg-black/40 border-white/10 text-neutral-500'}`}
+            >
+              VIP
+            </button>
+            <select
+              value={ticketStatus}
+              onChange={(e) => setTicketStatus(e.target.value as TicketStatus)}
+              className="col-span-2 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300 outline-none focus:border-gold-500/50"
+            >
+              <option value={TicketStatus.PENDING}>AKTIVAN</option>
+              <option value={TicketStatus.WON}>PROSLO</option>
+              <option value={TicketStatus.LOST}>PALO</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-3 mb-6">
+          {ticketCart.map((item, index) => (
+            <div key={item.match.id} className="bg-black/35 border border-white/10 rounded-2xl p-4">
+              <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">
+                    #{index + 1} · {item.match.date} · {item.match.league}
+                  </div>
+                  <div className="font-bold text-neutral-100">
+                    {item.match.homeTeam} - {item.match.awayTeam}
+                  </div>
+                  <div className="mt-2 text-xs text-neutral-500">
+                    Rezultat: <span className="text-gold-500 font-black">{item.match.homeScore} - {item.match.awayScore}</span>
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-[120px_120px_1fr_auto] gap-3 flex-1">
+                  <select
+                    value={item.prediction}
+                    onChange={(e) => handleUpdateTicketPrediction(item.match.id, e.target.value)}
+                    className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                  >
+                    {tipOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={item.odds}
+                    onChange={(e) => handleUpdateTicketItem(item.match.id, { odds: e.target.value })}
+                    className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                    placeholder="Kvota"
+                  />
+                  <input
+                    value={item.analysis}
+                    onChange={(e) => handleUpdateTicketItem(item.match.id, { analysis: e.target.value })}
+                    className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                    placeholder="Komentar / analiza"
+                  />
+                  <button
+                    onClick={() => handleRemoveTicketItem(item.match.id)}
+                    className="p-3 bg-white/5 rounded-xl hover:text-red-500 transition-colors"
+                    aria-label="Ukloni mec iz tiketa"
+                  >
+                    <MinusCircle size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-t border-white/10 pt-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3">
+              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Broj parova</div>
+              <div className="text-2xl font-display font-black">{ticketCart.length}</div>
+            </div>
+            <div className="bg-gold-500/10 border border-gold-500/20 rounded-2xl px-5 py-3">
+              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Ukupna kvota</div>
+              <div className="text-2xl font-display font-black text-gold-500">{ticketTotalOdds.toFixed(2)}</div>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3 col-span-2 sm:col-span-1">
+              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Tip tiketa</div>
+              <div className="text-2xl font-display font-black">{getTicketKind(ticketCart.length)}</div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={() => setTicketCart([])}
+              className="px-5 py-3 bg-white/5 text-neutral-300 border border-white/10 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-white/10 transition-all"
+            >
+              Isprazni tiket
+            </button>
+            <button
+              onClick={handlePublishTicket}
+              className="px-7 py-3 bg-gold-500 text-black text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-gold-600 transition-all shadow-lg shadow-gold-500/20"
+            >
+              Objavi tiket
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const menuItems = [
@@ -539,17 +928,32 @@ export default function AdminDashboard() {
                  <motion.div key="matches" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
                        <div>
-                         <h2 className="text-3xl font-display font-bold">Baza utakmica</h2>
-                         <p className="text-sm text-neutral-500 mt-2">Importovane utakmice vidi samo admin. Public deo dobija samo objavljene tipove.</p>
-                       </div>
-                       <button
-                         onClick={handleClearImportedMatches}
-                         disabled={availableMatches.length === 0}
-                         className="flex items-center gap-2 px-5 py-3 bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-red-500/20 transition-all disabled:opacity-40"
-                       >
-                         <Trash2 size={14} /> Obrisi bazu
-                       </button>
-                    </div>
+                          <h2 className="text-3xl font-display font-bold">Baza utakmica</h2>
+                          <p className="text-sm text-neutral-500 mt-2">Importovane utakmice vidi samo admin. Public deo dobija samo objavljene tipove.</p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <button
+                            onClick={handlePrepareHistory}
+                            disabled={availableMatches.length === 0}
+                            className="flex items-center justify-center gap-2 px-5 py-3 bg-gold-500 text-black border border-gold-500 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-gold-600 transition-all disabled:opacity-40"
+                          >
+                            <RefreshCw size={14} /> Pripremi istoriju
+                          </button>
+                          <button
+                            onClick={handleClearImportedMatches}
+                            disabled={availableMatches.length === 0}
+                            className="flex items-center justify-center gap-2 px-5 py-3 bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-red-500/20 transition-all disabled:opacity-40"
+                          >
+                            <Trash2 size={14} /> Obrisi bazu
+                          </button>
+                        </div>
+                     </div>
+
+                    {historyPrepMessage && (
+                      <div className="glass p-4 rounded-2xl border-gold-500/20 mb-6 text-sm text-neutral-300">
+                        {historyPrepMessage}
+                      </div>
+                    )}
 
                     <div className="glass p-6 rounded-[2rem] border-white/5 mb-8">
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
@@ -576,7 +980,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    <div className="glass p-5 rounded-[2rem] border-white/5 mb-8">
+                     <div className="glass p-5 rounded-[2rem] border-white/5 mb-8">
                       <div className="grid md:grid-cols-4 gap-3">
                         <input
                           value={matchTeamFilter}
@@ -613,10 +1017,12 @@ export default function AdminDashboard() {
                       </div>
                       <div className="mt-4 text-[10px] text-neutral-500 font-black uppercase tracking-widest">
                         Prikazano {Math.min(filteredAvailableMatches.length, 300)} od {filteredAvailableMatches.length} filtriranih / ukupno {availableMatches.length}
-                      </div>
-                    </div>
+                       </div>
+                     </div>
 
-                    {resultTipMatch && (
+                     {renderTicketBuilderPanel()}
+
+                     {resultTipMatch && (
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
                           <div>
@@ -723,15 +1129,21 @@ export default function AdminDashboard() {
                                 <span>2: {match.oddsAway.toFixed(2)}</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                             <div className="flex items-center gap-2">
+                               <button
+                                 onClick={() => handleOpenResultTip(match)}
+                                 className="px-5 py-3 bg-gold-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-gold-600 transition-all"
+                               >
+                                 Dodaj tip
+                               </button>
                               <button
-                                onClick={() => handleOpenResultTip(match)}
-                                className="px-5 py-3 bg-gold-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-gold-600 transition-all"
+                                onClick={() => handleAddMatchToTicket(match)}
+                                className="inline-flex items-center gap-2 px-5 py-3 bg-white/5 text-neutral-200 border border-white/10 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-gold-500/40 hover:text-gold-500 transition-all"
                               >
-                                Dodaj tip
+                                <Plus size={14} /> Dodaj na tiket
                               </button>
-                              <button
-                                onClick={() => handleDeleteImportedMatch(match.id)}
+                               <button
+                                 onClick={() => handleDeleteImportedMatch(match.id)}
                                 className="p-3 bg-white/5 rounded-xl hover:text-red-500 transition-colors"
                               >
                                 <Trash2 size={16} />
@@ -767,14 +1179,49 @@ export default function AdminDashboard() {
 
               {activeTab === 'tips' && (
                  <motion.div key="tips" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                    <div className="flex items-center justify-between mb-8">
-                       <h2 className="text-3xl font-display font-bold">Upravljanje tipovima</h2>
-                       <button 
-                        onClick={() => setIsTipModalOpen(true)}
-                        className="px-6 py-3 bg-gold-500 text-black font-bold rounded-2xl hover:bg-gold-600 transition-all shadow-lg shadow-gold-500/20"
-                       >
-                         Novi Tip
-                       </button>
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+                       <div>
+                         <h2 className="text-3xl font-display font-bold">Upravljanje tipovima</h2>
+                         <p className="text-sm text-neutral-500 mt-2">
+                           Draft tikete vidi samo admin. Public/statistika koriste samo objavljene tikete.
+                         </p>
+                       </div>
+                       <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                         onClick={handlePrepareHistory}
+                         disabled={availableMatches.length === 0}
+                         className="px-6 py-3 bg-white/5 text-neutral-200 border border-white/10 font-bold rounded-2xl hover:border-gold-500/40 hover:text-gold-500 transition-all disabled:opacity-40"
+                        >
+                          Pripremi istoriju
+                        </button>
+                        <button 
+                         onClick={() => setIsTipModalOpen(true)}
+                         className="px-6 py-3 bg-gold-500 text-black font-bold rounded-2xl hover:bg-gold-600 transition-all shadow-lg shadow-gold-500/20"
+                        >
+                          Novi Tip
+                        </button>
+                       </div>
+                    </div>
+
+                    {historyPrepMessage && (
+                      <div className="glass p-4 rounded-2xl border-gold-500/20 mb-6 text-sm text-neutral-300">
+                        {historyPrepMessage}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                      <div className="glass p-5 rounded-2xl border-white/5">
+                        <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">Draft tiketi</div>
+                        <div className="text-2xl font-display font-bold">{draftTips.length}</div>
+                      </div>
+                      <div className="glass p-5 rounded-2xl border-white/5">
+                        <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">Spremno za objavu</div>
+                        <div className="text-2xl font-display font-bold text-gold-500">{draftTips.filter((tip) => tip.status !== TicketStatus.PENDING).length}</div>
+                      </div>
+                      <div className="glass p-5 rounded-2xl border-white/5">
+                        <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">Objavljeno</div>
+                        <div className="text-2xl font-display font-bold text-green-500">{tips.filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED).length}</div>
+                      </div>
                     </div>
 
                     {apiIssues.length > 0 && (
@@ -819,6 +1266,12 @@ export default function AdminDashboard() {
                                 >
                                   Dodaj tip
                                 </button>
+                                <button
+                                  onClick={() => handleAddMatchToTicket(match)}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 text-neutral-200 border border-white/10 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-gold-500/40 hover:text-gold-500 transition-all"
+                                >
+                                  <Plus size={14} /> Dodaj na tiket
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -830,6 +1283,8 @@ export default function AdminDashboard() {
                         </div>
                       )}
                     </div>
+
+                    {renderTicketBuilderPanel()}
 
                     {resultTipMatch && (
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
@@ -928,9 +1383,20 @@ export default function AdminDashboard() {
                                      </span>
                                   </div>
                                   <h3 className="text-xl font-bold">{tip.matches?.[0]?.teams} {tip.matches.length > 1 && `+${tip.matches.length - 1}`}</h3>
+                                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                                    <span className="px-3 py-1 rounded-full bg-black/30 border border-gold-500/20 text-gold-500 text-[9px] font-black uppercase tracking-widest">
+                                      {getTicketKind(tip.matches.length)}
+                                    </span>
+                                    <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-neutral-300 text-[9px] font-black uppercase tracking-widest">
+                                      {tip.matches.length} {tip.matches.length === 1 ? 'par' : 'parova'}
+                                    </span>
+                                    <span className="px-3 py-1 rounded-full bg-gold-500/10 border border-gold-500/20 text-gold-500 text-[9px] font-black uppercase tracking-widest">
+                                      Ukupna kvota {tip.totalOdds.toFixed(2)}
+                                    </span>
+                                  </div>
                                </div>
                                
-                               <div className="flex items-center gap-3">
+                               <div className="flex flex-wrap items-center gap-3">
                                   <select
                                     value={tip.status}
                                     onChange={(e) => handleUpdateTipStatus(tip, e.target.value as TicketStatus)}
@@ -965,15 +1431,15 @@ export default function AdminDashboard() {
                                   </button>
                                   <button 
                                     onClick={() => handleOpenEditModal(tip)}
-                                    className="p-2 bg-white/5 rounded-xl hover:text-gold-500 transition-colors"
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl hover:text-gold-500 transition-colors text-[10px] font-black uppercase tracking-widest"
                                   >
-                                     <Settings size={18} />
+                                     <Settings size={14} /> Izmeni
                                   </button>
                                   <button 
                                     onClick={() => handleDeleteTip(tip.id)}
-                                    className="p-2 bg-white/5 rounded-xl hover:text-red-500 transition-colors"
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl hover:text-red-500 transition-colors text-[10px] font-black uppercase tracking-widest"
                                   >
-                                     <X size={18} />
+                                     <X size={14} /> Obrisi
                                   </button>
                                </div>
                             </div>
@@ -987,6 +1453,7 @@ export default function AdminDashboard() {
                                           <div className="font-bold text-neutral-200">{m.homeTeam} - {m.awayTeam}</div>
                                           <div className="mt-2 flex items-center gap-4">
                                              <div className="text-xs"><span className="text-neutral-500 uppercase tracking-tighter">Tip:</span> <span className="text-gold-500 font-black">{m.prediction}</span></div>
+                                             <div className="text-xs"><span className="text-neutral-500 uppercase tracking-tighter">Kvota:</span> <span className="text-neutral-200 font-black">{m.odds.toFixed(2)}</span></div>
                                              {m.result && <div className="text-xs"><span className="text-neutral-500 uppercase tracking-tighter">Rezultat:</span> <span className="text-neutral-200 font-black">{m.result}</span></div>}
                                           </div>
                                        </div>

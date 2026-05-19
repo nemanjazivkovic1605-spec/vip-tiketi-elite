@@ -150,6 +150,16 @@ export const mockTipsService = {
     writeTips([normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT }), ...tips]);
   },
 
+  addTips: async (newTips: Tip[]): Promise<void> => {
+    const tips = await mockTipsService.getAllTips();
+    const existingIds = new Set(tips.map((tip) => tip.id));
+    const normalizedNewTips = newTips
+      .filter((tip) => !existingIds.has(tip.id))
+      .map((tip) => normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT }));
+
+    writeTips([...normalizedNewTips, ...tips]);
+  },
+
   updateTip: async (updatedTip: Tip): Promise<void> => {
     const tips = await mockTipsService.getAllTips();
     const index = tips.findIndex(t => t.id === updatedTip.id);
