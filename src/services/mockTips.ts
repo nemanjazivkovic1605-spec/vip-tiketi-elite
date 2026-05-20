@@ -43,7 +43,10 @@ const normalizeTip = (tip: Tip): Tip => {
     date: tip.date || new Date().toISOString().split('T')[0],
     analysis: cleanAnalysis(tip.analysis),
     matches,
-    totalOdds,
+    totalOdds: tip.totalOddsOverride && Number.isFinite(tip.totalOdds) && tip.totalOdds > 0
+      ? Number(tip.totalOdds.toFixed(2))
+      : totalOdds,
+    totalOddsOverride: Boolean(tip.totalOddsOverride),
     stake: getTicketStake({ ...tip, matches, totalOdds } as Tip),
   };
 };

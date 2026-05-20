@@ -13,6 +13,7 @@ import { importedMatchesService } from '../../services/importedMatchesService';
 import { DEMO_USERS } from '../../lib/demoData';
 import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus } from '../../types';
 import TipModal from '../../components/TipModal';
+import TicketEditModal from '../../components/admin/TicketEditModal';
 import { calculateTotalOdds, getDefaultStake, getStatusLabel, getTicketKind, normalizeOdds } from '../../utils/tickets';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
@@ -67,6 +68,7 @@ export default function AdminDashboard() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTipModalOpen, setIsTipModalOpen] = useState(false);
   const [editingTip, setEditingTip] = useState<Tip | undefined>(undefined);
+  const [editingTicket, setEditingTicket] = useState<Tip | null>(null);
   
   // Fake state for lists
   const [userList, setUserList] = useState(DEMO_USERS);
@@ -517,8 +519,17 @@ export default function AdminDashboard() {
   };
 
   const handleOpenEditModal = (tip: Tip) => {
-    setEditingTip(tip);
-    setIsTipModalOpen(true);
+    setEditingTicket(tip);
+  };
+
+  const handleSaveTicketEdit = async (updatedTip: Tip) => {
+    await mockTipsService.updateTip(updatedTip);
+    await refreshData();
+  };
+
+  const handleDeleteTicketEdit = async (tipId: string) => {
+    await mockTipsService.deleteTip(tipId);
+    await refreshData();
   };
 
   const handleUpdateUserStatus = (userId: string, status: MembershipStatus) => {
@@ -1523,7 +1534,16 @@ export default function AdminDashboard() {
 
                     <div className="grid gap-6">
                        {filteredTips.map(tip => (
-                         <div key={tip.id} className="glass p-8 rounded-[2rem] border-white/5">
+                         <div
+                           key={tip.id}
+                           onClick={() => handleOpenEditModal(tip)}
+                           role="button"
+                           tabIndex={0}
+                           onKeyDown={(event) => {
+                             if (event.key === 'Enter' || event.key === ' ') handleOpenEditModal(tip);
+                           }}
+                           className="glass p-8 rounded-[2rem] border-white/5 cursor-pointer transition-all hover:border-gold-500/30 hover:shadow-[0_0_28px_rgba(245,124,0,0.10)]"
+                         >
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                                <div>
                                   <div className="flex items-center gap-2 mb-2">
@@ -1567,6 +1587,7 @@ export default function AdminDashboard() {
                                   <select
                                     value={tip.status}
                                     onChange={(e) => handleUpdateTipStatus(tip, e.target.value as TicketStatus)}
+                                    onClick={(event) => event.stopPropagation()}
                                     className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 outline-none focus:border-gold-500/50 transition-all"
                                   >
                                     <option value={TicketStatus.PENDING}>Aktivan</option>
@@ -1576,21 +1597,30 @@ export default function AdminDashboard() {
                                   </select>
                                   {tip.publicationStatus === TipPublicationStatus.PUBLISHED ? (
                                     <button
-                                      onClick={() => handleUnpublishTip(tip.id)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleUnpublishTip(tip.id);
+                                      }}
                                       className="px-4 py-2 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
                                     >
                                       Vrati u draft
                                     </button>
                                   ) : (
                                     <button
-                                      onClick={() => handlePublishTip(tip.id)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handlePublishTip(tip.id);
+                                      }}
                                       className="px-4 py-2 bg-gold-500 text-black hover:bg-gold-600 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
                                     >
                                       Objavi
                                     </button>
                                   )}
                                   <button 
-                                    onClick={() => autoGradeTip(tip.id)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      autoGradeTip(tip.id);
+                                    }}
                                     disabled={loading}
                                     className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-gold-500/10 hover:text-gold-500 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all disabled:opacity-50"
                                   >
@@ -1598,13 +1628,19 @@ export default function AdminDashboard() {
                                     Auto Grade
                                   </button>
                                   <button 
-                                    onClick={() => handleOpenEditModal(tip)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleOpenEditModal(tip);
+                                    }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl hover:text-gold-500 transition-colors text-[10px] font-black uppercase tracking-widest"
                                   >
                                      <Settings size={14} /> Izmeni
                                   </button>
                                   <button 
-                                    onClick={() => handleDeleteTip(tip.id)}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleDeleteTip(tip.id);
+                                    }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl hover:text-red-500 transition-colors text-[10px] font-black uppercase tracking-widest"
                                   >
                                      <X size={14} /> Obrisi
@@ -1631,6 +1667,7 @@ export default function AdminDashboard() {
                                           <select 
                                             value={m.externalMatchId || ''}
                                             onChange={(e) => linkMatch(tip.id, idx, e.target.value)}
+                                            onClick={(event) => event.stopPropagation()}
                                             className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] font-bold text-neutral-400 outline-none focus:border-gold-500/50 transition-all max-w-[150px]"
                                           >
                                             <option value="">Poveži meč...</option>
@@ -1732,6 +1769,14 @@ export default function AdminDashboard() {
             }}
             onSave={handleCreateTip}
             initialData={editingTip}
+          />
+        )}
+        {editingTicket && (
+          <TicketEditModal
+            tip={editingTicket}
+            onClose={() => setEditingTicket(null)}
+            onSave={handleSaveTicketEdit}
+            onDelete={handleDeleteTicketEdit}
           />
         )}
       </AnimatePresence>

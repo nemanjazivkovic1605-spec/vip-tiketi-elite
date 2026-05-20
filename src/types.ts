@@ -99,6 +99,7 @@ export interface Tip {
   date: string;
   matches: Match[];
   totalOdds: number;
+  totalOddsOverride?: boolean;
   stake?: number;
   status: TicketStatus;
   analysis: string;
