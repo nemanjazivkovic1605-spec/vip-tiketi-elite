@@ -13,6 +13,7 @@ import { importedMatchesService } from '../../services/importedMatchesService';
 import { DEMO_USERS } from '../../lib/demoData';
 import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus } from '../../types';
 import TipModal from '../../components/TipModal';
+import { calculateTotalOdds, getDefaultStake, getStatusLabel, getTicketKind, normalizeOdds } from '../../utils/tickets';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
 
@@ -32,13 +33,6 @@ type HistoricalPick = {
   prediction: '1' | 'X' | '2';
   odds: number;
   status: TicketStatus;
-};
-
-const getTicketKind = (matchCount: number) => {
-  if (matchCount === 1) return 'SINGL';
-  if (matchCount === 2) return 'DUBL';
-  if (matchCount === 3) return 'TREBL';
-  return 'KOMBINOVANI';
 };
 
 const getIsoDate = (date: Date) => date.toISOString().split('T')[0];
@@ -98,6 +92,7 @@ export default function AdminDashboard() {
   const [ticketCart, setTicketCart] = useState<TicketBuilderItem[]>([]);
   const [ticketAccessType, setTicketAccessType] = useState<TicketAccessType>('VIP');
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>(TicketStatus.PENDING);
+  const [ticketStake, setTicketStake] = useState('5000');
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => mockSettingsService.getSettings());
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -122,12 +117,17 @@ export default function AdminDashboard() {
   }, [availableMatches, matchDateFilter, matchLeagueFilter, matchTeamFilter]);
 
   const ticketTotalOdds = useMemo(() => {
-    const product = ticketCart.reduce((acc, item) => {
-      const odds = Number(item.odds);
-      return acc * (Number.isFinite(odds) && odds > 0 ? odds : 1);
-    }, 1);
+    const matches = ticketCart.map((item) => ({
+      teams: `${item.match.homeTeam} - ${item.match.awayTeam}`,
+      homeTeam: item.match.homeTeam,
+      awayTeam: item.match.awayTeam,
+      league: item.match.league,
+      prediction: item.prediction,
+      odds: normalizeOdds(item.odds),
+      time: 'FT',
+    }));
 
-    return Number(product.toFixed(2));
+    return calculateTotalOdds(matches);
   }, [ticketCart]);
 
   const draftTips = useMemo(() => {
@@ -199,13 +199,17 @@ export default function AdminDashboard() {
     return 1.8;
   };
 
+  const applyDefaultTicketStake = (accessType: TicketAccessType, matchCount: number) => {
+    setTicketStake(String(getDefaultStake(accessType === 'VIP', matchCount)));
+  };
+
   const handleOpenResultTip = (match: ImportedMatch) => {
     const prediction = 'GG';
     setResultTipMatch(match);
     setResultTipForm({
       prediction,
       odds: getDefaultOddsForPrediction(prediction, match).toFixed(2),
-      stake: '100',
+      stake: String(getDefaultStake(true, 1)),
       status: TicketStatus.WON,
       analysis: `${match.homeTeam} - ${match.awayTeam}`,
       isVip: true,
@@ -217,7 +221,7 @@ export default function AdminDashboard() {
 
     const odds = Number(resultTipForm.odds);
     const stake = Number(resultTipForm.stake);
-    if (!Number.isFinite(odds) || odds <= 1 || !Number.isFinite(stake) || stake <= 0) {
+    if (!Number.isFinite(odds) || odds <= 0 || !Number.isFinite(stake) || stake <= 0) {
       alert('Popunite tip igre, kvotu i ulog.');
       return;
     }
@@ -230,7 +234,7 @@ export default function AdminDashboard() {
       date: resultTipMatch.date,
       isVip: resultTipForm.isVip,
       status: resultTipForm.status,
-      totalOdds: Number(odds.toFixed(2)),
+      totalOdds: normalizeOdds(odds),
       stake: Number(stake.toFixed(2)),
       analysis: resultTipForm.analysis,
       matches: [
@@ -242,7 +246,7 @@ export default function AdminDashboard() {
           awayTeam: resultTipMatch.awayTeam,
           league: resultTipMatch.league,
           prediction: resultTipForm.prediction,
-          odds,
+          odds: normalizeOdds(odds),
           time: 'FT',
           result: `${resultTipMatch.homeScore}:${resultTipMatch.awayScore}`,
           status: resultTipForm.status,
@@ -262,7 +266,7 @@ export default function AdminDashboard() {
       }
 
       const prediction = '1';
-      return [
+      const next = [
         ...current,
         {
           match,
@@ -271,6 +275,12 @@ export default function AdminDashboard() {
           analysis: '',
         },
       ];
+      const currentDefaultStake = getDefaultStake(ticketAccessType === 'VIP', current.length);
+      const shouldUseNextDefault = current.length === 0 || Number(ticketStake) === currentDefaultStake;
+      if (shouldUseNextDefault) {
+        setTicketStake(String(getDefaultStake(ticketAccessType === 'VIP', next.length)));
+      }
+      return next;
     });
   };
 
@@ -294,7 +304,14 @@ export default function AdminDashboard() {
   };
 
   const handleRemoveTicketItem = (matchId: string) => {
-    setTicketCart((current) => current.filter((item) => item.match.id !== matchId));
+    setTicketCart((current) => {
+      const next = current.filter((item) => item.match.id !== matchId);
+      const currentDefaultStake = getDefaultStake(ticketAccessType === 'VIP', current.length);
+      if (Number(ticketStake) === currentDefaultStake) {
+        setTicketStake(String(getDefaultStake(ticketAccessType === 'VIP', next.length)));
+      }
+      return next;
+    });
   };
 
   const handlePublishTicket = async () => {
@@ -303,20 +320,23 @@ export default function AdminDashboard() {
       return;
     }
 
-    const invalidItem = ticketCart.find((item) => {
-      const odds = Number(item.odds);
-      return !item.prediction || !Number.isFinite(odds) || odds <= 1;
-    });
+    const invalidItem = ticketCart.find((item) => !item.prediction);
 
     if (invalidItem) {
-      alert('Svaki mec mora imati tip igre i validnu kvotu vecu od 1.00.');
+      alert('Svaki mec mora imati tip igre.');
+      return;
+    }
+
+    const stake = Number(ticketStake);
+    if (!Number.isFinite(stake) || stake <= 0) {
+      alert('Unesite validan ulog za tiket.');
       return;
     }
 
     const sortedDates = ticketCart.map((item) => item.match.date).sort();
     const createdAt = new Date().toISOString();
     const matches = ticketCart.map((item) => {
-      const odds = Number(item.odds);
+      const odds = normalizeOdds(item.odds);
 
       return {
         id: `ticket-match-${item.match.id}-${Date.now()}`,
@@ -343,7 +363,7 @@ export default function AdminDashboard() {
       isVip: ticketAccessType === 'VIP',
       status: ticketStatus,
       totalOdds: ticketTotalOdds,
-      stake: 100,
+      stake: Number(stake.toFixed(2)),
       analysis: ticketCart
         .map((item) => item.analysis.trim())
         .filter(Boolean)
@@ -355,6 +375,7 @@ export default function AdminDashboard() {
     setTicketCart([]);
     setTicketAccessType('VIP');
     setTicketStatus(TicketStatus.PENDING);
+    setTicketStake(String(getDefaultStake(true, 0)));
     await refreshData();
   };
 
@@ -436,7 +457,7 @@ export default function AdminDashboard() {
           status: pick.status,
           analysis: '',
         }));
-        const totalOdds = Number(ticketMatches.reduce((acc, match) => acc * match.odds, 1).toFixed(2));
+        const totalOdds = calculateTotalOdds(ticketMatches);
         const status = rankedPicks.some((pick) => pick.status === TicketStatus.LOST) ? TicketStatus.LOST : TicketStatus.WON;
 
         generatedTips.push({
@@ -447,7 +468,7 @@ export default function AdminDashboard() {
           isVip: true,
           status,
           totalOdds,
-          stake: 100,
+          stake: getDefaultStake(true, ticketMatches.length),
           analysis: '',
           matches: ticketMatches,
         });
@@ -658,13 +679,19 @@ export default function AdminDashboard() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <button
-              onClick={() => setTicketAccessType('FREE')}
+              onClick={() => {
+                setTicketAccessType('FREE');
+                applyDefaultTicketStake('FREE', ticketCart.length);
+              }}
               className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${ticketAccessType === 'FREE' ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-500'}`}
             >
               FREE
             </button>
             <button
-              onClick={() => setTicketAccessType('VIP')}
+              onClick={() => {
+                setTicketAccessType('VIP');
+                applyDefaultTicketStake('VIP', ticketCart.length);
+              }}
               className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${ticketAccessType === 'VIP' ? 'bg-gold-500 text-black border-gold-500' : 'bg-black/40 border-white/10 text-neutral-500'}`}
             >
               VIP
@@ -677,6 +704,7 @@ export default function AdminDashboard() {
               <option value={TicketStatus.PENDING}>AKTIVAN</option>
               <option value={TicketStatus.WON}>PROSLO</option>
               <option value={TicketStatus.LOST}>PALO</option>
+              <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
             </select>
           </div>
         </div>
@@ -748,6 +776,17 @@ export default function AdminDashboard() {
               <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Tip tiketa</div>
               <div className="text-2xl font-display font-black">{getTicketKind(ticketCart.length)}</div>
             </div>
+            <label className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3 col-span-2 sm:col-span-1">
+              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Ulog</div>
+              <input
+                type="number"
+                min="1"
+                step="100"
+                value={ticketStake}
+                onChange={(e) => setTicketStake(e.target.value)}
+                className="w-full bg-transparent text-2xl font-display font-black outline-none text-neutral-100"
+              />
+            </label>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -1180,15 +1219,16 @@ export default function AdminDashboard() {
                           >
                             <option value={TicketStatus.WON}>PROSLO</option>
                             <option value={TicketStatus.LOST}>PALO</option>
+                            <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
                           </select>
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, stake: String(getDefaultStake(false, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${!resultTipForm.isVip ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             FREE
                           </button>
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true, stake: String(getDefaultStake(true, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${resultTipForm.isVip ? 'bg-gold-500 text-black border-gold-500' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             VIP
@@ -1453,13 +1493,13 @@ export default function AdminDashboard() {
                             placeholder="Ulog"
                           />
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, stake: String(getDefaultStake(false, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${!resultTipForm.isVip ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             FREE
                           </button>
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true, stake: String(getDefaultStake(true, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${resultTipForm.isVip ? 'bg-gold-500 text-black border-gold-500' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             VIP
@@ -1493,11 +1533,13 @@ export default function AdminDashboard() {
                                      <span className="text-xs text-neutral-500 font-bold uppercase tracking-widest">{tip.date}</span>
                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1 ${
                                        tip.status === TicketStatus.WON ? 'bg-green-500/10 text-green-500' : 
-                                       tip.status === TicketStatus.LOST ? 'bg-red-500/10 text-red-500' : 'bg-white/5 text-neutral-400'
+                                       tip.status === TicketStatus.LOST ? 'bg-red-500/10 text-red-500' :
+                                       tip.status === TicketStatus.POSTPONED ? 'bg-blue-500/10 text-blue-300' : 'bg-white/5 text-neutral-400'
                                      }`}>
                                        {tip.status === TicketStatus.WON && <CheckCircle2 size={10} />}
                                        {tip.status === TicketStatus.LOST && <XCircle size={10} />}
-                                       {tip.status === TicketStatus.WON ? 'PROSLO' : tip.status === TicketStatus.LOST ? 'PALO' : 'AKTIVAN'}
+                                       {tip.status === TicketStatus.PENDING && <Clock size={10} />}
+                                       {getStatusLabel(tip.status)}
                                      </span>
                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
                                        tip.publicationStatus === TipPublicationStatus.PUBLISHED
@@ -1530,6 +1572,7 @@ export default function AdminDashboard() {
                                     <option value={TicketStatus.PENDING}>Aktivan</option>
                                     <option value={TicketStatus.WON}>PROSLO</option>
                                     <option value={TicketStatus.LOST}>PALO</option>
+                                    <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
                                   </select>
                                   {tip.publicationStatus === TipPublicationStatus.PUBLISHED ? (
                                     <button

@@ -2,7 +2,8 @@
 export enum TicketStatus {
   WON = 'WON',
   LOST = 'LOST',
-  PENDING = 'PENDING'
+  PENDING = 'PENDING',
+  POSTPONED = 'POSTPONED'
 }
 
 export enum TipPublicationStatus {

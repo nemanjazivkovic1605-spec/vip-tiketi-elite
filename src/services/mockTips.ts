@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Tip, TicketStatus, GlobalStats, TipPublicationStatus } from '../types';
+import { calculateTotalOdds, getTicketStake, isSettledTicket, normalizeOdds } from '../utils/tickets';
 
 const TICKETS_COLLECTION = 'tickets';
 const LEGACY_TIPS_KEY = 'elite_tips_data';
@@ -26,13 +27,11 @@ const normalizeTip = (tip: Tip): Tip => {
   const matches = Array.isArray(tip.matches)
     ? tip.matches.map((match) => ({
       ...match,
+      odds: normalizeOdds(match.odds),
       analysis: cleanAnalysis(match.analysis),
     }))
     : [];
-  const totalOdds = matches.reduce((acc, match) => {
-    const odds = Number(match.odds);
-    return acc * (Number.isFinite(odds) && odds > 0 ? odds : 1);
-  }, 1);
+  const totalOdds = calculateTotalOdds(matches);
 
   return {
     ...tip,
@@ -44,9 +43,8 @@ const normalizeTip = (tip: Tip): Tip => {
     date: tip.date || new Date().toISOString().split('T')[0],
     analysis: cleanAnalysis(tip.analysis),
     matches,
-    totalOdds: Number.isFinite(tip.totalOdds) && tip.totalOdds > 0
-      ? Number(tip.totalOdds.toFixed(2))
-      : Number(totalOdds.toFixed(2)),
+    totalOdds,
+    stake: getTicketStake({ ...tip, matches, totalOdds } as Tip),
   };
 };
 
@@ -125,18 +123,18 @@ const readAllTips = async (): Promise<Tip[]> => {
 };
 
 const calculateStats = (tips: Tip[]): GlobalStats => {
-  const completed = tips.filter(t => t.status !== TicketStatus.PENDING);
+  const completed = tips.filter(t => isSettledTicket(t.status));
   const wins = completed.filter(t => t.status === TicketStatus.WON);
 
-  const totalStaked = completed.reduce((acc, t) => acc + (t.stake || 100), 0);
-  const totalReturned = completed.reduce((acc, t) => {
+  const totalStaked = completed.reduce((acc, t) => acc + getTicketStake(t), 0);
+  const profit = completed.reduce((acc, t) => {
+    const stake = getTicketStake(t);
     if (t.status === TicketStatus.WON) {
-      return acc + ((t.stake || 100) * t.totalOdds);
+      return acc + (stake * (normalizeOdds(t.totalOdds) - 1));
     }
-    return acc;
+    return acc - stake;
   }, 0);
 
-  const profit = totalReturned - totalStaked;
   const roi = totalStaked > 0 ? (profit / totalStaked) * 100 : 0;
   let winStreak = 0;
   let loseStreak = 0;
