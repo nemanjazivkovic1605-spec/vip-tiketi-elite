@@ -24,6 +24,8 @@ type TicketBuilderItem = {
 };
 
 type TicketAccessType = 'FREE' | 'VIP';
+type UserStatusFilter = 'all' | 'pending' | 'approved';
+type TipPublicationFilter = 'all' | 'draft' | 'published';
 
 type HistoricalPick = {
   match: ImportedMatch;
@@ -74,7 +76,9 @@ export default function AdminDashboard() {
   
   // Fake state for lists
   const [userList, setUserList] = useState(DEMO_USERS);
+  const [userStatusFilter, setUserStatusFilter] = useState<UserStatusFilter>('all');
   const [tips, setTips] = useState<Tip[]>([]);
+  const [tipPublicationFilter, setTipPublicationFilter] = useState<TipPublicationFilter>('all');
   const [availableMatches, setAvailableMatches] = useState<ImportedMatch[]>([]);
   const [matchTeamFilter, setMatchTeamFilter] = useState('');
   const [matchLeagueFilter, setMatchLeagueFilter] = useState('all');
@@ -129,6 +133,30 @@ export default function AdminDashboard() {
   const draftTips = useMemo(() => {
     return tips.filter((tip) => tip.publicationStatus !== TipPublicationStatus.PUBLISHED);
   }, [tips]);
+
+  const filteredUsers = useMemo(() => {
+    if (userStatusFilter === 'pending') {
+      return userList.filter((currentUser) => currentUser.membershipStatus === MembershipStatus.PENDING);
+    }
+
+    if (userStatusFilter === 'approved') {
+      return userList.filter((currentUser) => currentUser.membershipStatus === MembershipStatus.APPROVED);
+    }
+
+    return userList;
+  }, [userList, userStatusFilter]);
+
+  const filteredTips = useMemo(() => {
+    if (tipPublicationFilter === 'draft') {
+      return tips.filter((tip) => tip.publicationStatus !== TipPublicationStatus.PUBLISHED);
+    }
+
+    if (tipPublicationFilter === 'published') {
+      return tips.filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED);
+    }
+
+    return tips;
+  }, [tips, tipPublicationFilter]);
 
   useEffect(() => {
     refreshData();
@@ -527,6 +555,16 @@ export default function AdminDashboard() {
     window.setTimeout(() => setSettingsSaved(false), 2000);
   };
 
+  const openUsersTab = (filter: UserStatusFilter) => {
+    setUserStatusFilter(filter);
+    setActiveTab('users');
+  };
+
+  const openTipsTab = (filter: TipPublicationFilter) => {
+    setTipPublicationFilter(filter);
+    setActiveTab('tips');
+  };
+
   const autoGradeTip = async (tipId: string) => {
     setLoading(true);
     const tip = tips.find(t => t.id === tipId);
@@ -814,33 +852,71 @@ export default function AdminDashboard() {
                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                       {[
                         { label: 'Ukupno Korisnika', value: userList.length, icon: <Users className="text-gold-500" /> },
-                        { label: 'Aktivni VIP', value: userList.filter(u => u.membershipStatus === 'approved').length, icon: <ShieldCheck className="text-gold-500" /> },
-                        { label: 'Novi Zahtevi', value: userList.filter(u => u.membershipStatus === 'pending').length, icon: <Clock className="text-gold-500" />, highlight: true },
+                        { label: 'Aktivni VIP', value: userList.filter(u => u.membershipStatus === MembershipStatus.APPROVED).length, icon: <ShieldCheck className="text-gold-500" />, onClick: () => openUsersTab('approved') },
+                        { label: 'Novi Zahtevi', value: userList.filter(u => u.membershipStatus === MembershipStatus.PENDING).length, icon: <Clock className="text-gold-500" />, highlight: true, onClick: () => openUsersTab('pending') },
                         { label: 'Mesečni ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
                       ].map((s, i) => (
-                        <div key={i} className={`glass p-6 rounded-3xl ${s.highlight ? 'border-gold-500/50' : 'border-white/5'}`}>
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={s.onClick}
+                          disabled={!s.onClick}
+                          className={`glass p-6 rounded-3xl text-left transition-all ${s.highlight ? 'border-gold-500/50' : 'border-white/5'} ${s.onClick ? 'cursor-pointer hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]' : 'cursor-default'}`}
+                        >
                            <div className="flex items-center justify-between mb-4">
                               <div className="p-2 bg-white/5 rounded-xl">{s.icon}</div>
+                              {s.onClick && (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
+                                  Pogledaj <ChevronRight size={12} />
+                                </span>
+                              )}
                            </div>
                            <div className="text-3xl font-display font-bold">{s.value}</div>
                            <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mt-1">{s.label}</div>
-                        </div>
+                        </button>
                         ))}
                      </div>
                    
                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                      <div className="glass p-5 rounded-2xl border-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('matches')}
+                        className="glass p-5 rounded-2xl border-white/5 text-left cursor-pointer transition-all hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]"
+                      >
                          <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">Admin baza</div>
-                         <div className="text-2xl font-display font-bold">{tips.length}</div>
-                      </div>
-                      <div className="glass p-5 rounded-2xl border-white/5">
+                         <div className="flex items-end justify-between gap-3">
+                           <div className="text-2xl font-display font-bold">{availableMatches.length}</div>
+                           <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
+                             Pogledaj <ChevronRight size={12} />
+                           </span>
+                         </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openTipsTab('draft')}
+                        className="glass p-5 rounded-2xl border-white/5 text-left cursor-pointer transition-all hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]"
+                      >
                          <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">DRAFT</div>
-                         <div className="text-2xl font-display font-bold">{tips.filter(t => t.publicationStatus !== TipPublicationStatus.PUBLISHED).length}</div>
-                      </div>
-                      <div className="glass p-5 rounded-2xl border-white/5">
+                         <div className="flex items-end justify-between gap-3">
+                           <div className="text-2xl font-display font-bold">{draftTips.length}</div>
+                           <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
+                             Pogledaj <ChevronRight size={12} />
+                           </span>
+                         </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openTipsTab('published')}
+                        className="glass p-5 rounded-2xl border-white/5 text-left cursor-pointer transition-all hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]"
+                      >
                          <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">PUBLISHED</div>
-                         <div className="text-2xl font-display font-bold text-gold-500">{tips.filter(t => t.publicationStatus === TipPublicationStatus.PUBLISHED).length}</div>
-                      </div>
+                         <div className="flex items-end justify-between gap-3">
+                           <div className="text-2xl font-display font-bold text-gold-500">{tips.filter(t => t.publicationStatus === TipPublicationStatus.PUBLISHED).length}</div>
+                           <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
+                             Pogledaj <ChevronRight size={12} />
+                           </span>
+                         </div>
+                      </button>
                    </div>
 
                    {/* More details could go here */}
@@ -858,8 +934,28 @@ export default function AdminDashboard() {
 
               {activeTab === 'users' && (
                  <motion.div key="users" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                    <div className="flex items-center justify-between mb-8">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
                        <h2 className="text-3xl font-display font-bold">Upravljanje korisnicima</h2>
+                       <div className="flex flex-wrap gap-2">
+                         {[
+                           { label: 'Svi', value: 'all' },
+                           { label: 'Pending', value: 'pending' },
+                           { label: 'Aktivni VIP', value: 'approved' },
+                         ].map((filterOption) => (
+                           <button
+                             key={filterOption.value}
+                             type="button"
+                             onClick={() => setUserStatusFilter(filterOption.value as UserStatusFilter)}
+                             className={`px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                               userStatusFilter === filterOption.value
+                                 ? 'bg-gold-500 text-black border-gold-500'
+                                 : 'bg-white/5 text-neutral-400 border-white/10 hover:border-gold-500/40'
+                             }`}
+                           >
+                             {filterOption.label}
+                           </button>
+                         ))}
+                       </div>
                     </div>
 
                     <div className="glass rounded-[2rem] overflow-hidden">
@@ -873,7 +969,7 @@ export default function AdminDashboard() {
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                             {userList.map(u => (
+                              {filteredUsers.map(u => (
                                <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
                                   <td className="px-6 py-4">
                                      <div className="font-bold">{u.displayName || 'N/A'}</div>
@@ -917,8 +1013,15 @@ export default function AdminDashboard() {
                                      </div>
                                   </td>
                                </tr>
-                             ))}
-                          </tbody>
+                              ))}
+                              {filteredUsers.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="px-6 py-10 text-center text-neutral-500 font-bold">
+                                    Nema korisnika za izabrani filter.
+                                  </td>
+                                </tr>
+                              )}
+                           </tbody>
                        </table>
                     </div>
                  </motion.div>
@@ -1224,6 +1327,28 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
+                    <div className="glass p-4 rounded-2xl border-white/5 mb-8 flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mr-2">Filter tiketa</span>
+                      {[
+                        { label: 'Svi', value: 'all' },
+                        { label: 'DRAFT', value: 'draft' },
+                        { label: 'PUBLISHED', value: 'published' },
+                      ].map((filterOption) => (
+                        <button
+                          key={filterOption.value}
+                          type="button"
+                          onClick={() => setTipPublicationFilter(filterOption.value as TipPublicationFilter)}
+                          className={`px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                            tipPublicationFilter === filterOption.value
+                              ? 'bg-gold-500 text-black border-gold-500'
+                              : 'bg-white/5 text-neutral-400 border-white/10 hover:border-gold-500/40'
+                          }`}
+                        >
+                          {filterOption.label}
+                        </button>
+                      ))}
+                    </div>
+
                     {apiIssues.length > 0 && (
                       <div className="bg-red-500/10 border border-red-500/20 p-5 rounded-3xl mb-6">
                         <h3 className="font-bold text-red-500 mb-2">Import upozorenja</h3>
@@ -1357,7 +1482,7 @@ export default function AdminDashboard() {
                     )}
 
                     <div className="grid gap-6">
-                       {tips.map(tip => (
+                       {filteredTips.map(tip => (
                          <div key={tip.id} className="glass p-8 rounded-[2rem] border-white/5">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                                <div>
@@ -1474,9 +1599,9 @@ export default function AdminDashboard() {
                                     </div>
                          </div>
                         ))}
-                       {tips.length === 0 && (
+                       {filteredTips.length === 0 && (
                          <div className="glass p-8 rounded-[2rem] border-white/5 text-center">
-                           <p className="text-neutral-500 font-bold">Nema dostupnih realnih podataka.</p>
+                           <p className="text-neutral-500 font-bold">Nema tiketa za izabrani filter.</p>
                          </div>
                        )}
                      </div>
