@@ -7,9 +7,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
 import {
-  calculateTicketProfit,
+  calculateTicketUnitsProfit,
   getTicketKind,
-  getTicketStake,
+  getTicketUnitsStake,
   isTicketLockedForUser,
 } from '../utils/tickets';
 
@@ -73,8 +73,7 @@ const getTicketVisuals = (status: TicketStatus) => {
   };
 };
 
-const formatMoney = (value: number) =>
-  value.toLocaleString('sr-RS', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const formatUnits = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}u`;
 
 export default function Tickets() {
   const { canAccessVip } = useAuth();
@@ -232,7 +231,7 @@ export default function Tickets() {
           <AnimatePresence mode="popLayout">
             {filteredTips.map((tip) => {
               const visuals = getTicketVisuals(tip.status);
-              const profit = calculateTicketProfit(tip);
+              const profit = calculateTicketUnitsProfit(tip);
               const locked = isTicketLockedForUser(tip, canAccessVip);
 
               return (
@@ -293,13 +292,13 @@ export default function Tickets() {
                           <span className={`text-3xl font-display font-black ${visuals.odds}`}>{tip.totalOdds.toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col text-right">
-                          <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ulog</span>
-                          <span className="text-base font-display font-bold text-neutral-200">{formatMoney(getTicketStake(tip))}</span>
+                          <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</span>
+                          <span className="text-base font-display font-bold text-neutral-200">{getTicketUnitsStake(tip).toFixed(2)}u</span>
                         </div>
                         <div className="flex flex-col text-right">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">P/L</span>
                           <span className={`text-base font-display font-bold ${profit > 0 ? 'text-green-300' : profit < 0 ? 'text-red-300' : 'text-neutral-300'}`}>
-                            {locked ? '-' : `${profit > 0 ? '+' : ''}${formatMoney(profit)}`}
+                            {locked ? '-' : formatUnits(profit)}
                           </span>
                         </div>
                         <ChevronRight size={18} className="text-neutral-500" />
@@ -379,15 +378,15 @@ export default function Tickets() {
                     <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>{selectedTip.totalOdds.toFixed(2)}</div>
                   </div>
                   <div>
-                    <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ulog</div>
-                    <div className="text-xl font-display font-bold text-neutral-100">{formatMoney(getTicketStake(selectedTip))}</div>
+                    <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</div>
+                    <div className="text-xl font-display font-bold text-neutral-100">{getTicketUnitsStake(selectedTip).toFixed(2)}u</div>
                   </div>
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Profit/Loss</div>
                     <div className={`text-xl font-display font-bold ${
-                      calculateTicketProfit(selectedTip) > 0 ? 'text-green-300' : calculateTicketProfit(selectedTip) < 0 ? 'text-red-300' : 'text-neutral-300'
+                      calculateTicketUnitsProfit(selectedTip) > 0 ? 'text-green-300' : calculateTicketUnitsProfit(selectedTip) < 0 ? 'text-red-300' : 'text-neutral-300'
                     }`}>
-                      {calculateTicketProfit(selectedTip) > 0 ? '+' : ''}{formatMoney(calculateTicketProfit(selectedTip))}
+                      {formatUnits(calculateTicketUnitsProfit(selectedTip))}
                     </div>
                   </div>
                   <div>

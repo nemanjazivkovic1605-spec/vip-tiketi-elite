@@ -62,7 +62,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
         {[
           { label: 'Win Rate', value: `${stats?.successRate}%`, icon: <Target className="text-gold-500" /> },
-          { label: 'Mesečni Profit', value: `€${stats?.monthlyProfit?.toLocaleString()}`, icon: <TrendingUp className="text-gold-500" /> },
+          { label: 'Units Profit', value: `${(stats?.unitsProfit ?? 0) >= 0 ? '+' : ''}${stats?.unitsProfit ?? 0}u`, icon: <TrendingUp className="text-gold-500" /> },
           { label: 'Win Streak', value: `${stats?.winStreak}`, icon: <Award className="text-gold-500" /> },
           { label: 'Ukupno Tipova', value: stats?.totalTips, icon: < Zap className="text-gold-500" /> },
         ].map((s, i) => (

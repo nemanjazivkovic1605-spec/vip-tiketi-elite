@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Plus, Trash2, X } from 'lucide-react';
 import { Match, TicketStatus, Tip, TipPublicationStatus } from '../../types';
-import { calculateTotalOdds, getDefaultStake, getTicketKind, normalizeOdds } from '../../utils/tickets';
+import { calculateTotalOdds, getDefaultUnitsStake, getTicketKind, getTicketUnitsStake, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 
 type TicketKind = 'SINGL' | 'DUBL' | 'COMBO';
 
@@ -48,8 +48,8 @@ const ensureKindMatchCount = (matches: Match[], kind: TicketKind) => {
 export default function TicketEditModal({ tip, onClose, onSave, onDelete }: TicketEditModalProps) {
   const [draft, setDraft] = useState<Tip>(() => ({
     ...tip,
-    stake: tip.stake ?? getDefaultStake(tip.isVip, tip.matches.length),
-    unitsStake: tip.unitsStake ?? 1,
+    unitsStake: getTicketUnitsStake(tip),
+    stake: unitsToRsd(getTicketUnitsStake(tip)),
     matches: tip.matches.length > 0 ? tip.matches.map((match) => ({ ...match })) : [emptyMatch()],
   }));
   const [selectedKind, setSelectedKind] = useState<TicketKind>(() => kindFromCount(tip.matches.length));
@@ -94,23 +94,23 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     setSelectedKind(kind);
     setDraft((current) => {
       const matches = ensureKindMatchCount(current.matches, kind);
-      const currentDefaultStake = getDefaultStake(current.isVip, current.matches.length);
-      const nextStake = Number(current.stake) === currentDefaultStake
-        ? getDefaultStake(current.isVip, matches.length)
-        : current.stake;
+      const currentDefaultUnits = getDefaultUnitsStake(current.isVip, current.matches.length);
+      const nextUnits = Number(current.unitsStake) === currentDefaultUnits
+        ? getDefaultUnitsStake(current.isVip, matches.length)
+        : current.unitsStake;
 
-      return { ...current, matches, stake: nextStake };
+      return { ...current, matches, unitsStake: nextUnits, stake: unitsToRsd(Number(nextUnits) || 0) };
     });
   };
 
   const changeVisibility = (isVip: boolean) => {
     setDraft((current) => {
-      const currentDefaultStake = getDefaultStake(current.isVip, current.matches.length);
-      const nextStake = Number(current.stake) === currentDefaultStake
-        ? getDefaultStake(isVip, current.matches.length)
-        : current.stake;
+      const currentDefaultUnits = getDefaultUnitsStake(current.isVip, current.matches.length);
+      const nextUnits = Number(current.unitsStake) === currentDefaultUnits
+        ? getDefaultUnitsStake(isVip, current.matches.length)
+        : current.unitsStake;
 
-      return { ...current, isVip, stake: nextStake };
+      return { ...current, isVip, unitsStake: nextUnits, stake: unitsToRsd(Number(nextUnits) || 0) };
     });
   };
 
@@ -131,12 +131,11 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     }));
 
     const invalidMatch = matches.find((match) => !match.homeTeam || !match.awayTeam || !match.prediction);
-    const stake = Number(draft.stake);
     const unitsStake = Number(draft.unitsStake);
     const manualTotalOdds = Number(totalOddsInput);
 
-    if (invalidMatch || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
-      alert('Popunite domacina, gosta, tip igre, validan ulog i units stake od 1 do 10.');
+    if (invalidMatch || !Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
+      alert('Popunite domacina, gosta, tip igre i units od 1 do 10.');
       return null;
     }
 
@@ -154,8 +153,8 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
         ? draft.publishedAt || new Date().toISOString()
         : '',
       matches,
-      stake: Number(stake.toFixed(2)),
       unitsStake: Number(unitsStake.toFixed(2)),
+      stake: unitsToRsd(unitsStake),
       totalOdds: draft.totalOddsOverride ? Number(manualTotalOdds.toFixed(2)) : calculateTotalOdds(matches),
       analysis: draft.analysis?.trim() || '',
       totalOddsOverride: Boolean(draft.totalOddsOverride),
@@ -286,14 +285,9 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
               </label>
 
               <label className="block mb-4">
-                <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Ulog</span>
-                <input type="number" min="1" step="100" value={draft.stake || ''} onChange={(event) => updateDraft({ stake: Number(event.target.value) })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
-              </label>
-
-              <label className="block mb-4">
-                <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Units stake</span>
-                <input type="number" min="1" max="10" step="0.5" value={draft.unitsStake || 1} onChange={(event) => updateDraft({ unitsStake: Number(event.target.value) })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
-                <span className="mt-2 block text-[10px] text-neutral-600 font-bold uppercase tracking-widest">Profesionalni staking 1-10 jedinica</span>
+                <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Units</span>
+                <input type="number" min="1" max="10" step="0.5" value={draft.unitsStake || 1} onChange={(event) => updateDraft({ unitsStake: Number(event.target.value), stake: unitsToRsd(Number(event.target.value) || 0) })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                <span className="mt-2 block text-[10px] text-neutral-600 font-bold uppercase tracking-widest">{Number(draft.unitsStake) || 0}u = {unitsToRsd(Number(draft.unitsStake) || 0).toLocaleString('sr-RS')} RSD</span>
               </label>
 
               <div className="mb-4">

@@ -7,6 +7,7 @@ import { getTicketUnitsStake } from '../utils/tickets';
 
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
+const formatRsd = (value = 0) => `${value >= 0 ? '+' : ''}${value.toLocaleString('sr-RS')} RSD`;
 
 const statusMeta = (status: TicketStatus) => {
   if (status === TicketStatus.WON) return { label: '✅ POGOĐENO', className: 'text-green-300 bg-green-500/10 border-green-500/20' };
@@ -55,11 +56,12 @@ export default function Stats() {
   }
 
   const overviewCards = [
-    { label: 'Yield', value: formatPercent(stats?.yield ?? 0), desc: 'Čist profit / ukupan ulog', icon: <TrendingUp className="text-gold-500" /> },
+    { label: 'Yield', value: formatPercent(stats?.yield ?? 0), desc: 'Čist profit / ukupne units', icon: <TrendingUp className="text-gold-500" /> },
     { label: 'ROI banke', value: formatPercent(stats?.roi ?? 0), desc: 'Povraćaj investicije', icon: <PieChart className="text-gold-500" /> },
     { label: 'Hit Rate', value: `${stats?.hitRate ?? 0}%`, desc: 'Pogođeni / završeni', icon: <Target className="text-gold-500" /> },
     { label: 'Average Odds', value: (stats?.averageOdds ?? 0).toFixed(2), desc: 'Prosek završenih tiketa', icon: <BarChart3 className="text-gold-500" /> },
     { label: 'Units Profit', value: formatUnits(stats?.unitsProfit ?? 0), desc: 'Profit u jedinicama', icon: <Award className="text-gold-500" /> },
+    { label: 'Profit RSD', value: formatRsd(stats?.monthlyProfit ?? 0), desc: '1 unit = 1000 RSD', icon: <TrendingUp className="text-gold-500" /> },
     { label: 'Završeni Tiketi', value: stats?.completedCount ?? 0, desc: `${stats?.winCount ?? 0} / ${stats?.lossCount ?? 0} / ${stats?.refundCount ?? 0}`, icon: <Zap className="text-gold-500" /> },
   ];
 
@@ -114,11 +116,12 @@ export default function Stats() {
                   <div><span className="block text-neutral-500 uppercase font-black">Tiketa</span>{month.totalTickets}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">P / F</span>{month.wins} / {month.losses}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">Avg kvota</span>{month.averageOdds.toFixed(2)}</div>
-                  <div><span className="block text-neutral-500 uppercase font-black">Profit</span>{formatUnits(month.profitUnits)}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Profit u</span>{formatUnits(month.profitUnits)}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Profit RSD</span>{formatRsd(month.profitRsd)}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">Yield</span>{formatPercent(month.yield)}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">ROI</span>{formatPercent(month.roi)}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">Povrat</span>{month.refunds}</div>
-                  <div><span className="block text-neutral-500 uppercase font-black">Ulog</span>{month.unitsStaked.toFixed(2)}u</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Units</span>{month.unitsStaked.toFixed(2)}u</div>
                 </div>
               </button>
             ))}

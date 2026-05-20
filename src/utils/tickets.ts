@@ -1,5 +1,7 @@
 import { Tip, TicketStatus, Match } from '../types';
 
+export const UNIT_VALUE_RSD = 1000;
+
 export const getTicketKind = (matchCount: number) => {
   if (matchCount === 1) return 'SINGL';
   if (matchCount === 2) return 'DUBL';
@@ -24,20 +26,30 @@ export const calculateTotalOdds = (matches: Match[]) => {
   return Number(total.toFixed(2));
 };
 
-export const getDefaultStake = (isVip: boolean, matchCount: number) => {
-  if (!isVip) return 5000;
-  if (matchCount === 1) return 10000;
-  return 5000;
+export const getDefaultUnitsStake = (isVip: boolean, matchCount: number) => {
+  if (!isVip) return 5;
+  if (matchCount === 1) return 10;
+  return 5;
 };
 
+export const unitsToRsd = (units: number) => Number((units * UNIT_VALUE_RSD).toFixed(2));
+
+export const getDefaultStake = (isVip: boolean, matchCount: number) =>
+  unitsToRsd(getDefaultUnitsStake(isVip, matchCount));
+
 export const getTicketStake = (tip: Tip) => {
-  const stake = Number(tip.stake);
-  return Number.isFinite(stake) && stake > 0 ? stake : getDefaultStake(tip.isVip, tip.matches?.length || 0);
+  return unitsToRsd(getTicketUnitsStake(tip));
 };
 
 export const getTicketUnitsStake = (tip: Tip) => {
   const units = Number(tip.unitsStake);
-  if (!Number.isFinite(units)) return 1;
+  if (!Number.isFinite(units) || units <= 0) {
+    const legacyStake = Number(tip.stake);
+    if (Number.isFinite(legacyStake) && legacyStake > 0) {
+      return Math.min(10, Math.max(1, Number((legacyStake / UNIT_VALUE_RSD).toFixed(2))));
+    }
+    return getDefaultUnitsStake(tip.isVip, tip.matches?.length || 0);
+  }
   return Math.min(10, Math.max(1, units));
 };
 
@@ -57,6 +69,8 @@ export const calculateTicketProfit = (tip: Tip) => {
 
   return Number((-stake).toFixed(2));
 };
+
+export const calculateTicketRsdProfit = (tip: Tip) => unitsToRsd(calculateTicketUnitsProfit(tip));
 
 export const calculateTicketUnitsProfit = (tip: Tip) => {
   if (tip.status === TicketStatus.REFUND) return 0;

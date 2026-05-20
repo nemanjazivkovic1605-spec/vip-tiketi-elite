@@ -14,7 +14,7 @@ import { DEMO_USERS } from '../../lib/demoData';
 import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus } from '../../types';
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
-import { calculateTotalOdds, getDefaultStake, getStatusLabel, getTicketKind, normalizeOdds } from '../../utils/tickets';
+import { calculateTotalOdds, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
 
@@ -86,8 +86,7 @@ export default function AdminDashboard() {
   const [resultTipForm, setResultTipForm] = useState({
     prediction: 'GG',
     odds: '1.80',
-    stake: '100',
-    unitsStake: '1',
+    unitsStake: '5',
     status: TicketStatus.WON,
     analysis: '',
     isVip: true,
@@ -95,7 +94,7 @@ export default function AdminDashboard() {
   const [ticketCart, setTicketCart] = useState<TicketBuilderItem[]>([]);
   const [ticketAccessType, setTicketAccessType] = useState<TicketAccessType>('VIP');
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>(TicketStatus.PENDING);
-  const [ticketStake, setTicketStake] = useState('5000');
+  const [ticketUnits, setTicketUnits] = useState('5');
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => mockSettingsService.getSettings());
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -203,7 +202,7 @@ export default function AdminDashboard() {
   };
 
   const applyDefaultTicketStake = (accessType: TicketAccessType, matchCount: number) => {
-    setTicketStake(String(getDefaultStake(accessType === 'VIP', matchCount)));
+    setTicketUnits(String(getDefaultUnitsStake(accessType === 'VIP', matchCount)));
   };
 
   const handleOpenResultTip = (match: ImportedMatch) => {
@@ -212,8 +211,7 @@ export default function AdminDashboard() {
     setResultTipForm({
       prediction,
       odds: getDefaultOddsForPrediction(prediction, match).toFixed(2),
-      stake: String(getDefaultStake(true, 1)),
-      unitsStake: '1',
+      unitsStake: String(getDefaultUnitsStake(true, 1)),
       status: TicketStatus.WON,
       analysis: `${match.homeTeam} - ${match.awayTeam}`,
       isVip: true,
@@ -224,10 +222,9 @@ export default function AdminDashboard() {
     if (!resultTipMatch) return;
 
     const odds = Number(resultTipForm.odds);
-    const stake = Number(resultTipForm.stake);
     const unitsStake = Number(resultTipForm.unitsStake);
-    if (!Number.isFinite(odds) || odds <= 0 || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
-      alert('Popunite tip igre, kvotu, ulog i units stake od 1 do 10.');
+    if (!Number.isFinite(odds) || odds <= 0 || !Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
+      alert('Popunite tip igre, kvotu i units od 1 do 10.');
       return;
     }
 
@@ -240,8 +237,8 @@ export default function AdminDashboard() {
       isVip: resultTipForm.isVip,
       status: resultTipForm.status,
       totalOdds: normalizeOdds(odds),
-      stake: Number(stake.toFixed(2)),
       unitsStake: Number(unitsStake.toFixed(2)),
+      stake: unitsToRsd(unitsStake),
       analysis: resultTipForm.analysis,
       matches: [
         {
@@ -281,10 +278,10 @@ export default function AdminDashboard() {
           analysis: '',
         },
       ];
-      const currentDefaultStake = getDefaultStake(ticketAccessType === 'VIP', current.length);
-      const shouldUseNextDefault = current.length === 0 || Number(ticketStake) === currentDefaultStake;
+      const currentDefaultUnits = getDefaultUnitsStake(ticketAccessType === 'VIP', current.length);
+      const shouldUseNextDefault = current.length === 0 || Number(ticketUnits) === currentDefaultUnits;
       if (shouldUseNextDefault) {
-        setTicketStake(String(getDefaultStake(ticketAccessType === 'VIP', next.length)));
+        setTicketUnits(String(getDefaultUnitsStake(ticketAccessType === 'VIP', next.length)));
       }
       return next;
     });
@@ -312,9 +309,9 @@ export default function AdminDashboard() {
   const handleRemoveTicketItem = (matchId: string) => {
     setTicketCart((current) => {
       const next = current.filter((item) => item.match.id !== matchId);
-      const currentDefaultStake = getDefaultStake(ticketAccessType === 'VIP', current.length);
-      if (Number(ticketStake) === currentDefaultStake) {
-        setTicketStake(String(getDefaultStake(ticketAccessType === 'VIP', next.length)));
+      const currentDefaultUnits = getDefaultUnitsStake(ticketAccessType === 'VIP', current.length);
+      if (Number(ticketUnits) === currentDefaultUnits) {
+        setTicketUnits(String(getDefaultUnitsStake(ticketAccessType === 'VIP', next.length)));
       }
       return next;
     });
@@ -333,9 +330,9 @@ export default function AdminDashboard() {
       return;
     }
 
-    const stake = Number(ticketStake);
-    if (!Number.isFinite(stake) || stake <= 0) {
-      alert('Unesite validan ulog za tiket.');
+    const unitsStake = Number(ticketUnits);
+    if (!Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
+      alert('Unesite units od 1 do 10 za tiket.');
       return;
     }
 
@@ -369,8 +366,8 @@ export default function AdminDashboard() {
       isVip: ticketAccessType === 'VIP',
       status: ticketStatus,
       totalOdds: ticketTotalOdds,
-      stake: Number(stake.toFixed(2)),
-      unitsStake: 1,
+      unitsStake: Number(unitsStake.toFixed(2)),
+      stake: unitsToRsd(unitsStake),
       analysis: ticketCart
         .map((item) => item.analysis.trim())
         .filter(Boolean)
@@ -382,7 +379,7 @@ export default function AdminDashboard() {
     setTicketCart([]);
     setTicketAccessType('VIP');
     setTicketStatus(TicketStatus.PENDING);
-    setTicketStake(String(getDefaultStake(true, 0)));
+    setTicketUnits(String(getDefaultUnitsStake(true, 0)));
     await refreshData();
   };
 
@@ -475,8 +472,8 @@ export default function AdminDashboard() {
           isVip: true,
           status,
           totalOdds,
-          stake: getDefaultStake(true, ticketMatches.length),
-          unitsStake: 1,
+          unitsStake: getDefaultUnitsStake(true, ticketMatches.length),
+          stake: unitsToRsd(getDefaultUnitsStake(true, ticketMatches.length)),
           analysis: '',
           matches: ticketMatches,
         });
@@ -795,15 +792,19 @@ export default function AdminDashboard() {
               <div className="text-2xl font-display font-black">{getTicketKind(ticketCart.length)}</div>
             </div>
             <label className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3 col-span-2 sm:col-span-1">
-              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Ulog</div>
+              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Units</div>
               <input
                 type="number"
                 min="1"
-                step="100"
-                value={ticketStake}
-                onChange={(e) => setTicketStake(e.target.value)}
+                max="10"
+                step="0.5"
+                value={ticketUnits}
+                onChange={(e) => setTicketUnits(e.target.value)}
                 className="w-full bg-transparent text-2xl font-display font-black outline-none text-neutral-100"
               />
+              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">
+                {Number(ticketUnits) || 0}u = {unitsToRsd(Number(ticketUnits) || 0).toLocaleString('sr-RS')} RSD
+              </div>
             </label>
           </div>
 
@@ -1224,14 +1225,6 @@ export default function AdminDashboard() {
                           />
                           <input
                             type="number"
-                            step="1"
-                            value={resultTipForm.stake}
-                            onChange={(e) => setResultTipForm({ ...resultTipForm, stake: e.target.value })}
-                            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
-                            placeholder="Ulog"
-                          />
-                          <input
-                            type="number"
                             min="1"
                             max="10"
                             step="0.5"
@@ -1240,6 +1233,9 @@ export default function AdminDashboard() {
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                             placeholder="Units"
                           />
+                          <div className="bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-[10px] text-neutral-500 font-black uppercase tracking-widest">
+                            {Number(resultTipForm.unitsStake) || 0}u = {unitsToRsd(Number(resultTipForm.unitsStake) || 0).toLocaleString('sr-RS')} RSD
+                          </div>
                           <select
                             value={resultTipForm.status}
                             onChange={(e) => setResultTipForm({ ...resultTipForm, status: e.target.value as TicketStatus })}
@@ -1251,13 +1247,13 @@ export default function AdminDashboard() {
                             <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                           </select>
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, stake: String(getDefaultStake(false, 1)) })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, unitsStake: String(getDefaultUnitsStake(false, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${!resultTipForm.isVip ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             FREE
                           </button>
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true, stake: String(getDefaultStake(true, 1)) })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true, unitsStake: String(getDefaultUnitsStake(true, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${resultTipForm.isVip ? 'bg-gold-500 text-black border-gold-500' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             VIP
@@ -1513,14 +1509,6 @@ export default function AdminDashboard() {
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                             placeholder="Kvota"
                           />
-                         <input
-                            type="number"
-                            step="1"
-                            value={resultTipForm.stake}
-                            onChange={(e) => setResultTipForm({ ...resultTipForm, stake: e.target.value })}
-                            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
-                            placeholder="Ulog"
-                          />
                           <input
                             type="number"
                             min="1"
@@ -1531,14 +1519,17 @@ export default function AdminDashboard() {
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                             placeholder="Units"
                           />
+                          <div className="bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-[10px] text-neutral-500 font-black uppercase tracking-widest">
+                            {Number(resultTipForm.unitsStake) || 0}u = {unitsToRsd(Number(resultTipForm.unitsStake) || 0).toLocaleString('sr-RS')} RSD
+                          </div>
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, stake: String(getDefaultStake(false, 1)) })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, unitsStake: String(getDefaultUnitsStake(false, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${!resultTipForm.isVip ? 'bg-white text-black border-white' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             FREE
                           </button>
                           <button
-                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true, stake: String(getDefaultStake(true, 1)) })}
+                            onClick={() => setResultTipForm({ ...resultTipForm, isVip: true, unitsStake: String(getDefaultUnitsStake(true, 1)) })}
                             className={`rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest border ${resultTipForm.isVip ? 'bg-gold-500 text-black border-gold-500' : 'bg-black/40 border-white/10 text-neutral-500'}`}
                           >
                             VIP

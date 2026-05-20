@@ -123,7 +123,7 @@ export default function VipTips() {
          <div>
             <h3 className="text-xl font-bold mb-2">Savet za klađenje</h3>
             <p className="text-neutral-400 text-sm max-w-2xl">
-               Preporučujemo ravnomerno ulaganje (flat stake) na sve VIP tipove. Naša statistika pokazuje da je ovo najsigurniji put do dugoročnog profita. Ne jurite gubitke.
+               Preporučujemo disciplinovan units staking na sve VIP tipove. Naša statistika pokazuje da je ovo najsigurniji put do dugoročnog profita. Ne jurite gubitke.
             </p>
          </div>
       </div>

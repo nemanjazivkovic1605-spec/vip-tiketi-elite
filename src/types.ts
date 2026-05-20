@@ -148,6 +148,7 @@ export interface MonthlyStats {
   refunds: number;
   averageOdds: number;
   profitUnits: number;
+  profitRsd: number;
   unitsStaked: number;
   yield: number;
   roi: number;

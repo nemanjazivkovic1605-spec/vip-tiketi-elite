@@ -18,6 +18,7 @@ import {
   isFinishedForStats,
   isSettledTicket,
   normalizeOdds,
+  unitsToRsd,
 } from '../utils/tickets';
 
 const TICKETS_COLLECTION = 'tickets';
@@ -174,6 +175,7 @@ const calculateMonthlyStats = (tips: Tip[]): MonthlyStats[] => {
         refunds,
         averageOdds: Number(averageOdds.toFixed(2)),
         profitUnits: Number(profitUnits.toFixed(2)),
+        profitRsd: unitsToRsd(profitUnits),
         unitsStaked: Number(unitsStaked.toFixed(2)),
         yield: Number(yieldValue.toFixed(1)),
         roi: Number(yieldValue.toFixed(1)),
@@ -188,17 +190,9 @@ const calculateStats = (tips: Tip[]): GlobalStats => {
   const wins = completed.filter(t => t.status === TicketStatus.WON);
   const refunds = finished.filter(t => t.status === TicketStatus.REFUND);
 
-  const totalStaked = completed.reduce((acc, t) => acc + getTicketStake(t), 0);
-  const profit = completed.reduce((acc, t) => {
-    const stake = getTicketStake(t);
-    if (t.status === TicketStatus.WON) {
-      return acc + (stake * (normalizeOdds(t.totalOdds) - 1));
-    }
-    return acc - stake;
-  }, 0);
-
   const totalUnitsStaked = completed.reduce((acc, t) => acc + getTicketUnitsStake(t), 0);
   const unitsProfit = completed.reduce((acc, t) => acc + calculateTicketUnitsProfit(t), 0);
+  const profit = unitsToRsd(unitsProfit);
   const averageOdds = finished.length > 0
     ? finished.reduce((acc, t) => acc + normalizeOdds(t.totalOdds), 0) / finished.length
     : 0;
