@@ -44,11 +44,19 @@ export const getDemoStats = (): GlobalStats => ({
   totalTips: 0,
   winCount: 0,
   lossCount: 0,
+  refundCount: 0,
+  completedCount: 0,
   successRate: 0,
+  hitRate: 0,
   monthlyProfit: 0,
+  unitsProfit: 0,
+  totalUnitsStaked: 0,
+  averageOdds: 0,
+  yield: 0,
   roi: 0,
   winStreak: 0,
-  loseStreak: 0
+  loseStreak: 0,
+  monthlyBreakdown: []
 });
 
 export const VIP_PACKAGES: VipPackage[] = [

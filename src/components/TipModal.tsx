@@ -15,6 +15,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
   const [date, setDate] = useState(initialData?.date ?? new Date().toISOString().split('T')[0]);
   const [status, setStatus] = useState<TicketStatus>(initialData?.status ?? TicketStatus.PENDING);
   const [stake, setStake] = useState(String(initialData?.stake ?? getDefaultStake(initialData?.isVip ?? true, initialData?.matches?.length ?? 1)));
+  const [unitsStake, setUnitsStake] = useState(String(initialData?.unitsStake ?? 1));
   const [analysis, setAnalysis] = useState(initialData?.analysis ?? '');
   const [matches, setMatches] = useState<Match[]>(initialData?.matches ?? [
     { teams: '', homeTeam: '', awayTeam: '', league: '', prediction: '', odds: 1.5, time: '20:00' }
@@ -54,8 +55,9 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
     }));
 
     const normalizedStake = Number(stake);
-    if (!Number.isFinite(normalizedStake) || normalizedStake <= 0) {
-      alert('Unesite validan ulog.');
+    const normalizedUnitsStake = Number(unitsStake);
+    if (!Number.isFinite(normalizedStake) || normalizedStake <= 0 || !Number.isFinite(normalizedUnitsStake) || normalizedUnitsStake < 1 || normalizedUnitsStake > 10) {
+      alert('Unesite validan ulog i units stake od 1 do 10.');
       return;
     }
 
@@ -72,6 +74,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
       status,
       totalOdds,
       stake: Number(normalizedStake.toFixed(2)),
+      unitsStake: Number(normalizedUnitsStake.toFixed(2)),
       analysis,
       matches: normalizedMatches
     };
@@ -136,6 +139,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                   <option value={TicketStatus.WON}>PROSLO</option>
                   <option value={TicketStatus.LOST}>PALO</option>
                   <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+                  <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                 </select>
               </div>
            </div>
@@ -148,6 +152,19 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                 step="100"
                 value={stake}
                 onChange={(e) => setStake(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-gold-500/50 transition-all"
+              />
+           </div>
+
+           <div>
+              <label className="block text-[10px] font-black uppercase text-neutral-500 tracking-widest mb-2">Units stake</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                step="0.5"
+                value={unitsStake}
+                onChange={(e) => setUnitsStake(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-gold-500/50 transition-all"
               />
            </div>

@@ -1,22 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { mockTipsService } from '../services/mockTips';
-import { GlobalStats } from '../types';
-import { TrendingUp, Target, Award, BarChart3, PieChart, Activity, Zap } from 'lucide-react';
-import { motion } from 'motion/react';
+import { GlobalStats, MonthlyStats, TicketStatus, Tip } from '../types';
+import { Activity, Award, BarChart3, ChevronRight, PieChart, Target, TrendingUp, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { getTicketUnitsStake } from '../utils/tickets';
+
+const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
+
+const statusMeta = (status: TicketStatus) => {
+  if (status === TicketStatus.WON) return { label: '✅ POGOĐENO', className: 'text-green-300 bg-green-500/10 border-green-500/20' };
+  if (status === TicketStatus.LOST) return { label: '❌ PROMAŠENO', className: 'text-red-300 bg-red-500/10 border-red-500/20' };
+  return { label: '🔄 KVOTA 1 / POVRAT', className: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20' };
+};
+
+const ticketRows = (tickets: Tip[]) =>
+  tickets.flatMap((tip) =>
+    tip.matches.map((match, index) => ({
+      id: `${tip.id}-${match.id || index}`,
+      ticket: tip,
+      match,
+    }))
+  );
 
 export default function Stats() {
   const [stats, setStats] = useState<GlobalStats | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const s = await mockTipsService.getStats();
-        setStats(s);
+        const nextStats = await mockTipsService.getStats();
+        setStats(nextStats);
+        setSelectedMonth((current) => {
+          if (!current) return nextStats.monthlyBreakdown[0] || null;
+          return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
+        });
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
     return mockTipsService.subscribe(fetchData);
   }, []);
@@ -29,78 +54,144 @@ export default function Stats() {
     );
   }
 
+  const overviewCards = [
+    { label: 'Yield', value: formatPercent(stats?.yield ?? 0), desc: 'Čist profit / ukupan ulog', icon: <TrendingUp className="text-gold-500" /> },
+    { label: 'ROI banke', value: formatPercent(stats?.roi ?? 0), desc: 'Povraćaj investicije', icon: <PieChart className="text-gold-500" /> },
+    { label: 'Hit Rate', value: `${stats?.hitRate ?? 0}%`, desc: 'Pogođeni / završeni', icon: <Target className="text-gold-500" /> },
+    { label: 'Average Odds', value: (stats?.averageOdds ?? 0).toFixed(2), desc: 'Prosek završenih tiketa', icon: <BarChart3 className="text-gold-500" /> },
+    { label: 'Units Profit', value: formatUnits(stats?.unitsProfit ?? 0), desc: 'Profit u jedinicama', icon: <Award className="text-gold-500" /> },
+    { label: 'Završeni Tiketi', value: stats?.completedCount ?? 0, desc: `${stats?.winCount ?? 0} / ${stats?.lossCount ?? 0} / ${stats?.refundCount ?? 0}`, icon: <Zap className="text-gold-500" /> },
+  ];
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
-      <div className="text-center mb-16">
+      <div className="text-center mb-14">
         <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">GLOBALNA <span className="gold-text">STATISTIKA</span></h1>
-        <p className="text-neutral-400">Naši rezultati govore više od reči. Pratite real-time podatke naše uspešnosti.</p>
+        <p className="text-neutral-400">Profesionalni tipsterski pregled kroz yield, ROI, hit rate i units profit.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-        {[
-          { label: 'Uspešnost', value: `${stats?.successRate}%`, desc: 'Procena tačnih tipova', icon: <Target className="text-gold-500" /> },
-          { label: 'Ukupno Tipova', value: stats?.totalTips, desc: 'Od osnivanja elita tima', icon: <BarChart3 className="text-gold-500" /> },
-          { label: 'Prošli Tipovi', value: stats?.winCount, desc: 'Dobitni tiketi', icon: <Award className="text-gold-500" /> },
-          { label: 'ROI (Povrat)', value: `+${stats?.roi}%`, desc: 'Povrat investicije', icon: <TrendingUp className="text-gold-500" /> },
-        ].map((s, i) => (
-          <motion.div 
-            key={i}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+        {overviewCards.map((card, index) => (
+          <motion.div
+            key={card.label}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="glass p-8 rounded-[2.5rem] relative overflow-hidden group hover:border-gold-500/30 transition-all"
+            transition={{ delay: index * 0.05 }}
+            className="glass p-7 rounded-[2rem] relative overflow-hidden group hover:border-gold-500/30 transition-all"
           >
-            <div className="flex items-center justify-between mb-6">
-               <div className="p-3 bg-gold-500/10 rounded-2xl group-hover:scale-110 transition-transform">{s.icon}</div>
+            <div className="flex items-center justify-between mb-5">
+              <div className="p-3 bg-gold-500/10 rounded-2xl group-hover:scale-110 transition-transform">{card.icon}</div>
             </div>
-            <div className="text-4xl font-display font-black mb-1">{s.value}</div>
-            <div className="text-sm font-bold text-neutral-200 mb-2">{s.label}</div>
-            <p className="text-xs text-neutral-500">{s.desc}</p>
+            <div className="text-4xl font-display font-black mb-1">{card.value}</div>
+            <div className="text-sm font-bold text-neutral-200 mb-2">{card.label}</div>
+            <p className="text-xs text-neutral-500">{card.desc}</p>
           </motion.div>
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 glass p-8 md:p-12 rounded-[3rem]">
-           <h2 className="text-2xl font-bold mb-8 flex items-center gap-3">
-              <Activity className="text-gold-500" /> Mesečni trend rasta
-           </h2>
-           <div className="h-64 flex items-end gap-2 md:gap-4">
-              {Array.from({ length: 12 }).map((_, i) => {
-                const height = 30 + Math.random() * 70;
-                return (
-                  <div key={i} className="flex-1 flex flex-col gap-2 items-center">
-                    <motion.div 
-                      initial={{ height: 0 }}
-                      animate={{ height: `${height}%` }}
-                      transition={{ delay: i * 0.05, duration: 1 }}
-                      className={`w-full rounded-t-xl transition-all ${i === 11 ? 'gold-gradient gold-glow' : 'bg-white/5'}`}
-                    ></motion.div>
-                    <span className="text-[8px] md:text-[10px] text-neutral-600 font-bold uppercase">{['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'][i]}</span>
-                  </div>
-                );
-              })}
-           </div>
+      <div className="grid xl:grid-cols-[1fr_1.25fr] gap-8">
+        <div className="glass p-6 md:p-8 rounded-[2.5rem]">
+          <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
+            <Activity className="text-gold-500" /> Mesečni zbirni pregled
+          </h2>
+
+          <div className="space-y-3">
+            {(stats?.monthlyBreakdown || []).map((month) => (
+              <button
+                key={month.key}
+                onClick={() => setSelectedMonth(month)}
+                className={`w-full text-left rounded-2xl border p-4 transition-all ${
+                  selectedMonth?.key === month.key
+                    ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_24px_rgba(245,124,0,0.12)]'
+                    : 'bg-white/[0.03] border-white/10 hover:border-gold-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div className="font-display font-bold text-lg capitalize">{month.month}</div>
+                  <ChevronRight size={18} className="text-gold-500" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div><span className="block text-neutral-500 uppercase font-black">Tiketa</span>{month.totalTickets}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">P / F</span>{month.wins} / {month.losses}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Avg kvota</span>{month.averageOdds.toFixed(2)}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Profit</span>{formatUnits(month.profitUnits)}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Yield</span>{formatPercent(month.yield)}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">ROI</span>{formatPercent(month.roi)}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Povrat</span>{month.refunds}</div>
+                  <div><span className="block text-neutral-500 uppercase font-black">Ulog</span>{month.unitsStaked.toFixed(2)}u</div>
+                </div>
+              </button>
+            ))}
+
+            {(stats?.monthlyBreakdown || []).length === 0 && (
+              <div className="text-center py-12 text-neutral-500 font-bold">Nema završenih tiketa za statistiku.</div>
+            )}
+          </div>
         </div>
 
-        <div className="glass p-8 md:p-12 rounded-[3rem] items-center justify-center flex flex-col text-center">
-           <div className="relative w-48 h-48 mb-8">
-              <svg className="w-full h-full transform -rotate-90">
-                 <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-white/5" />
-                 <circle cx="96" cy="96" r="80" stroke="currentColor" strokeWidth="12" fill="transparent" 
-                   strokeDasharray={502} 
-                   strokeDashoffset={502 - (502 * (stats?.successRate || 0)) / 100}
-                   className="text-gold-500"
-                   strokeLinecap="round"
-                 />
-              </svg>
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-                 <div className="text-4xl font-display font-black leading-none">{stats?.successRate}%</div>
-                 <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mt-1">WIN RATE</div>
+        <div className="glass p-6 md:p-8 rounded-[2.5rem]">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-bold">Detaljan pregled</h2>
+              <p className="text-sm text-neutral-500 capitalize">{selectedMonth?.month || 'Izaberi mesec'}</p>
+            </div>
+            {selectedMonth && (
+              <div className="text-right">
+                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest">Units P/L</div>
+                <div className={`text-2xl font-display font-black ${selectedMonth.profitUnits >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                  {formatUnits(selectedMonth.profitUnits)}
+                </div>
               </div>
-           </div>
-           <h3 className="text-xl font-bold mb-4">Elite Preciznost</h3>
-           <p className="text-neutral-400 text-sm italic">"Naš algoritam je usavršen tokom 5 godina iskustva na tržištu."</p>
+            )}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="text-left text-[10px] text-neutral-500 uppercase tracking-widest border-b border-white/10">
+                  <th className="py-3 pr-4">Datum</th>
+                  <th className="py-3 pr-4">Sport / Liga</th>
+                  <th className="py-3 pr-4">Meč</th>
+                  <th className="py-3 pr-4">Tip</th>
+                  <th className="py-3 pr-4">Kvota</th>
+                  <th className="py-3 pr-4">Units</th>
+                  <th className="py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                <AnimatePresence mode="popLayout">
+                  {selectedMonth && ticketRows(selectedMonth.tickets).map((row) => {
+                    const meta = statusMeta(row.ticket.status);
+                    return (
+                      <motion.tr
+                        key={row.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="hover:bg-white/[0.02] transition-colors"
+                      >
+                        <td className="py-4 pr-4 text-neutral-300 font-bold">{row.ticket.date}</td>
+                        <td className="py-4 pr-4 text-neutral-400">{row.match.league || 'Fudbal'}</td>
+                        <td className="py-4 pr-4 font-bold text-neutral-100">{row.match.homeTeam} - {row.match.awayTeam}</td>
+                        <td className="py-4 pr-4 text-gold-400 font-black">{row.match.prediction}</td>
+                        <td className="py-4 pr-4 text-neutral-200 font-bold">{row.match.odds.toFixed(2)}</td>
+                        <td className="py-4 pr-4 text-neutral-200 font-bold">{getTicketUnitsStake(row.ticket).toFixed(2)}u</td>
+                        <td className="py-4">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest ${meta.className}`}>
+                            {meta.label}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+
+          {!selectedMonth && (
+            <div className="text-center py-16 text-neutral-500 font-bold">Izaberi mesec za detalje.</div>
+          )}
         </div>
       </div>
     </div>

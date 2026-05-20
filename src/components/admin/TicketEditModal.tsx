@@ -49,6 +49,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
   const [draft, setDraft] = useState<Tip>(() => ({
     ...tip,
     stake: tip.stake ?? getDefaultStake(tip.isVip, tip.matches.length),
+    unitsStake: tip.unitsStake ?? 1,
     matches: tip.matches.length > 0 ? tip.matches.map((match) => ({ ...match })) : [emptyMatch()],
   }));
   const [selectedKind, setSelectedKind] = useState<TicketKind>(() => kindFromCount(tip.matches.length));
@@ -131,10 +132,11 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
 
     const invalidMatch = matches.find((match) => !match.homeTeam || !match.awayTeam || !match.prediction);
     const stake = Number(draft.stake);
+    const unitsStake = Number(draft.unitsStake);
     const manualTotalOdds = Number(totalOddsInput);
 
-    if (invalidMatch || !Number.isFinite(stake) || stake <= 0) {
-      alert('Popunite domacina, gosta, tip igre i validan ulog.');
+    if (invalidMatch || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
+      alert('Popunite domacina, gosta, tip igre, validan ulog i units stake od 1 do 10.');
       return null;
     }
 
@@ -153,6 +155,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
         : '',
       matches,
       stake: Number(stake.toFixed(2)),
+      unitsStake: Number(unitsStake.toFixed(2)),
       totalOdds: draft.totalOddsOverride ? Number(manualTotalOdds.toFixed(2)) : calculateTotalOdds(matches),
       analysis: draft.analysis?.trim() || '',
       totalOddsOverride: Boolean(draft.totalOddsOverride),
@@ -266,6 +269,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   <option value={TicketStatus.WON}>PROSLO</option>
                   <option value={TicketStatus.LOST}>PALO</option>
                   <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+                  <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                 </select>
               </label>
 
@@ -284,6 +288,12 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
               <label className="block mb-4">
                 <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Ulog</span>
                 <input type="number" min="1" step="100" value={draft.stake || ''} onChange={(event) => updateDraft({ stake: Number(event.target.value) })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+              </label>
+
+              <label className="block mb-4">
+                <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Units stake</span>
+                <input type="number" min="1" max="10" step="0.5" value={draft.unitsStake || 1} onChange={(event) => updateDraft({ unitsStake: Number(event.target.value) })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                <span className="mt-2 block text-[10px] text-neutral-600 font-bold uppercase tracking-widest">Profesionalni staking 1-10 jedinica</span>
               </label>
 
               <div className="mb-4">

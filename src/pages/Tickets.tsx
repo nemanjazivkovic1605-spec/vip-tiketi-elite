@@ -50,6 +50,18 @@ const getTicketVisuals = (status: TicketStatus) => {
     };
   }
 
+  if (status === TicketStatus.REFUND) {
+    return {
+      card: 'border-cyan-400/25 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.10),transparent_38%),linear-gradient(180deg,rgba(8,17,20,0.90),rgba(8,8,8,0.94))] shadow-[0_14px_55px_rgba(0,0,0,0.38)] hover:border-cyan-400/35',
+      glow: 'bg-cyan-400/10 blur-3xl opacity-50',
+      badge: 'bg-cyan-400/10 text-cyan-300 border-cyan-400/25',
+      label: 'KVOTA 1 / POVRAT',
+      icon: <AlertCircle size={16} />,
+      odds: 'text-cyan-200',
+      totalBox: 'bg-cyan-400/5 border-cyan-400/15',
+    };
+  }
+
   return {
     card: 'border-orange-400/45 bg-[radial-gradient(circle_at_top_right,rgba(245,124,0,0.16),transparent_38%),linear-gradient(180deg,rgba(18,13,7,0.92),rgba(8,8,8,0.94))] shadow-[0_0_38px_rgba(245,124,0,0.20),0_16px_70px_rgba(0,0,0,0.42)] hover:shadow-[0_0_55px_rgba(245,124,0,0.28),0_20px_80px_rgba(0,0,0,0.48)]',
     glow: 'bg-orange-400/18 blur-3xl opacity-70',
@@ -168,7 +180,7 @@ export default function Tickets() {
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-12">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[10px] font-black uppercase text-neutral-500 tracking-widest mr-2">Status</span>
-          {['all', TicketStatus.PENDING, TicketStatus.WON, TicketStatus.LOST, TicketStatus.POSTPONED].map((statusFilter) => (
+          {['all', TicketStatus.PENDING, TicketStatus.WON, TicketStatus.LOST, TicketStatus.POSTPONED, TicketStatus.REFUND].map((statusFilter) => (
             <button
               key={statusFilter}
               onClick={() => setFilter(statusFilter as 'all' | TicketStatus)}
@@ -186,7 +198,9 @@ export default function Tickets() {
                     ? 'Prosli'
                     : statusFilter === TicketStatus.LOST
                       ? 'Pali'
-                      : 'Odlozeni'}
+                      : statusFilter === TicketStatus.POSTPONED
+                        ? 'Odlozeni'
+                        : 'Povrat'}
             </button>
           ))}
         </div>

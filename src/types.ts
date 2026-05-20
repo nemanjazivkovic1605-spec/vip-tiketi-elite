@@ -3,7 +3,8 @@ export enum TicketStatus {
   WON = 'WON',
   LOST = 'LOST',
   PENDING = 'PENDING',
-  POSTPONED = 'POSTPONED'
+  POSTPONED = 'POSTPONED',
+  REFUND = 'REFUND'
 }
 
 export enum TipPublicationStatus {
@@ -101,6 +102,7 @@ export interface Tip {
   totalOdds: number;
   totalOddsOverride?: boolean;
   stake?: number;
+  unitsStake?: number;
   status: TicketStatus;
   analysis: string;
   isVip: boolean;
@@ -122,11 +124,34 @@ export interface GlobalStats {
   totalTips: number;
   winCount: number;
   lossCount: number;
+  refundCount: number;
+  completedCount: number;
   successRate: number;
+  hitRate: number;
   monthlyProfit: number;
+  unitsProfit: number;
+  totalUnitsStaked: number;
+  averageOdds: number;
+  yield: number;
   roi: number;
   winStreak: number;
   loseStreak: number;
+  monthlyBreakdown: MonthlyStats[];
+}
+
+export interface MonthlyStats {
+  key: string;
+  month: string;
+  totalTickets: number;
+  wins: number;
+  losses: number;
+  refunds: number;
+  averageOdds: number;
+  profitUnits: number;
+  unitsStaked: number;
+  yield: number;
+  roi: number;
+  tickets: Tip[];
 }
 
 export interface VipPackage {

@@ -87,6 +87,7 @@ export default function AdminDashboard() {
     prediction: 'GG',
     odds: '1.80',
     stake: '100',
+    unitsStake: '1',
     status: TicketStatus.WON,
     analysis: '',
     isVip: true,
@@ -212,6 +213,7 @@ export default function AdminDashboard() {
       prediction,
       odds: getDefaultOddsForPrediction(prediction, match).toFixed(2),
       stake: String(getDefaultStake(true, 1)),
+      unitsStake: '1',
       status: TicketStatus.WON,
       analysis: `${match.homeTeam} - ${match.awayTeam}`,
       isVip: true,
@@ -223,8 +225,9 @@ export default function AdminDashboard() {
 
     const odds = Number(resultTipForm.odds);
     const stake = Number(resultTipForm.stake);
-    if (!Number.isFinite(odds) || odds <= 0 || !Number.isFinite(stake) || stake <= 0) {
-      alert('Popunite tip igre, kvotu i ulog.');
+    const unitsStake = Number(resultTipForm.unitsStake);
+    if (!Number.isFinite(odds) || odds <= 0 || !Number.isFinite(stake) || stake <= 0 || !Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
+      alert('Popunite tip igre, kvotu, ulog i units stake od 1 do 10.');
       return;
     }
 
@@ -238,6 +241,7 @@ export default function AdminDashboard() {
       status: resultTipForm.status,
       totalOdds: normalizeOdds(odds),
       stake: Number(stake.toFixed(2)),
+      unitsStake: Number(unitsStake.toFixed(2)),
       analysis: resultTipForm.analysis,
       matches: [
         {
@@ -366,6 +370,7 @@ export default function AdminDashboard() {
       status: ticketStatus,
       totalOdds: ticketTotalOdds,
       stake: Number(stake.toFixed(2)),
+      unitsStake: 1,
       analysis: ticketCart
         .map((item) => item.analysis.trim())
         .filter(Boolean)
@@ -471,6 +476,7 @@ export default function AdminDashboard() {
           status,
           totalOdds,
           stake: getDefaultStake(true, ticketMatches.length),
+          unitsStake: 1,
           analysis: '',
           matches: ticketMatches,
         });
@@ -716,6 +722,7 @@ export default function AdminDashboard() {
               <option value={TicketStatus.WON}>PROSLO</option>
               <option value={TicketStatus.LOST}>PALO</option>
               <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+              <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
             </select>
           </div>
         </div>
@@ -1223,6 +1230,16 @@ export default function AdminDashboard() {
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                             placeholder="Ulog"
                           />
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            step="0.5"
+                            value={resultTipForm.unitsStake}
+                            onChange={(e) => setResultTipForm({ ...resultTipForm, unitsStake: e.target.value })}
+                            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                            placeholder="Units"
+                          />
                           <select
                             value={resultTipForm.status}
                             onChange={(e) => setResultTipForm({ ...resultTipForm, status: e.target.value as TicketStatus })}
@@ -1231,6 +1248,7 @@ export default function AdminDashboard() {
                             <option value={TicketStatus.WON}>PROSLO</option>
                             <option value={TicketStatus.LOST}>PALO</option>
                             <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+                            <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                           </select>
                           <button
                             onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, stake: String(getDefaultStake(false, 1)) })}
@@ -1495,13 +1513,23 @@ export default function AdminDashboard() {
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                             placeholder="Kvota"
                           />
-                          <input
+                         <input
                             type="number"
                             step="1"
                             value={resultTipForm.stake}
                             onChange={(e) => setResultTipForm({ ...resultTipForm, stake: e.target.value })}
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                             placeholder="Ulog"
+                          />
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            step="0.5"
+                            value={resultTipForm.unitsStake}
+                            onChange={(e) => setResultTipForm({ ...resultTipForm, unitsStake: e.target.value })}
+                            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                            placeholder="Units"
                           />
                           <button
                             onClick={() => setResultTipForm({ ...resultTipForm, isVip: false, stake: String(getDefaultStake(false, 1)) })}
@@ -1554,7 +1582,8 @@ export default function AdminDashboard() {
                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase flex items-center gap-1 ${
                                        tip.status === TicketStatus.WON ? 'bg-green-500/10 text-green-500' : 
                                        tip.status === TicketStatus.LOST ? 'bg-red-500/10 text-red-500' :
-                                       tip.status === TicketStatus.POSTPONED ? 'bg-blue-500/10 text-blue-300' : 'bg-white/5 text-neutral-400'
+                                       tip.status === TicketStatus.POSTPONED ? 'bg-blue-500/10 text-blue-300' :
+                                       tip.status === TicketStatus.REFUND ? 'bg-cyan-500/10 text-cyan-300' : 'bg-white/5 text-neutral-400'
                                      }`}>
                                        {tip.status === TicketStatus.WON && <CheckCircle2 size={10} />}
                                        {tip.status === TicketStatus.LOST && <XCircle size={10} />}
@@ -1591,10 +1620,11 @@ export default function AdminDashboard() {
                                     className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 outline-none focus:border-gold-500/50 transition-all"
                                   >
                                     <option value={TicketStatus.PENDING}>Aktivan</option>
-                                    <option value={TicketStatus.WON}>PROSLO</option>
-                                    <option value={TicketStatus.LOST}>PALO</option>
-                                    <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
-                                  </select>
+                            <option value={TicketStatus.WON}>PROSLO</option>
+                            <option value={TicketStatus.LOST}>PALO</option>
+                            <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+                            <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
+                          </select>
                                   {tip.publicationStatus === TipPublicationStatus.PUBLISHED ? (
                                     <button
                                       onClick={(event) => {
