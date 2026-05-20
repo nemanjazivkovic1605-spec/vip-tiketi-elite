@@ -12,6 +12,8 @@ import { db } from '../lib/firebase';
 import { Tip, TicketStatus, GlobalStats, TipPublicationStatus } from '../types';
 
 const TICKETS_COLLECTION = 'tickets';
+const LEGACY_TIPS_KEY = 'elite_tips_data';
+const LEGACY_TIPS_MIGRATED_KEY = 'elite_tips_data_migrated_to_firestore';
 
 const cleanAnalysis = (analysis?: string) => {
   const value = (analysis || '').trim();
@@ -62,6 +64,40 @@ const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 
 const getTicketDoc = (id: string) => doc(db, TICKETS_COLLECTION, id);
 
+const readLegacyLocalTips = (): Tip[] => {
+  try {
+    const stored = localStorage.getItem(LEGACY_TIPS_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const migrateLegacyLocalTips = async (existingTips: Tip[]) => {
+  if (localStorage.getItem(LEGACY_TIPS_MIGRATED_KEY) === 'true') return existingTips;
+
+  const legacyTips = readLegacyLocalTips()
+    .filter((tip) => tip && tip.source === 'admin')
+    .map((tip) => normalizeTip(tip));
+
+  if (legacyTips.length === 0) {
+    localStorage.setItem(LEGACY_TIPS_MIGRATED_KEY, 'true');
+    return existingTips;
+  }
+
+  const existingIds = new Set(existingTips.map((tip) => tip.id));
+  const tipsToUpload = legacyTips.filter((tip) => !existingIds.has(tip.id));
+
+  if (tipsToUpload.length > 0) {
+    await Promise.all(tipsToUpload.map((tip) => setDoc(getTicketDoc(tip.id), removeUndefined(tip))));
+  }
+
+  localStorage.setItem(LEGACY_TIPS_MIGRATED_KEY, 'true');
+  return sortTips([...tipsToUpload, ...existingTips]);
+};
+
 const removeUndefined = <T>(value: T): T => {
   if (Array.isArray(value)) {
     return value.map((item) => removeUndefined(item)) as T;
@@ -81,10 +117,11 @@ const removeUndefined = <T>(value: T): T => {
 
 const readAllTips = async (): Promise<Tip[]> => {
   const snapshot = await getDocs(query(getTicketsCollection()));
-  return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
+  const sharedTips = sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
     ...ticketDoc.data(),
     id: ticketDoc.id,
   } as Tip)));
+  return migrateLegacyLocalTips(sharedTips);
 };
 
 const calculateStats = (tips: Tip[]): GlobalStats => {
