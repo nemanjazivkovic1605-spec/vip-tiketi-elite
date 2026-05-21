@@ -26,6 +26,7 @@ type TicketBuilderItem = {
 };
 
 type TicketAccessType = 'FREE' | 'VIP';
+type BuilderTicketType = 'VIP Dubl' | 'VIP Combo';
 type UserStatusFilter = 'all' | 'pending' | 'approved';
 type TipPublicationFilter = 'all' | 'draft' | 'published';
 
@@ -93,6 +94,7 @@ export default function AdminDashboard() {
   });
   const [ticketCart, setTicketCart] = useState<TicketBuilderItem[]>([]);
   const [ticketAccessType, setTicketAccessType] = useState<TicketAccessType>('VIP');
+  const [builderTicketType, setBuilderTicketType] = useState<BuilderTicketType>('VIP Dubl');
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>(TicketStatus.PENDING);
   const [ticketUnits, setTicketUnits] = useState('5');
   const [stats, setStats] = useState<GlobalStats | null>(null);
@@ -205,6 +207,9 @@ export default function AdminDashboard() {
     setTicketUnits(String(getDefaultUnitsStake(accessType === 'VIP', matchCount)));
   };
 
+  const getSuggestedBuilderTicketType = (matchCount: number): BuilderTicketType =>
+    matchCount >= 3 ? 'VIP Combo' : 'VIP Dubl';
+
   const handleOpenResultTip = (match: ImportedMatch) => {
     const prediction = 'GG';
     setResultTipMatch(match);
@@ -265,6 +270,7 @@ export default function AdminDashboard() {
   const handleAddMatchToTicket = (match: ImportedMatch) => {
     setTicketCart((current) => {
       if (current.some((item) => item.match.id === match.id)) {
+        alert('Ova utakmica je vec dodata na trenutni tiket.');
         return current;
       }
 
@@ -283,6 +289,8 @@ export default function AdminDashboard() {
       if (shouldUseNextDefault) {
         setTicketUnits(String(getDefaultUnitsStake(ticketAccessType === 'VIP', next.length)));
       }
+      setTicketAccessType('VIP');
+      setBuilderTicketType(getSuggestedBuilderTicketType(next.length));
       return next;
     });
   };
@@ -313,13 +321,22 @@ export default function AdminDashboard() {
       if (Number(ticketUnits) === currentDefaultUnits) {
         setTicketUnits(String(getDefaultUnitsStake(ticketAccessType === 'VIP', next.length)));
       }
+      setBuilderTicketType(getSuggestedBuilderTicketType(next.length));
       return next;
     });
   };
 
+  const handleClearTicketCart = () => {
+    setTicketCart([]);
+    setTicketAccessType('VIP');
+    setBuilderTicketType('VIP Dubl');
+    setTicketStatus(TicketStatus.PENDING);
+    setTicketUnits(String(getDefaultUnitsStake(true, 0)));
+  };
+
   const handlePublishTicket = async () => {
-    if (ticketCart.length === 0) {
-      alert('Dodajte bar jedan mec na tiket.');
+    if (ticketCart.length < 2) {
+      alert('Za VIP Dubl/Combo dodajte najmanje 2 meca na tiket.');
       return;
     }
 
@@ -363,9 +380,10 @@ export default function AdminDashboard() {
       publicationStatus: TipPublicationStatus.PUBLISHED,
       publishedAt: createdAt,
       date: sortedDates[0] || createdAt.split('T')[0],
-      isVip: ticketAccessType === 'VIP',
+      isVip: true,
       status: ticketStatus,
       totalOdds: ticketTotalOdds,
+      ticketType: builderTicketType,
       unitsStake: Number(unitsStake.toFixed(2)),
       stake: unitsToRsd(unitsStake),
       analysis: ticketCart
@@ -376,10 +394,7 @@ export default function AdminDashboard() {
     };
 
     await mockTipsService.addTip(ticket);
-    setTicketCart([]);
-    setTicketAccessType('VIP');
-    setTicketStatus(TicketStatus.PENDING);
-    setTicketUnits(String(getDefaultUnitsStake(true, 0)));
+    handleClearTicketCart();
     await refreshData();
   };
 
@@ -827,6 +842,166 @@ export default function AdminDashboard() {
     );
   };
 
+  const renderFloatingTicketBuilderPanel = () => {
+    if (ticketCart.length === 0) return null;
+
+    return (
+      <aside className="fixed inset-x-4 bottom-4 z-[70] max-h-[82vh] overflow-y-auto rounded-[2rem] border border-gold-500/30 bg-neutral-950/95 p-5 shadow-2xl shadow-black/60 backdrop-blur-2xl md:inset-x-auto md:bottom-6 md:right-6 md:top-24 md:w-[430px]">
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.24em] text-gold-500">
+              Trenutni tiket
+            </div>
+            <h3 className="font-display text-xl font-bold">
+              {builderTicketType} · {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
+            </h3>
+            <p className="mt-2 text-xs text-neutral-500">
+              Podesite tip za svaki mec, kvote i units za ceo tiket.
+            </p>
+          </div>
+          <button
+            onClick={handleClearTicketCart}
+            className="rounded-xl bg-white/5 p-2 text-neutral-400 transition-colors hover:text-red-400"
+            aria-label="Ocisti tiket"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="my-4 space-y-3">
+          {ticketCart.map((item, index) => (
+            <div key={item.match.id} className="rounded-2xl border border-white/10 bg-black/40 p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                    #{index + 1} · {item.match.date} / FT
+                  </div>
+                  <div className="truncate text-sm font-black text-neutral-100">
+                    {item.match.homeTeam} - {item.match.awayTeam}
+                  </div>
+                  <div className="mt-1 text-[11px] font-bold text-neutral-500">
+                    {item.match.league || 'Liga nije uneta'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRemoveTicketItem(item.match.id)}
+                  className="rounded-xl bg-white/5 p-2 text-neutral-400 transition-colors hover:text-red-400"
+                  aria-label="Ukloni mec iz tiketa"
+                >
+                  <MinusCircle size={17} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label>
+                  <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
+                  <select
+                    value={item.prediction}
+                    onChange={(e) => handleUpdateTicketPrediction(item.match.id, e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                  >
+                    {tipOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Kvota</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={item.odds}
+                    onChange={(e) => handleUpdateTicketItem(item.match.id, { odds: e.target.value })}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                    placeholder="Kvota"
+                  />
+                </label>
+                <label className="col-span-2">
+                  <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Komentar</span>
+                  <input
+                    value={item.analysis}
+                    onChange={(e) => handleUpdateTicketItem(item.match.id, { analysis: e.target.value })}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                    placeholder="Komentar / analiza"
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-3 border-t border-white/10 pt-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-gold-500/20 bg-gold-500/10 px-4 py-3">
+              <div className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Ukupna kvota</div>
+              <div className="font-display text-2xl font-black text-gold-500">{ticketTotalOdds.toFixed(2)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Broj parova</div>
+              <div className="font-display text-2xl font-black">{ticketCart.length}</div>
+            </div>
+          </div>
+
+          <label className="block rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+            <div className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Ulog u Units za ceo tiket</div>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              step="0.5"
+              value={ticketUnits}
+              onChange={(e) => setTicketUnits(e.target.value)}
+              className="w-full bg-transparent font-display text-2xl font-black text-neutral-100 outline-none"
+            />
+            <div className="text-[9px] font-black uppercase tracking-widest text-neutral-500">
+              {Number(ticketUnits) || 0}u = {unitsToRsd(Number(ticketUnits) || 0).toLocaleString('sr-RS')} RSD
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Tip tiketa</span>
+            <select
+              value={builderTicketType}
+              onChange={(e) => setBuilderTicketType(e.target.value as BuilderTicketType)}
+              className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm font-black uppercase tracking-widest text-neutral-200 outline-none focus:border-gold-500/50"
+            >
+              <option value="VIP Dubl">VIP Dubl</option>
+              <option value="VIP Combo">VIP Combo</option>
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Status</span>
+            <select
+              value={ticketStatus}
+              onChange={(e) => setTicketStatus(e.target.value as TicketStatus)}
+              className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm font-black uppercase tracking-widest text-neutral-200 outline-none focus:border-gold-500/50"
+            >
+              <option value={TicketStatus.PENDING}>PENDING / AKTIVAN</option>
+              <option value={TicketStatus.WON}>WON / PROSLO</option>
+              <option value={TicketStatus.LOST}>LOST / PALO</option>
+            </select>
+          </label>
+
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <button
+              onClick={handlePublishTicket}
+              className="rounded-2xl bg-gold-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black shadow-lg shadow-gold-500/20 transition-all hover:bg-gold-600"
+            >
+              Sacuvaj tiket
+            </button>
+            <button
+              onClick={handleClearTicketCart}
+              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300 transition-all hover:bg-white/10"
+            >
+              Ocisti tiket
+            </button>
+          </div>
+        </div>
+      </aside>
+    );
+  };
+
   const menuItems = [
     { id: 'overview', label: 'Pregled', icon: <BarChart3 size={20} /> },
     { id: 'users', label: 'Korisnici', icon: <Users size={20} /> },
@@ -902,7 +1077,7 @@ export default function AdminDashboard() {
             </div>
         </header>
 
-        <div className="p-8">
+        <div className={`p-8 transition-[padding] duration-300 ${ticketCart.length > 0 ? 'md:pr-[470px]' : ''}`}>
            <AnimatePresence mode="wait">
               {activeTab === 'overview' && (
                 <motion.div key="overview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
@@ -1181,7 +1356,7 @@ export default function AdminDashboard() {
                        </div>
                      </div>
 
-                     {renderTicketBuilderPanel()}
+                     {renderFloatingTicketBuilderPanel()}
 
                      {resultTipMatch && (
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
@@ -1304,12 +1479,17 @@ export default function AdminDashboard() {
                                >
                                  Dodaj tip
                                </button>
-                              <button
-                                onClick={() => handleAddMatchToTicket(match)}
-                                className="inline-flex items-center gap-2 px-5 py-3 bg-white/5 text-neutral-200 border border-white/10 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-gold-500/40 hover:text-gold-500 transition-all"
-                              >
-                                <Plus size={14} /> Dodaj na tiket
-                              </button>
+                               <button
+                                 onClick={() => handleAddMatchToTicket(match)}
+                                 disabled={ticketCart.some((item) => item.match.id === match.id)}
+                                 className={`inline-flex items-center gap-2 px-5 py-3 border text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                                   ticketCart.some((item) => item.match.id === match.id)
+                                     ? 'bg-gold-500/10 text-gold-500 border-gold-500/30 cursor-not-allowed'
+                                     : 'bg-white/5 text-neutral-200 border-white/10 hover:border-gold-500/40 hover:text-gold-500'
+                                 }`}
+                               >
+                                 <Plus size={14} /> {ticketCart.some((item) => item.match.id === match.id) ? 'Dodato' : 'Dodaj na tiket'}
+                               </button>
                                <button
                                  onClick={() => handleDeleteImportedMatch(match.id)}
                                 className="p-3 bg-white/5 rounded-xl hover:text-red-500 transition-colors"
@@ -1456,12 +1636,17 @@ export default function AdminDashboard() {
                                 >
                                   Dodaj tip
                                 </button>
-                                <button
-                                  onClick={() => handleAddMatchToTicket(match)}
-                                  className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 text-neutral-200 border border-white/10 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-gold-500/40 hover:text-gold-500 transition-all"
-                                >
-                                  <Plus size={14} /> Dodaj na tiket
-                                </button>
+                                 <button
+                                   onClick={() => handleAddMatchToTicket(match)}
+                                   disabled={ticketCart.some((item) => item.match.id === match.id)}
+                                   className={`inline-flex items-center gap-2 px-4 py-2 border text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                                     ticketCart.some((item) => item.match.id === match.id)
+                                       ? 'bg-gold-500/10 text-gold-500 border-gold-500/30 cursor-not-allowed'
+                                       : 'bg-white/5 text-neutral-200 border-white/10 hover:border-gold-500/40 hover:text-gold-500'
+                                   }`}
+                                 >
+                                   <Plus size={14} /> {ticketCart.some((item) => item.match.id === match.id) ? 'Dodato' : 'Dodaj na tiket'}
+                                 </button>
                               </div>
                             </div>
                           ))}
@@ -1474,7 +1659,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    {renderTicketBuilderPanel()}
+                    {renderFloatingTicketBuilderPanel()}
 
                     {resultTipMatch && (
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">

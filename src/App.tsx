@@ -18,6 +18,9 @@ const Stats = lazy(() => import('./pages/Stats'));
 const Contact = lazy(() => import('./pages/Contact'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Faq = lazy(() => import('./pages/Faq'));
+const BankrollManagement = lazy(() => import('./pages/BankrollManagement'));
+const DailyAnalysis = lazy(() => import('./pages/DailyAnalysis'));
+const EarlyInformation = lazy(() => import('./pages/EarlyInformation'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
@@ -67,6 +70,9 @@ export default function App() {
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/faq" element={<Faq />} />
                 <Route path="/cesta-pitanja" element={<Faq />} />
+                <Route path="/bankroll-management" element={<BankrollManagement />} />
+                <Route path="/daily-analysis" element={<DailyAnalysis />} />
+                <Route path="/early-information" element={<EarlyInformation />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/legal" element={<Terms />} />
                 <Route path="/pravila-koriscenja" element={<Terms />} />

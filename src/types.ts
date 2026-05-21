@@ -101,6 +101,7 @@ export interface Tip {
   matches: Match[];
   totalOdds: number;
   totalOddsOverride?: boolean;
+  ticketType?: string;
   stake?: number;
   unitsStake?: number;
   status: TicketStatus;

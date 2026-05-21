@@ -116,31 +116,66 @@ export default function Home() {
               {
                 title: 'Rane Informacije',
                 desc: 'Prvi saznajemo o povredama, promenama u sastavima i sumnjivim kretanjima kvota.',
-                icon: <ShieldCheck size={32} />
+                icon: <ShieldCheck size={32} />,
+                path: '/early-information',
+                badges: ['Opening Line Edge', 'Smart Money Tracking', 'Early Value Detection']
               },
               {
                 title: 'Dnevna Analiza',
                 desc: 'Svaki VIP tip dolazi sa detaljnim objašnjenjem zašto verujemo u taj ishod.',
-                icon: <Star size={32} />
+                icon: <Star size={32} />,
+                path: '/daily-analysis',
+                eyebrow: 'Premium Sports Analytics',
+                pulse: 'Value Based Analysis'
               },
               {
                 title: 'Bankroll Management',
                 desc: 'Učimo vas kako da pametno ulažete i sačuvate profit na duge staze.',
-                icon: <Zap size={32} />
+                icon: <Zap size={32} />,
+                path: '/bankroll-management'
               }
-            ].map((f, i) => (
-              <motion.div
-                key={i}
-                whileHover={{ y: -10 }}
-                className="glass p-8 rounded-[2.5rem] border-white/5 hover:border-gold-500/30 transition-all duration-500"
-              >
-                <div className="w-16 h-16 bg-gold-500/10 rounded-2xl flex items-center justify-center mb-6 text-gold-500">
-                  {f.icon}
-                </div>
-                <h3 className="text-2xl font-bold mb-4">{f.title}</h3>
-                <p className="text-neutral-400 leading-relaxed">{f.desc}</p>
-              </motion.div>
-            ))}
+            ].map((f, i) => {
+              const card = (
+                <motion.div
+                  whileHover={{ y: -10 }}
+                  className="glass h-full p-8 rounded-[2.5rem] border-white/5 hover:border-gold-500/30 transition-all duration-500"
+                >
+                  <div className="w-16 h-16 bg-gold-500/10 rounded-2xl flex items-center justify-center mb-6 text-gold-500">
+                    {f.icon}
+                  </div>
+                  <h3 className="text-2xl font-bold mb-4">{f.title}</h3>
+                  {'eyebrow' in f && f.eyebrow && (
+                    <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-gold-400">
+                      {f.eyebrow}
+                    </div>
+                  )}
+                  <p className="text-neutral-400 leading-relaxed">{f.desc}</p>
+                  {'badges' in f && f.badges && (
+                    <div className="mt-6 flex flex-wrap gap-2">
+                      {f.badges.map((badge) => (
+                        <span key={badge} className="rounded-full border border-gold-500/20 bg-gold-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gold-300">
+                          {badge}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {'pulse' in f && f.pulse && (
+                    <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-gold-500/25 bg-gold-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gold-300">
+                      <span className="h-2 w-2 rounded-full bg-gold-500 animate-pulse" />
+                      {f.pulse}
+                    </div>
+                  )}
+                </motion.div>
+              );
+
+              return f.path ? (
+                <Link key={i} to={f.path} className="block h-full">
+                  {card}
+                </Link>
+              ) : (
+                <React.Fragment key={i}>{card}</React.Fragment>
+              );
+            })}
           </div>
         </div>
       </section>
