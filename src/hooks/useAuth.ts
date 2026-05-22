@@ -2,11 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { MembershipStatus, type User } from '../types';
 import { authService, type RegisterPayload } from '../services/authService';
 
+const hasVerifiedEmail = (user: User | null) => {
+  if (!user) return false;
+  return user.isAdmin || user.emailVerified === true;
+};
+
 const hasActiveVip = (user: User | null) => {
   if (!user) return false;
   if (user.isAdmin) return true;
+  if (!hasVerifiedEmail(user)) return false;
   if (user.accountStatus === 'blocked' || user.status === 'blocked') return false;
-  if (user.vipAccess !== true || user.membershipStatus !== MembershipStatus.APPROVED) return false;
+  if (user.vipApproved !== true || user.vipAccess !== true || user.membershipStatus !== MembershipStatus.APPROVED) return false;
   const expiry = user.vipExpiresAt || user.vip_expires_at;
   if (!expiry) return false;
 
@@ -53,9 +59,20 @@ export function useAuth() {
     setUser(null);
   }, []);
 
+  const resendVerificationEmail = useCallback(async () => {
+    await authService.resendVerificationEmail();
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    const refreshedUser = await authService.refreshCurrentUser();
+    setUser(refreshedUser);
+    return refreshedUser;
+  }, []);
+
   const isApproved = hasActiveVip(user);
-  const isVerified = user?.emailVerified === true;
+  const isVerified = hasVerifiedEmail(user);
   const canAccessVip = hasActiveVip(user);
+  const canAccessFree = Boolean(user && isVerified && user.accountStatus !== 'blocked' && user.status !== 'blocked');
   const isAdmin = user?.isAdmin === true;
 
   return {
@@ -64,9 +81,12 @@ export function useAuth() {
     isAdmin,
     isApproved,
     isVerified,
+    canAccessFree,
     canAccessVip,
     login,
     register,
     logout,
+    resendVerificationEmail,
+    refreshUser,
   };
 }

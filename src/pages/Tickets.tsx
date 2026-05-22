@@ -12,6 +12,7 @@ import {
   getTicketUnitsStake,
   isTicketLockedForUser,
 } from '../utils/tickets';
+import EmailVerificationGate from '../components/EmailVerificationGate';
 
 const getTicketVisuals = (status: TicketStatus) => {
   if (status === TicketStatus.WON) {
@@ -76,7 +77,7 @@ const getTicketVisuals = (status: TicketStatus) => {
 const formatUnits = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}u`;
 
 export default function Tickets() {
-  const { user, canAccessVip } = useAuth();
+  const { user, isVerified, canAccessFree, canAccessVip } = useAuth();
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | TicketStatus>('all');
@@ -86,13 +87,17 @@ export default function Tickets() {
 
   useEffect(() => {
     fetchData();
-    return mockTipsService.subscribe(fetchData);
-  }, []);
+    return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
+  }, [canAccessFree, canAccessVip]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const allTips = await mockTipsService.getTips();
+      if (!canAccessFree) {
+        setTips([]);
+        return;
+      }
+      const allTips = await mockTipsService.getVisibleTips({ canAccessFree, canAccessVip });
       setTips(allTips);
     } finally {
       setLoading(false);
@@ -110,19 +115,25 @@ export default function Tickets() {
     const locked = isTicketLockedForUser(tip, user, canAccessVip);
 
     if (locked) {
+      const message = !user
+        ? 'Napravite nalog i potvrdite email da vidite FREE tipove'
+        : !isVerified
+          ? 'Potvrdite email adresu da biste nastavili.'
+          : 'Potreban aktivan VIP nalog';
+
       return (
         <div className="py-8 flex flex-col items-center text-center">
           <AlertCircle className="text-gold-500 mb-4" size={32} />
-          <h4 className="font-bold mb-2">{user ? 'Tiket zakljucan' : 'Registracija je potrebna'}</h4>
+          <h4 className="font-bold mb-2">{user ? 'Tiket zaključan' : 'Registracija je potrebna'}</h4>
           <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-6">
-            {user ? 'Potreban aktivan VIP nalog' : 'Napravite nalog da vidite FREE tipove'}
+            {message}
           </p>
           <Link
-            to={user ? '/#pricing' : '/register?plan=free'}
+            to={!user ? '/register?plan=free' : !isVerified ? '/dashboard' : '/#pricing'}
             onClick={(event) => event.stopPropagation()}
             className="px-6 py-2 bg-gold-500 text-black text-[10px] font-black rounded-lg"
           >
-            {user ? 'NADOGRADI' : 'REGISTRUJ SE'}
+            {!user ? 'REGISTRUJ SE' : !isVerified ? 'VERIFIKUJ EMAIL' : 'NADOGRADI'}
           </Link>
         </div>
       );
@@ -170,6 +181,10 @@ export default function Tickets() {
   };
 
   const selectedVisuals = selectedTip ? getTicketVisuals(selectedTip.status) : null;
+
+  if (user && !isVerified) {
+    return <EmailVerificationGate />;
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
@@ -317,8 +332,17 @@ export default function Tickets() {
       {filteredTips.length === 0 && !loading && (
         <div className="text-center py-20 glass rounded-[3rem]">
           <p className="text-neutral-500 font-bold">
-            {tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
+            {!user
+              ? 'Registrujte se i potvrdite email da biste videli tipove.'
+              : !isVerified
+                ? 'Potvrdite email adresu da biste nastavili.'
+                : tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
           </p>
+          {!user && (
+            <Link to="/register?plan=free" className="mt-6 inline-flex rounded-2xl bg-gold-500 px-6 py-3 text-sm font-black text-black">
+              Registruj se
+            </Link>
+          )}
           {isRealApiMode && tips.length === 0 && (
             <p className="text-neutral-600 text-xs font-bold uppercase tracking-widest mt-3">Trenutno nema dostupnih tiketa.</p>
           )}

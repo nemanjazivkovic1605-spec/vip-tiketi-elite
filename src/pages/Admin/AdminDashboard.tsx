@@ -1367,6 +1367,9 @@ export default function AdminDashboard() {
                                         u.membershipStatus === 'pending' ? 'text-blue-500' :
                                         u.membershipStatus === 'blocked' ? 'text-red-400' : 'text-neutral-500'
                                      }>{u.membershipStatus}</span>
+                                     <div className={`mt-1 text-[10px] ${u.vipApproved ? 'text-green-400' : 'text-neutral-600'}`}>
+                                       VIP: {u.vipApproved ? 'odobren' : 'nije odobren'}
+                                     </div>
                                      <div className="mt-1 text-[10px] text-neutral-600">{u.accountStatus || u.status || 'active'}</div>
                                   </td>
                                   <td className="px-6 py-4 text-xs text-neutral-400">{u.registeredAt || '-'}</td>
@@ -1385,13 +1388,14 @@ export default function AdminDashboard() {
                                   </td>
                                   <td className="px-6 py-4">
                                      <div className="flex min-w-[360px] flex-wrap items-center gap-2">
+                                        <button onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.APPROVED)} className="rounded-lg bg-green-500/10 px-2 py-1 text-[10px] font-black text-green-400 hover:bg-green-500/20">Odobri VIP</button>
+                                        <button onClick={() => handleRemoveVip(u.id)} className="rounded-lg bg-orange-500/10 px-2 py-1 text-[10px] font-black text-orange-300 hover:bg-orange-500/20">Ukloni VIP</button>
                                         <button onClick={() => handleActivateUserPlan(u, 'silver_7')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Silver 7</button>
                                         <button onClick={() => handleActivateUserPlan(u, 'gold_30')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Gold 30</button>
                                         <button onClick={() => handleActivateUserPlan(u, 'elite_90')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Elite 90</button>
                                         <button onClick={() => handleExtendUser(u, 7)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+7 dana</button>
                                         <button onClick={() => handleExtendUser(u, 30)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+30 dana</button>
                                         <button onClick={() => handleExtendUser(u, 90)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+90 dana</button>
-                                        <button onClick={() => handleRemoveVip(u.id)} className="rounded-lg bg-orange-500/10 px-2 py-1 text-[10px] font-black text-orange-300 hover:bg-orange-500/20">Izbaci iz VIP</button>
                                         {u.accountStatus === 'blocked' || u.membershipStatus === MembershipStatus.BLOCKED ? (
                                           <button onClick={() => handleUnblockUser(u.id)} className="rounded-lg bg-green-500/10 px-2 py-1 text-[10px] font-black text-green-400 hover:bg-green-500/20">Odblokiraj</button>
                                         ) : (

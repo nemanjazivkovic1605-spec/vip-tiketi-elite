@@ -65,7 +65,7 @@ export default function Register() {
             <UserPlus className="text-gold-500" size={32} />
           </div>
           <h2 className="text-3xl font-display font-bold mb-2">Napravi nalog</h2>
-          <p className="text-neutral-500">Pridruži se eliti i sačekaj odobrenje administratora.</p>
+          <p className="text-neutral-500">Pridruži se eliti, potvrdi email i sačekaj odobrenje administratora.</p>
         </div>
 
         <div className="mb-6 rounded-2xl border border-gold-500/25 bg-gold-500/10 p-4">
@@ -89,7 +89,7 @@ export default function Register() {
         {success && (
           <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 text-green-400 text-sm rounded-xl flex items-start gap-3">
             <CheckCircle size={18} className="mt-0.5 shrink-0" />
-            <span>Registracija je uspešna. Vaš nalog je kreiran i čeka odobrenje administratora nakon provere uplate.</span>
+            <span>Registracija je uspešna. Poslali smo verifikacioni email. Potvrdite email adresu da biste nastavili.</span>
           </div>
         )}
 

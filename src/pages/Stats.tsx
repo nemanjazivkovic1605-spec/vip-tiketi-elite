@@ -4,6 +4,7 @@ import { GlobalStats, MonthlyStats, TicketStatus, Tip } from '../types';
 import { Activity, Award, BarChart3, ChevronRight, PieChart, Target, TrendingUp, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getTicketUnitsStake } from '../utils/tickets';
+import { useAuth } from '../hooks/useAuth';
 
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
@@ -25,6 +26,7 @@ const ticketRows = (tickets: Tip[]) =>
   );
 
 export default function Stats() {
+  const { canAccessFree, canAccessVip } = useAuth();
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,7 +34,7 @@ export default function Stats() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const nextStats = await mockTipsService.getStats();
+        const nextStats = await mockTipsService.getVisibleStats({ canAccessFree, canAccessVip });
         setStats(nextStats);
         setSelectedMonth((current) => {
           if (!current) return nextStats.monthlyBreakdown[0] || null;
@@ -44,8 +46,8 @@ export default function Stats() {
     };
 
     fetchData();
-    return mockTipsService.subscribe(fetchData);
-  }, []);
+    return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
+  }, [canAccessFree, canAccessVip]);
 
   if (loading) {
     return (

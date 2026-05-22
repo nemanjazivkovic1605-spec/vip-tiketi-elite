@@ -7,6 +7,7 @@ import {
   query,
   setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, MonthlyStats } from '../types';
@@ -92,6 +93,29 @@ const removeUndefined = <T>(value: T): T => {
 
 const readAllTips = async (): Promise<Tip[]> => {
   const snapshot = await getDocs(query(getTicketsCollection()));
+  return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
+    ...ticketDoc.data(),
+    id: ticketDoc.id,
+  } as Tip)));
+};
+
+const readPublishedFreeTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(
+    getTicketsCollection(),
+    where('publicationStatus', '==', TipPublicationStatus.PUBLISHED),
+    where('isVip', '==', false),
+  ));
+  return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
+    ...ticketDoc.data(),
+    id: ticketDoc.id,
+  } as Tip)));
+};
+
+const readPublishedTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(
+    getTicketsCollection(),
+    where('publicationStatus', '==', TipPublicationStatus.PUBLISHED),
+  ));
   return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
     ...ticketDoc.data(),
     id: ticketDoc.id,
@@ -205,25 +229,33 @@ export const mockTipsService = {
   },
 
   getTips: async (): Promise<Tip[]> => {
-    return publicOnly(await readAllTips());
+    return readPublishedTips();
+  },
+
+  getVisibleTips: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<Tip[]> => {
+    if (!access.canAccessFree) return [];
+    return access.canAccessVip ? readPublishedTips() : readPublishedFreeTips();
   },
 
   getPublishedTips: async (): Promise<Tip[]> => {
-    return publicOnly(await readAllTips());
+    return readPublishedTips();
   },
 
   getVipTips: async (): Promise<Tip[]> => {
-    const tips = await mockTipsService.getPublishedTips();
+    const tips = await readPublishedTips();
     return tips.filter(t => t.isVip);
   },
 
   getFreeTips: async (): Promise<Tip[]> => {
-    const tips = await mockTipsService.getPublishedTips();
-    return tips.filter(t => !t.isVip);
+    return readPublishedFreeTips();
   },
 
   getStats: async (): Promise<GlobalStats> => {
     return calculateStats(await mockTipsService.getPublishedTips());
+  },
+
+  getVisibleStats: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<GlobalStats> => {
+    return calculateStats(await mockTipsService.getVisibleTips(access));
   },
 
   resetTips: async (): Promise<void> => {
@@ -270,9 +302,17 @@ export const mockTipsService = {
     });
   },
 
-  subscribe: (callback: () => void): (() => void) => {
+  subscribe: (callback: () => void, access?: { canAccessFree: boolean; canAccessVip: boolean }): (() => void) => {
+    if (access && !access.canAccessFree) return () => undefined;
+
+    const ticketsQuery = access
+      ? access.canAccessVip
+        ? query(getTicketsCollection(), where('publicationStatus', '==', TipPublicationStatus.PUBLISHED))
+        : query(getTicketsCollection(), where('publicationStatus', '==', TipPublicationStatus.PUBLISHED), where('isVip', '==', false))
+      : query(getTicketsCollection());
+
     return onSnapshot(
-      query(getTicketsCollection()),
+      ticketsQuery,
       () => callback(),
       (error) => {
         console.error('Tickets shared store subscription failed:', error);

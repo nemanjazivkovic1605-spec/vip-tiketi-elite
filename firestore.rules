@@ -6,9 +6,44 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function hasAdminRole() {
+      return isSignedIn() &&
+        exists(userPath(request.auth.uid)) &&
+        get(userPath(request.auth.uid)).data.role == 'admin';
+    }
+
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'nemanjazivkovic1605@gmail.com'
+        request.auth.token.email == 'nemanjazivkovic1605@gmail.com' ||
+        hasAdminRole()
+      );
+    }
+
+    function hasVerifiedEmail() {
+      return isAdmin() || (isSignedIn() && request.auth.token.email_verified == true);
+    }
+
+    function currentUser() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function hasVipAccess() {
+      return isAdmin() || (
+        (
+          hasVerifiedEmail() &&
+          currentUser().role == 'admin'
+        ) ||
+        (
+          hasVerifiedEmail() &&
+          currentUser().vipApproved == true &&
+          currentUser().vipAccess == true &&
+          currentUser().membershipStatus == 'approved' &&
+          currentUser().status == 'active'
+        )
       );
     }
 
@@ -35,7 +70,14 @@ service cloud.firestore {
 
     // Tickets
     match /tickets/{ticketId} {
-      allow read: if true;
+      allow read: if isAdmin() || (
+        hasVerifiedEmail() &&
+        resource.data.publicationStatus == 'PUBLISHED' &&
+        (
+          resource.data.isVip == false ||
+          hasVipAccess()
+        )
+      );
       allow write: if isAdmin();
     }
 
@@ -48,8 +90,10 @@ service cloud.firestore {
           incoming().uid == userId &&
           incoming().role == 'user' &&
           incoming().isAdmin == false &&
+          incoming().emailVerified == false &&
           incoming().status == 'active' &&
           incoming().vipAccess == false &&
+          incoming().vipApproved == false &&
           incoming().vipExpiresAt == null &&
           incoming().vip_expires_at == null &&
           incoming().membershipStatus in ['free', 'pending']
@@ -57,15 +101,21 @@ service cloud.firestore {
       );
       allow update: if isAdmin() || (
         isOwner(userId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emailVerified', 'updatedAt']) &&
+        incoming().emailVerified == request.auth.token.email_verified
+      ) || (
+        isOwner(userId) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'uid',
           'email',
+          'emailVerified',
           'role',
           'isAdmin',
           'status',
           'accountStatus',
           'membershipStatus',
           'vipAccess',
+          'vipApproved',
           'vipExpiresAt',
           'vip_expires_at',
           'selectedPlan',

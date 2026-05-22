@@ -132,6 +132,7 @@ export interface User {
   status?: MembershipStatus | string;
   accountStatus?: AccountStatus;
   vipAccess?: boolean;
+  vipApproved?: boolean;
   vipExpiresAt?: string | null;
   vip_expires_at?: string | null;
   approvedAt?: string | null;

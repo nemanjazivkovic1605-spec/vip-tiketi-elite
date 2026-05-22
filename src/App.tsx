@@ -7,6 +7,7 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ScrollToTop from './components/utils/ScrollToTop';
 import MembershipGuard from './components/MembershipGuard';
+import EmailVerificationGate from './components/EmailVerificationGate';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -32,7 +33,7 @@ const PageLoader = () => (
 );
 
 const ProtectedRoute = ({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) => {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, isVerified } = useAuth();
 
   if (loading) return (
     <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
@@ -42,6 +43,7 @@ const ProtectedRoute = ({ children, requireAdmin = false }: { children: React.Re
   
   if (!user) return <Navigate to="/login" replace />;
   if (requireAdmin && !isAdmin) return <Navigate to="/dashboard" replace />;
+  if (!isVerified) return <EmailVerificationGate />;
 
   return <>{children}</>;
 };
@@ -65,8 +67,16 @@ export default function App() {
                 <Route path="/results" element={<Results />} />
                 <Route path="/live-results" element={<LiveResults />} />
                 <Route path="/live" element={<LiveResults />} />
-                <Route path="/stats" element={<Stats />} />
-                <Route path="/statistics" element={<Stats />} />
+                <Route path="/stats" element={
+                  <ProtectedRoute>
+                    <Stats />
+                  </ProtectedRoute>
+                } />
+                <Route path="/statistics" element={
+                  <ProtectedRoute>
+                    <Stats />
+                  </ProtectedRoute>
+                } />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/faq" element={<Faq />} />
                 <Route path="/cesta-pitanja" element={<Faq />} />

@@ -14,6 +14,7 @@ export default function Login() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +50,7 @@ export default function Login() {
     setResetLoading(true);
     try {
       await authService.resetPassword(email);
-      setSuccess('Email za reset lozinke je poslat. Proverite inbox i spam folder.');
+      setSuccess('Link za reset lozinke je poslat na vašu email adresu.');
     } catch (err) {
       const details = getFirebaseErrorDetails(err);
       console.error('Firebase password reset error:', details);
@@ -70,8 +71,10 @@ export default function Login() {
           <div className="w-16 h-16 bg-gold-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <LogIn className="text-gold-500" size={32} />
           </div>
-          <h2 className="text-3xl font-display font-bold mb-2">Dobrodošli nazad</h2>
-          <p className="text-neutral-500">Unesite svoje podatke za pristup VIP tipovima.</p>
+          <h2 className="text-3xl font-display font-bold mb-2">{resetMode ? 'Reset lozinke' : 'Dobrodošli nazad'}</h2>
+          <p className="text-neutral-500">
+            {resetMode ? 'Unesite email adresu i poslaćemo vam link za reset lozinke.' : 'Unesite svoje podatke za pristup VIP tipovima.'}
+          </p>
         </div>
 
         {error && (
@@ -87,7 +90,7 @@ export default function Login() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={resetMode ? (event) => { event.preventDefault(); handlePasswordReset(); } : handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <label className="text-sm font-semibold text-neutral-400 pl-1">Email adresa</label>
             <div className="relative group">
@@ -103,16 +106,20 @@ export default function Login() {
             </div>
           </div>
 
+          {!resetMode && (
           <div className="space-y-2">
             <div className="flex justify-between items-center pl-1">
               <label className="text-sm font-semibold text-neutral-400">Lozinka</label>
               <button
                 type="button"
-                onClick={handlePasswordReset}
-                disabled={resetLoading}
-                className="text-xs text-gold-500 hover:underline disabled:opacity-50"
+                onClick={() => {
+                  setError('');
+                  setSuccess('');
+                  setResetMode(true);
+                }}
+                className="text-xs text-gold-500 hover:underline"
               >
-                {resetLoading ? 'Slanje...' : 'Zaboravljena lozinka?'}
+                Zaboravili ste lozinku?
               </button>
             </div>
             <div className="relative group">
@@ -127,18 +134,33 @@ export default function Login() {
               />
             </div>
           </div>
+          )}
 
           <button 
             type="submit" 
-            disabled={loading}
+            disabled={loading || resetLoading}
             className="w-full py-4 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-2xl transition-all shadow-lg shadow-gold-500/20 flex items-center justify-center gap-2 group disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" /> : 'Login'}
+            {loading || resetLoading ? <Loader2 className="animate-spin" /> : resetMode ? 'Pošalji link za reset lozinke' : 'Login'}
           </button>
         </form>
 
         <p className="mt-8 text-center text-neutral-500 text-sm">
-          Nemate nalog? <Link to="/register" className="text-gold-500 font-bold hover:underline">Registrujte se</Link>
+          {resetMode ? (
+            <button
+              type="button"
+              onClick={() => {
+                setResetMode(false);
+                setError('');
+                setSuccess('');
+              }}
+              className="text-gold-500 font-bold hover:underline"
+            >
+              Vrati se na prijavu
+            </button>
+          ) : (
+            <>Nemate nalog? <Link to="/register" className="text-gold-500 font-bold hover:underline">Registrujte se</Link></>
+          )}
         </p>
       </motion.div>
     </div>

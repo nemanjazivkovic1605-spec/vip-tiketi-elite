@@ -86,5 +86,6 @@ export const calculateTicketUnitsProfit = (tip: Tip) => {
 
 export const isTicketLockedForUser = (tip: Tip, user: User | null, canAccessVip: boolean) => {
   if (!user) return true;
+  if (!user.isAdmin && !user.emailVerified) return true;
   return tip.isVip && !canAccessVip;
 };

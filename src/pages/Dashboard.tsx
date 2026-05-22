@@ -7,7 +7,7 @@ import { TrendingUp, Award, Calendar, ChevronRight, Zap, Target, ShieldCheck, Cl
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
-  const { user, isApproved } = useAuth();
+  const { user, isApproved, canAccessFree, canAccessVip } = useAuth();
   const [recentTips, setRecentTips] = useState<Tip[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -15,19 +15,19 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tips, s] = await Promise.all([
-          mockTipsService.getTips(),
-          mockTipsService.getStats()
+        const [visibleTips, s] = await Promise.all([
+          mockTipsService.getVisibleTips({ canAccessFree, canAccessVip }),
+          mockTipsService.getVisibleStats({ canAccessFree, canAccessVip })
         ]);
-        setRecentTips(tips.slice(0, 3));
+        setRecentTips(visibleTips.slice(0, 3));
         setStats(s);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-    return mockTipsService.subscribe(fetchData);
-  }, []);
+    return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
+  }, [canAccessFree, canAccessVip]);
 
   if (loading) {
     return (
