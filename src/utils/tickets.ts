@@ -59,6 +59,9 @@ export const isSettledTicket = (status: TicketStatus) =>
 export const isFinishedForStats = (status: TicketStatus) =>
   status === TicketStatus.WON || status === TicketStatus.LOST || status === TicketStatus.REFUND;
 
+export const isPublicFinishedTicket = (status: TicketStatus) =>
+  status === TicketStatus.WON || status === TicketStatus.LOST || status === TicketStatus.REFUND || status === TicketStatus.POSTPONED;
+
 export const calculateTicketProfit = (tip: Tip) => {
   if (!isSettledTicket(tip.status)) return 0;
 
@@ -85,7 +88,23 @@ export const calculateTicketUnitsProfit = (tip: Tip) => {
 };
 
 export const isTicketLockedForUser = (tip: Tip, user: User | null, canAccessVip: boolean) => {
-  if (!user) return true;
+  if (!user) return !isPublicFinishedTicket(tip.status);
   if (!user.isAdmin && !user.emailVerified) return true;
   return tip.isVip && !canAccessVip;
 };
+
+export const isPredictionLockedForUser = (
+  tip: Tip,
+  user: User | null,
+  canAccessFree: boolean,
+  canAccessVip: boolean,
+) => {
+  if (tip.isVip && !canAccessVip) return true;
+  if (!user || (!user.isAdmin && !user.emailVerified)) {
+    return !isPublicFinishedTicket(tip.status);
+  }
+  if (!canAccessFree && !isPublicFinishedTicket(tip.status)) return true;
+  return false;
+};
+
+export const canReadVipAnalysis = (tip: Tip, canAccessVip: boolean) => tip.isVip && canAccessVip;

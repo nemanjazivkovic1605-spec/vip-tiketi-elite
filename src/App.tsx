@@ -68,16 +68,8 @@ export default function App() {
                 <Route path="/results" element={<Results />} />
                 <Route path="/live-results" element={<LiveResults />} />
                 <Route path="/live" element={<LiveResults />} />
-                <Route path="/stats" element={
-                  <ProtectedRoute>
-                    <Stats />
-                  </ProtectedRoute>
-                } />
-                <Route path="/statistics" element={
-                  <ProtectedRoute>
-                    <Stats />
-                  </ProtectedRoute>
-                } />
+                <Route path="/stats" element={<Stats />} />
+                <Route path="/statistics" element={<Stats />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/faq" element={<Faq />} />
                 <Route path="/cesta-pitanja" element={<Faq />} />

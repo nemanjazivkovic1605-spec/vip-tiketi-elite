@@ -42,7 +42,8 @@ service cloud.firestore {
           currentUser().vipApproved == true &&
           currentUser().vipAccess == true &&
           currentUser().membershipStatus == 'approved' &&
-          currentUser().status == 'active'
+          currentUser().status == 'active' &&
+          currentUser().vipExpiresAt > request.time
         )
       );
     }
@@ -70,14 +71,13 @@ service cloud.firestore {
 
     // Tickets
     match /tickets/{ticketId} {
-      allow read: if isAdmin() || (
-        hasVerifiedEmail() &&
-        resource.data.publicationStatus == 'PUBLISHED' &&
-        (
-          resource.data.isVip == false ||
-          hasVipAccess()
-        )
-      );
+      allow read: if isAdmin() || hasVipAccess();
+      allow write: if isAdmin();
+    }
+
+    // Public ticket index. VIP predictions and analysis must never be stored here.
+    match /publicTickets/{ticketId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 

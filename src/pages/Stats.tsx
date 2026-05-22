@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Activity, Award, BarChart3, ChevronRight, Lock, PieChart, Target, TrendingUp, Zap } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
 import { GlobalStats, MonthlyStats, TicketStatus, Tip } from '../types';
-import { Activity, Award, BarChart3, ChevronRight, PieChart, Target, TrendingUp, Zap } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { getTicketUnitsStake } from '../utils/tickets';
+import { getTicketUnitsStake, isPredictionLockedForUser } from '../utils/tickets';
 import { useAuth } from '../hooks/useAuth';
 
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
@@ -11,9 +11,10 @@ const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u
 const formatRsd = (value = 0) => `${value >= 0 ? '+' : ''}${value.toLocaleString('sr-RS')} RSD`;
 
 const statusMeta = (status: TicketStatus) => {
-  if (status === TicketStatus.WON) return { label: '✅ POGOĐENO', className: 'text-green-300 bg-green-500/10 border-green-500/20' };
-  if (status === TicketStatus.LOST) return { label: '❌ PROMAŠENO', className: 'text-red-300 bg-red-500/10 border-red-500/20' };
-  return { label: '🔄 KVOTA 1 / POVRAT', className: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20' };
+  if (status === TicketStatus.WON) return { label: '✓ POGOĐENO', className: 'text-green-300 bg-green-500/10 border-green-500/20' };
+  if (status === TicketStatus.LOST) return { label: '✕ PROMAŠENO', className: 'text-red-300 bg-red-500/10 border-red-500/20' };
+  if (status === TicketStatus.POSTPONED) return { label: 'ODLOŽENO', className: 'text-blue-300 bg-blue-500/10 border-blue-500/20' };
+  return { label: 'KVOTA 1 / POVRAT', className: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20' };
 };
 
 const ticketRows = (tickets: Tip[]) =>
@@ -22,11 +23,11 @@ const ticketRows = (tickets: Tip[]) =>
       id: `${tip.id}-${match.id || index}`,
       ticket: tip,
       match,
-    }))
+    })),
   );
 
 export default function Stats() {
-  const { canAccessFree, canAccessVip } = useAuth();
+  const { user, canAccessFree, canAccessVip } = useAuth();
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,6 +168,7 @@ export default function Stats() {
                 <AnimatePresence mode="popLayout">
                   {selectedMonth && ticketRows(selectedMonth.tickets).map((row) => {
                     const meta = statusMeta(row.ticket.status);
+                    const locked = isPredictionLockedForUser(row.ticket, user, canAccessFree, canAccessVip);
                     return (
                       <motion.tr
                         key={row.id}
@@ -178,7 +180,13 @@ export default function Stats() {
                         <td className="py-4 pr-4 text-neutral-300 font-bold">{row.ticket.date}</td>
                         <td className="py-4 pr-4 text-neutral-400">{row.match.league || 'Fudbal'}</td>
                         <td className="py-4 pr-4 font-bold text-neutral-100">{row.match.homeTeam} - {row.match.awayTeam}</td>
-                        <td className="py-4 pr-4 text-gold-400 font-black">{row.match.prediction}</td>
+                        <td className="py-4 pr-4 text-gold-400 font-black">
+                          {locked ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-gold-500/20 bg-gold-500/10 px-3 py-1 text-[10px] uppercase tracking-widest">
+                              <Lock size={12} /> VIP TIP
+                            </span>
+                          ) : row.match.prediction}
+                        </td>
                         <td className="py-4 pr-4 text-neutral-200 font-bold">{row.match.odds.toFixed(2)}</td>
                         <td className="py-4 pr-4 text-neutral-200 font-bold">{getTicketUnitsStake(row.ticket).toFixed(2)}u</td>
                         <td className="py-4">

@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'motion/react';
+import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, TrendingUp, X, XCircle } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
 import { footballApiService } from '../services/footballApiService';
 import { Tip, TicketStatus } from '../types';
-import { CheckCircle2, XCircle, Clock, AlertCircle, ChevronRight, TrendingUp, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../hooks/useAuth';
-import { Link } from 'react-router-dom';
 import {
   calculateTicketUnitsProfit,
+  canReadVipAnalysis,
   getTicketKind,
   getTicketUnitsStake,
-  isTicketLockedForUser,
+  isPredictionLockedForUser,
 } from '../utils/tickets';
-import EmailVerificationGate from '../components/EmailVerificationGate';
 
 const getTicketVisuals = (status: TicketStatus) => {
   if (status === TicketStatus.WON) {
@@ -20,7 +20,7 @@ const getTicketVisuals = (status: TicketStatus) => {
       card: 'border-green-400/70 bg-[radial-gradient(circle_at_top_right,rgba(34,197,94,0.18),transparent_36%),linear-gradient(180deg,rgba(10,18,14,0.95),rgba(4,8,6,0.94))] shadow-[0_0_45px_rgba(34,197,94,0.24),0_18px_80px_rgba(0,0,0,0.45)] hover:shadow-[0_0_70px_rgba(34,197,94,0.34),0_22px_90px_rgba(0,0,0,0.55)]',
       glow: 'bg-green-400/25 blur-3xl opacity-80',
       badge: 'bg-green-400/15 text-green-300 border-green-400/40 shadow-[0_0_22px_rgba(34,197,94,0.35)]',
-      label: '✓ PROSAO',
+      label: '✓ PROŠAO',
       icon: <CheckCircle2 size={16} />,
       odds: 'text-green-300 drop-shadow-[0_0_14px_rgba(34,197,94,0.75)]',
       totalBox: 'bg-green-400/10 border-green-400/20',
@@ -44,7 +44,7 @@ const getTicketVisuals = (status: TicketStatus) => {
       card: 'border-blue-400/25 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.10),transparent_38%),linear-gradient(180deg,rgba(10,16,24,0.90),rgba(8,8,8,0.94))] shadow-[0_14px_55px_rgba(0,0,0,0.38)] hover:border-blue-400/35',
       glow: 'bg-blue-400/10 blur-3xl opacity-50',
       badge: 'bg-blue-400/10 text-blue-300 border-blue-400/25',
-      label: 'ODLOZENO',
+      label: 'ODLOŽENO',
       icon: <AlertCircle size={16} />,
       odds: 'text-blue-200',
       totalBox: 'bg-blue-400/5 border-blue-400/15',
@@ -83,6 +83,8 @@ export default function Tickets() {
   const [filter, setFilter] = useState<'all' | TicketStatus>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'vip' | 'free'>('all');
   const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
+  const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
+  const [accessMessage, setAccessMessage] = useState('');
   const isRealApiMode = footballApiService.isRealApiMode();
 
   useEffect(() => {
@@ -93,10 +95,6 @@ export default function Tickets() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      if (!canAccessFree) {
-        setTips([]);
-        return;
-      }
       const allTips = await mockTipsService.getVisibleTips({ canAccessFree, canAccessVip });
       setTips(allTips);
     } finally {
@@ -110,39 +108,88 @@ export default function Tickets() {
     return matchesStatus && matchesType;
   });
 
-  const renderTicketBody = (tip: Tip, compact = false) => {
-    const visuals = getTicketVisuals(tip.status);
-    const locked = isTicketLockedForUser(tip, user, canAccessVip);
+  const showVipPopup = (message: string) => {
+    setAccessMessage(message);
+  };
 
-    if (locked) {
-      const message = !user
-        ? 'Napravite nalog i potvrdite email da vidite FREE tipove'
-        : !isVerified
-          ? 'Potvrdite email adresu da biste nastavili.'
-          : 'Potreban aktivan VIP nalog';
+  const renderPrediction = (tip: Tip, prediction: string) => {
+    const locked = isPredictionLockedForUser(tip, user, canAccessFree, canAccessVip);
 
+    if (!locked) {
       return (
-        <div className="py-8 flex flex-col items-center text-center">
-          <AlertCircle className="text-gold-500 mb-4" size={32} />
-          <h4 className="font-bold mb-2">{user ? 'Tiket zaključan' : 'Registracija je potrebna'}</h4>
-          <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-6">
-            {message}
-          </p>
-          <Link
-            to={!user ? '/register?plan=free' : !isVerified ? '/dashboard' : '/#pricing'}
-            onClick={(event) => event.stopPropagation()}
-            className="px-6 py-2 bg-gold-500 text-black text-[10px] font-black rounded-lg"
-          >
-            {!user ? 'REGISTRUJ SE' : !isVerified ? 'VERIFIKUJ EMAIL' : 'NADOGRADI'}
-          </Link>
-        </div>
+        <span className="rounded-xl bg-gold-500/12 border border-gold-400/20 px-3 py-1.5 text-sm font-black text-gold-300">
+          {prediction}
+        </span>
       );
     }
 
     return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          showVipPopup(tip.isVip
+            ? 'Morate biti VIP član da biste videli VIP tip i analizu.'
+            : 'Prijavite se i potvrdite email adresu da biste videli aktivan FREE tip.');
+        }}
+        className="relative rounded-xl border border-gold-400/20 bg-gold-500/10 px-4 py-2 text-sm font-black text-gold-300 transition-all hover:border-gold-400/40"
+      >
+        <span className="select-none blur-[4px]">GG 1X</span>
+        <span className="absolute inset-0 flex items-center justify-center gap-1 text-[10px]">
+          <Lock size={12} /> {tip.isVip ? 'VIP TIP' : 'ZAKLJUČANO'}
+        </span>
+      </button>
+    );
+  };
+
+  const renderAnalysis = (tip: Tip) => {
+    if (!tip.isVip) return null;
+
+    const canRead = canReadVipAnalysis(tip, canAccessVip);
+    const analysis = [tip.analysis, ...tip.matches.map((match) => match.analysis)]
+      .map((value) => value?.trim())
+      .filter(Boolean)
+      .join('\n\n');
+    const isOpen = openAnalysisId === tip.id;
+
+    return (
+      <div className="rounded-2xl border border-gold-500/20 bg-gold-500/[0.05] p-4">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!canRead) {
+              showVipPopup('Morate biti VIP član da biste pročitali analizu.');
+              return;
+            }
+            setOpenAnalysisId((current) => current === tip.id ? null : tip.id);
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-black/30 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gold-300 transition-all hover:bg-black/45"
+        >
+          <Lock size={14} />
+          {canRead ? 'Pročitajte analizu' : 'Analizu mogu videti samo VIP članovi'}
+        </button>
+        {canRead && isOpen && (
+          <p className="mt-4 whitespace-pre-line text-xs leading-7 text-neutral-300">
+            {analysis || 'Analiza nije dodata za ovaj tip.'}
+          </p>
+        )}
+        {!canRead && (
+          <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+            Postanite VIP član za pristup analizama i tačnim tipovima.
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  const renderTicketBody = (tip: Tip, compact = false) => {
+    const visuals = getTicketVisuals(tip.status);
+
+    return (
       <div className={compact ? 'space-y-4' : 'p-6 space-y-5'}>
         {tip.matches.map((match, index) => (
-          <div key={match.id || index} className="relative rounded-2xl bg-black/22 border border-white/7 p-4 transition-colors hover:border-white/12">
+          <div key={match.id || index} className="relative overflow-hidden rounded-2xl bg-black/22 border border-white/7 p-4 transition-colors hover:border-white/12">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <span className="inline-flex items-center rounded-full bg-white/7 border border-white/10 px-3 py-1 text-[9px] text-neutral-300 uppercase font-black tracking-widest">
                 {match.league || 'Liga'}
@@ -158,16 +205,10 @@ export default function Tickets() {
               {match.homeTeam && match.awayTeam ? `${match.homeTeam} vs ${match.awayTeam}` : match.teams}
             </div>
 
-            {match.analysis?.trim() && (
-              <p className="mt-3 text-xs text-neutral-400 leading-relaxed">{match.analysis}</p>
-            )}
-
             <div className="mt-5 flex items-end justify-between gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Tip</span>
-                <span className="rounded-xl bg-gold-500/12 border border-gold-400/20 px-3 py-1.5 text-sm font-black text-gold-300">
-                  {match.prediction}
-                </span>
+                {renderPrediction(tip, match.prediction)}
               </div>
               <div className="text-right">
                 <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest mb-1">Kvota</div>
@@ -176,21 +217,18 @@ export default function Tickets() {
             </div>
           </div>
         ))}
+        {renderAnalysis(tip)}
       </div>
     );
   };
 
   const selectedVisuals = selectedTip ? getTicketVisuals(selectedTip.status) : null;
 
-  if (user && !isVerified) {
-    return <EmailVerificationGate />;
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="text-center mb-16">
         <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">TABELA <span className="gold-text">TIKETA</span></h1>
-        <p className="text-neutral-400">Pregled svih aktivnih i zavrsenih tiketa iz nase baze.</p>
+        <p className="text-neutral-400">Pregled svih aktivnih i završenih tiketa iz naše baze.</p>
       </div>
 
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-12">
@@ -211,11 +249,11 @@ export default function Tickets() {
                 : statusFilter === TicketStatus.PENDING
                   ? 'Aktivni'
                   : statusFilter === TicketStatus.WON
-                    ? 'Prosli'
+                    ? 'Prošli'
                     : statusFilter === TicketStatus.LOST
                       ? 'Pali'
                       : statusFilter === TicketStatus.POSTPONED
-                        ? 'Odlozeni'
+                        ? 'Odloženi'
                         : 'Povrat'}
             </button>
           ))}
@@ -249,7 +287,6 @@ export default function Tickets() {
             {filteredTips.map((tip) => {
               const visuals = getTicketVisuals(tip.status);
               const profit = calculateTicketUnitsProfit(tip);
-              const locked = isTicketLockedForUser(tip, user, canAccessVip);
 
               return (
                 <motion.div
@@ -306,7 +343,7 @@ export default function Tickets() {
                       <div className={`rounded-2xl border px-5 py-4 flex items-center justify-between gap-4 ${visuals.totalBox}`}>
                         <div className="flex flex-col">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</span>
-                          <span className={`text-3xl font-display font-black ${visuals.odds}`}>{locked ? '-' : tip.totalOdds.toFixed(2)}</span>
+                          <span className={`text-3xl font-display font-black ${visuals.odds}`}>{tip.totalOdds.toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col text-right">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</span>
@@ -315,7 +352,7 @@ export default function Tickets() {
                         <div className="flex flex-col text-right">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">P/L</span>
                           <span className={`text-base font-display font-bold ${profit > 0 ? 'text-green-300' : profit < 0 ? 'text-red-300' : 'text-neutral-300'}`}>
-                            {locked ? '-' : formatUnits(profit)}
+                            {formatUnits(profit)}
                           </span>
                         </div>
                         <ChevronRight size={18} className="text-neutral-500" />
@@ -332,11 +369,7 @@ export default function Tickets() {
       {filteredTips.length === 0 && !loading && (
         <div className="text-center py-20 glass rounded-[3rem]">
           <p className="text-neutral-500 font-bold">
-            {!user
-              ? 'Registrujte se i potvrdite email da biste videli tipove.'
-              : !isVerified
-                ? 'Potvrdite email adresu da biste nastavili.'
-                : tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
+            {tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
           </p>
           {!user && (
             <Link to="/register?plan=free" className="mt-6 inline-flex rounded-2xl bg-gold-500 px-6 py-3 text-sm font-black text-black">
@@ -401,9 +434,7 @@ export default function Tickets() {
                 <div className={`mt-6 rounded-2xl border px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 ${selectedVisuals.totalBox}`}>
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</div>
-                    <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>
-                      {isTicketLockedForUser(selectedTip, user, canAccessVip) ? '-' : selectedTip.totalOdds.toFixed(2)}
-                    </div>
+                    <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>{selectedTip.totalOdds.toFixed(2)}</div>
                   </div>
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</div>
@@ -414,7 +445,7 @@ export default function Tickets() {
                     <div className={`text-xl font-display font-bold ${
                       calculateTicketUnitsProfit(selectedTip) > 0 ? 'text-green-300' : calculateTicketUnitsProfit(selectedTip) < 0 ? 'text-red-300' : 'text-neutral-300'
                     }`}>
-                      {isTicketLockedForUser(selectedTip, user, canAccessVip) ? '-' : formatUnits(calculateTicketUnitsProfit(selectedTip))}
+                      {formatUnits(calculateTicketUnitsProfit(selectedTip))}
                     </div>
                   </div>
                   <div>
@@ -422,6 +453,42 @@ export default function Tickets() {
                     <div className="text-xl font-display font-bold text-neutral-100">{selectedVisuals.label.replace(/[✓✕⏳]/g, '').trim()}</div>
                   </div>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {accessMessage && (
+          <motion.div
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setAccessMessage('')}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 14, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.96 }}
+              onClick={(event) => event.stopPropagation()}
+              className="max-w-md rounded-[2rem] border border-gold-500/25 bg-neutral-950 p-7 text-center shadow-2xl shadow-gold-500/10"
+            >
+              <Lock className="mx-auto mb-4 text-gold-500" size={34} />
+              <h3 className="mb-3 text-xl font-display font-black">VIP pristup</h3>
+              <p className="text-sm leading-7 text-neutral-400">{accessMessage}</p>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <Link to="/register" className="flex-1 rounded-2xl bg-gold-500 px-5 py-3 text-xs font-black uppercase tracking-widest text-black">
+                  Postani VIP
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setAccessMessage('')}
+                  className="flex-1 rounded-2xl border border-white/10 px-5 py-3 text-xs font-black uppercase tracking-widest text-neutral-300"
+                >
+                  Zatvori
+                </button>
               </div>
             </motion.div>
           </motion.div>
