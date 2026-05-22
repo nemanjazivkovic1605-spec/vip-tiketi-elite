@@ -357,14 +357,14 @@ export default function AdminDashboard() {
 
   const handlePublishTicket = async () => {
     if (ticketCart.length < 2) {
-      alert('Za VIP Dubl/Combo dodajte najmanje 2 meca na tiket.');
+      alert('Za VIP Dubl/Combo dodajte najmanje 2 meča na tiket.');
       return;
     }
 
     const invalidItem = ticketCart.find((item) => !item.prediction);
 
     if (invalidItem) {
-      alert('Svaki mec mora imati tip igre.');
+      alert('Svaki meč mora imati tip igre.');
       return;
     }
 
@@ -516,7 +516,7 @@ export default function AdminDashboard() {
       });
 
     if (generatedTips.length === 0) {
-      setHistoryPrepMessage('Nema novih draft tiketa za poslednjih 6 meseci. Moguce je da su vec pripremljeni ili nema dovoljno meceva po danu.');
+      setHistoryPrepMessage('Nema novih draft tiketa za poslednjih 6 meseci. Moguće je da su već pripremljeni ili nema dovoljno mečeva po danu.');
       return;
     }
 
@@ -544,14 +544,14 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteImportedMatch = async (matchId: string) => {
-    if (confirm('Da li zelite da obrisete ovu utakmicu iz admin baze?')) {
+    if (confirm('Da li želite da obrišete ovu utakmicu iz admin baze?')) {
       await importedMatchesService.deleteMatch(matchId);
       await refreshData();
     }
   };
 
   const handleClearImportedMatches = async () => {
-    if (confirm('Da li zelite da obrisete sve importovane utakmice?')) {
+    if (confirm('Da li želite da obrišete sve importovane utakmice?')) {
       await importedMatchesService.clearMatches();
       await refreshData();
     }
@@ -615,7 +615,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (confirm('Da li ste sigurni da Å¾elite da obriÅ¡ete korisnika?')) {
+    if (confirm('Da li ste sigurni da želite da obrišete korisnika?')) {
       const userToDelete = userList.find(u => u.id === userId);
       if (!userToDelete) return;
       await authService.deleteUser(userToDelete);
@@ -624,7 +624,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteTip = async (tipId: string) => {
-    if (confirm('Da li ste sigurni da Å¾elite da obriÅ¡ete ovaj tip?')) {
+    if (confirm('Da li ste sigurni da želite da obrišete ovaj tip?')) {
       await mockTipsService.deleteTip(tipId);
       refreshData();
     }
@@ -646,7 +646,7 @@ export default function AdminDashboard() {
   };
 
   const handleResetData = async () => {
-    if (confirm('Ovo Ä‡e vratiti sve podatke na fabriÄka podeÅ¡avanja. Nastaviti?')) {
+    if (confirm('Ovo će vratiti sve podatke na fabrička podešavanja. Nastaviti?')) {
       await mockTipsService.resetTips();
       await importedMatchesService.clearMatches();
       mockSettingsService.resetSettings();
@@ -756,10 +756,10 @@ export default function AdminDashboard() {
               Trenutni tiket
             </div>
             <h3 className="text-2xl font-display font-bold">
-              {getTicketKind(ticketCart.length)} Â· {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
+              {getTicketKind(ticketCart.length)} · {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
             </h3>
             <p className="text-xs text-neutral-500 mt-2">
-              Podesite tip, kvotu i komentar za svaki mec, pa objavite tiket javno.
+              Podesite tip, kvotu i komentar za svaki meč, pa objavite tiket javno.
             </p>
           </div>
 
@@ -788,9 +788,9 @@ export default function AdminDashboard() {
               className="col-span-2 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300 outline-none focus:border-gold-500/50"
             >
               <option value={TicketStatus.PENDING}>AKTIVAN</option>
-              <option value={TicketStatus.WON}>PROSLO</option>
+              <option value={TicketStatus.WON}>PROŠLO</option>
               <option value={TicketStatus.LOST}>PALO</option>
-              <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+              <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
               <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
             </select>
           </div>
@@ -802,7 +802,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">
-                    #{index + 1} Â· {item.match.date} Â· {item.match.league}
+                    #{index + 1} · {item.match.date} · {item.match.league}
                   </div>
                   <div className="font-bold text-neutral-100">
                     {item.match.homeTeam} - {item.match.awayTeam}
@@ -839,7 +839,7 @@ export default function AdminDashboard() {
                   <button
                     onClick={() => handleRemoveTicketItem(item.match.id)}
                     className="p-3 bg-white/5 rounded-xl hover:text-red-500 transition-colors"
-                    aria-label="Ukloni mec iz tiketa"
+                    aria-label="Ukloni meč iz tiketa"
                   >
                     <MinusCircle size={18} />
                   </button>
@@ -910,10 +910,10 @@ export default function AdminDashboard() {
               Trenutni tiket
             </div>
             <h3 className="font-display text-xl font-bold">
-              {builderTicketType} Â· {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
+              {builderTicketType} · {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
             </h3>
             <p className="mt-2 text-xs text-neutral-500">
-              Podesite tip za svaki mec, kvote i units za ceo tiket.
+              Podesite tip za svaki meč, kvote i units za ceo tiket.
             </p>
           </div>
           <button
@@ -931,7 +931,7 @@ export default function AdminDashboard() {
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">
-                    #{index + 1} Â· {item.match.date} / FT
+                    #{index + 1} · {item.match.date} / FT
                   </div>
                   <div className="truncate text-sm font-black text-neutral-100">
                     {item.match.homeTeam} - {item.match.awayTeam}
@@ -943,7 +943,7 @@ export default function AdminDashboard() {
                 <button
                   onClick={() => handleRemoveTicketItem(item.match.id)}
                   className="rounded-xl bg-white/5 p-2 text-neutral-400 transition-colors hover:text-red-400"
-                  aria-label="Ukloni mec iz tiketa"
+                  aria-label="Ukloni meč iz tiketa"
                 >
                   <MinusCircle size={17} />
                 </button>
@@ -1035,7 +1035,7 @@ export default function AdminDashboard() {
               className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm font-black uppercase tracking-widest text-neutral-200 outline-none focus:border-gold-500/50"
             >
               <option value={TicketStatus.PENDING}>PENDING / AKTIVAN</option>
-              <option value={TicketStatus.WON}>WON / PROSLO</option>
+              <option value={TicketStatus.WON}>WON / PROŠLO</option>
               <option value={TicketStatus.LOST}>LOST / PALO</option>
             </select>
           </label>
@@ -1045,7 +1045,7 @@ export default function AdminDashboard() {
               onClick={handlePublishTicket}
               className="rounded-2xl bg-gold-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black shadow-lg shadow-gold-500/20 transition-all hover:bg-gold-600"
             >
-              Sacuvaj tiket
+              Sačuvaj tiket
             </button>
             <button
               onClick={handleClearTicketCart}
@@ -1064,7 +1064,7 @@ export default function AdminDashboard() {
     { id: 'users', label: 'Korisnici', icon: <Users size={20} /> },
     { id: 'matches', label: 'Baza utakmica', icon: <Database size={20} /> },
     { id: 'tips', label: 'Tipovi', icon: <FileText size={20} /> },
-    { id: 'settings', label: 'PodeÅ¡avanja', icon: <Settings size={20} /> },
+    { id: 'settings', label: 'Podešavanja', icon: <Settings size={20} /> },
   ];
 
   const unreadNotifications = notifications.filter((notification) => !notification.read);
@@ -1209,7 +1209,7 @@ export default function AdminDashboard() {
                         { label: 'Ukupno Korisnika', value: userList.length, icon: <Users className="text-gold-500" /> },
                         { label: 'Aktivni VIP', value: userList.filter(u => u.membershipStatus === MembershipStatus.APPROVED).length, icon: <ShieldCheck className="text-gold-500" />, onClick: () => openUsersTab('approved') },
                         { label: 'Novi Zahtevi', value: userList.filter(u => u.membershipStatus === MembershipStatus.PENDING).length, icon: <Clock className="text-gold-500" />, highlight: true, onClick: () => openUsersTab('pending') },
-                        { label: 'MeseÄni ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
+                        { label: 'Mesečni ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
                       ].map((s, i) => (
                         <button
                           key={i}
@@ -1398,7 +1398,7 @@ export default function AdminDashboard() {
                                           <button onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.BLOCKED)} className="rounded-lg bg-red-500/10 px-2 py-1 text-[10px] font-black text-red-400 hover:bg-red-500/20">Blokiraj</button>
                                         )}
                                         <button onClick={() => handleDeleteUser(u.id)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-500 hover:text-red-400">
-                                          Obrisi
+                                          Obriši
                                         </button>
                                      </div>
                                   </td>
@@ -1437,7 +1437,7 @@ export default function AdminDashboard() {
                             disabled={availableMatches.length === 0}
                             className="flex items-center justify-center gap-2 px-5 py-3 bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-red-500/20 transition-all disabled:opacity-40"
                           >
-                            <Trash2 size={14} /> Obrisi bazu
+                            <Trash2 size={14} /> Obriši bazu
                           </button>
                         </div>
                      </div>
@@ -1519,7 +1519,7 @@ export default function AdminDashboard() {
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
                           <div>
-                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} Â· {resultTipMatch.league}</div>
+                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {resultTipMatch.league}</div>
                             <h3 className="text-xl font-bold">{resultTipMatch.homeTeam} - {resultTipMatch.awayTeam}</h3>
                             <p className="text-gold-500 font-display font-black mt-1">
                               {resultTipMatch.homeScore} - {resultTipMatch.awayScore}
@@ -1573,9 +1573,9 @@ export default function AdminDashboard() {
                             onChange={(e) => setResultTipForm({ ...resultTipForm, status: e.target.value as TicketStatus })}
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                           >
-                            <option value={TicketStatus.WON}>PROSLO</option>
+                            <option value={TicketStatus.WON}>PROŠLO</option>
                             <option value={TicketStatus.LOST}>PALO</option>
-                            <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+                            <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
                             <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                           </select>
                           <button
@@ -1603,7 +1603,7 @@ export default function AdminDashboard() {
                             onClick={() => handleCreateTipFromResult(false)}
                             className="w-full py-4 bg-white/5 text-neutral-200 font-black uppercase tracking-widest rounded-2xl hover:bg-white/10 transition-all"
                           >
-                            Sacuvaj kao DRAFT
+                            Sačuvaj kao DRAFT
                           </button>
                           <button
                             onClick={() => handleCreateTipFromResult(true)}
@@ -1620,7 +1620,7 @@ export default function AdminDashboard() {
                         <div key={match.id} className="glass p-5 rounded-[2rem] border-white/5">
                           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
                             <div>
-                              <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} Â· {match.league}</div>
+                              <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {match.league}</div>
                               <div className="font-bold text-neutral-100 text-lg">{match.homeTeam} - {match.awayTeam}</div>
                               <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-neutral-500">
                                 <span>Rezultat: <strong className="text-gold-500">{match.homeScore} - {match.awayScore}</strong></span>
@@ -1780,7 +1780,7 @@ export default function AdminDashboard() {
                           {availableMatches.slice(0, 80).map((match) => (
                             <div key={match.id} className="bg-white/5 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                               <div>
-                                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} Â· {match.league}</div>
+                                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {match.league}</div>
                                 <div className="font-bold text-neutral-200">{match.homeTeam} - {match.awayTeam}</div>
                               </div>
                               <div className="flex items-center gap-3">
@@ -1822,7 +1822,7 @@ export default function AdminDashboard() {
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
                           <div>
-                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} Â· {resultTipMatch.league}</div>
+                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {resultTipMatch.league}</div>
                             <h3 className="text-xl font-bold">{resultTipMatch.homeTeam} - {resultTipMatch.awayTeam}</h3>
                             <p className="text-gold-500 font-display font-black mt-1">
                               {resultTipMatch.homeScore} - {resultTipMatch.awayScore}
@@ -1888,7 +1888,7 @@ export default function AdminDashboard() {
                           onClick={() => handleCreateTipFromResult(false)}
                           className="w-full py-4 bg-gold-500 text-black font-black uppercase tracking-widest rounded-2xl hover:bg-gold-600 transition-all"
                         >
-                          Sacuvaj kao DRAFT
+                          Sačuvaj kao DRAFT
                         </button>
                       </div>
                     )}
@@ -1953,9 +1953,9 @@ export default function AdminDashboard() {
                                     className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 outline-none focus:border-gold-500/50 transition-all"
                                   >
                                     <option value={TicketStatus.PENDING}>Aktivan</option>
-                            <option value={TicketStatus.WON}>PROSLO</option>
+                            <option value={TicketStatus.WON}>PROŠLO</option>
                             <option value={TicketStatus.LOST}>PALO</option>
-                            <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+                            <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
                             <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                           </select>
                                   {tip.publicationStatus === TipPublicationStatus.PUBLISHED ? (
@@ -2006,7 +2006,7 @@ export default function AdminDashboard() {
                                     }}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl hover:text-red-500 transition-colors text-[10px] font-black uppercase tracking-widest"
                                   >
-                                     <X size={14} /> Obrisi
+                                     <X size={14} /> Obriši
                                   </button>
                                </div>
                             </div>
@@ -2033,7 +2033,7 @@ export default function AdminDashboard() {
                                             onClick={(event) => event.stopPropagation()}
                                             className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] font-bold text-neutral-400 outline-none focus:border-gold-500/50 transition-all max-w-[150px]"
                                           >
-                                            <option value="">PoveÅ¾i meÄ...</option>
+                                            <option value="">Poveži meč...</option>
                                             {availableMatches.filter(am => am.date === tip.date).map(am => (
                                               <option key={am.id} value={am.id}>{am.homeTeam} - {am.awayTeam}</option>
                                             ))}
@@ -2055,7 +2055,7 @@ export default function AdminDashboard() {
               )}
               {activeTab === 'settings' && (
                  <motion.div key="settings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                    <h2 className="text-3xl font-display font-bold mb-8">PodeÅ¡avanja sistema</h2>
+                    <h2 className="text-3xl font-display font-bold mb-8">Podešavanja sistema</h2>
                     
                      <div className="max-w-xl space-y-6">
                        <div className="glass p-8 rounded-[2rem] border-white/5">
@@ -2081,7 +2081,7 @@ export default function AdminDashboard() {
                               onClick={handleSaveSettings}
                               className="w-full py-3 bg-gold-500 text-black font-black uppercase tracking-widest rounded-2xl hover:bg-gold-600 transition-all"
                             >
-                              {settingsSaved ? 'Sacuvano' : 'Sacuvaj podesavanja'}
+                              {settingsSaved ? 'Sačuvano' : 'Sačuvaj podešavanja'}
                             </button>
                           </div>
                        </div>
@@ -2089,7 +2089,7 @@ export default function AdminDashboard() {
                        <div className="glass p-8 rounded-[2rem] border-red-500/20">
                           <h3 className="text-xl font-bold mb-4 text-red-500">Opasna zona</h3>
                           <p className="text-neutral-400 text-sm mb-6">
-                             Resetovanjem podataka Ä‡ete izgubiti sve nove korisnike i tipove koje ste dodali u lokalni storage.
+                             Resetovanjem podataka ćete izgubiti sve nove korisnike i tipove koje ste dodali u lokalni storage.
                           </p>
                           <button 
                             onClick={handleResetData}
@@ -2107,7 +2107,7 @@ export default function AdminDashboard() {
                                 <span className="font-bold">v2.5.0-manual-import</span>
                              </div>
                              <div className="flex justify-between py-2 border-b border-white/5">
-                                <span className="text-neutral-500">Storage ReÅ¾im</span>
+                                <span className="text-neutral-500">Storage Režim</span>
                                 <span className="font-bold text-gold-500">Local Browser</span>
                              </div>
                              <div className="flex justify-between py-2">

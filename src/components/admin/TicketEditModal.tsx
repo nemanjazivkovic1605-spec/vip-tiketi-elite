@@ -175,7 +175,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
   };
 
   const deleteTicket = async () => {
-    if (!confirm('Da li ste sigurni da zelite da obrisete ovaj tiket?')) return;
+    if (!confirm('Da li ste sigurni da želite da obrišete ovaj tiket?')) return;
 
     setSaving(true);
     try {
@@ -212,7 +212,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   <button
                     onClick={() => removeMatch(index)}
                     className="p-2 bg-white/5 rounded-xl text-neutral-500 hover:text-red-400 transition-colors"
-                    aria-label="Obrisi par iz tiketa"
+                    aria-label="Obriši par iz tiketa"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -265,9 +265,9 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                 <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Status tiketa</span>
                 <select value={draft.status} onChange={(event) => updateDraft({ status: event.target.value as TicketStatus })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50">
                   <option value={TicketStatus.PENDING}>AKTIVAN</option>
-                  <option value={TicketStatus.WON}>PROSLO</option>
+                  <option value={TicketStatus.WON}>PROŠLO</option>
                   <option value={TicketStatus.LOST}>PALO</option>
-                  <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
+                  <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
                   <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                 </select>
               </label>
@@ -328,7 +328,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
             <div className="bg-black/30 border border-white/10 rounded-[2rem] p-5">
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <button disabled={saving} onClick={() => saveTicket(draft.publicationStatus)} className="py-3 bg-white/10 text-neutral-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/15 transition-all disabled:opacity-50">
-                  Sacuvaj izmene
+                  Sačuvaj izmene
                 </button>
                 <button disabled={saving} onClick={() => saveTicket(TipPublicationStatus.PUBLISHED)} className="py-3 bg-gold-500 text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gold-600 transition-all disabled:opacity-50">
                   Objavi
@@ -337,7 +337,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   Sakrij
                 </button>
                 <button disabled={saving} onClick={deleteTicket} className="py-3 bg-red-500/10 text-red-300 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500/20 transition-all disabled:opacity-50">
-                  Obrisi tiket
+                  Obriši tiket
                 </button>
               </div>
               <div className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest">
