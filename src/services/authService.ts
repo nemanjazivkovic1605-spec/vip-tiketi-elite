@@ -13,15 +13,17 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
   type DocumentData,
   type Timestamp,
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { VIP_PACKAGES } from '../lib/demoData';
-import { MembershipStatus, type User, type VipPackage } from '../types';
+import { MembershipStatus, type AdminNotification, type User, type VipPackage } from '../types';
 
 export const SELECTED_PLAN_STORAGE_KEY = 'elite_selected_vip_plan';
 const TRUSTED_ADMIN_EMAILS = ['nemanjazivkovic1605@gmail.com'];
@@ -32,6 +34,8 @@ export type RegisterPayload = {
   displayName?: string;
   selectedPlan: string;
 };
+
+export type PlanId = 'free' | 'silver_7' | 'gold_30' | 'elite_90';
 
 export const getFirebaseErrorDetails = (error: unknown) => {
   if (error instanceof FirebaseError) {
@@ -114,16 +118,33 @@ const getExpiryDate = (durationDays: number, fromDate = new Date()) => {
   return expiresAt;
 };
 
+const getVipExpiresAt = (data: DocumentData) =>
+  toIsoString(data.vipExpiresAt) || toIsoString(data.vip_expires_at);
+
+const isMembershipValue = (value: unknown): value is MembershipStatus =>
+  typeof value === 'string' && Object.values(MembershipStatus).includes(value as MembershipStatus);
+
+const getMembershipStatus = (data: DocumentData, isAdmin: boolean, vipExpiresAt?: string) => {
+  const rawMembership = data.membershipStatus || (isMembershipValue(data.status) ? data.status : undefined) || MembershipStatus.FREE;
+
+  if (!isAdmin && rawMembership === MembershipStatus.APPROVED && !isFutureDate(vipExpiresAt)) {
+    return MembershipStatus.EXPIRED;
+  }
+
+  return rawMembership as MembershipStatus;
+};
+
 const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: string): User => {
   const email = normalizeEmail(data.email || firebaseUser?.email);
-  const vipExpiresAt = toIsoString(data.vip_expires_at);
+  const vipExpiresAt = getVipExpiresAt(data);
   const createdAt = toIsoString(data.createdAt) || new Date().toISOString();
   const role = data.role === 'admin' || isTrustedAdminEmail(email) ? 'admin' : 'user';
   const isAdmin = role === 'admin';
-  const rawStatus = data.status || data.membershipStatus || MembershipStatus.PENDING;
-  const computedStatus = !isAdmin && rawStatus === MembershipStatus.APPROVED && !isFutureDate(vipExpiresAt)
-    ? MembershipStatus.EXPIRED
-    : rawStatus;
+  const accountStatus = data.status === 'blocked' || data.accountStatus === 'blocked' ? 'blocked' : 'active';
+  const computedStatus = accountStatus === 'blocked'
+    ? MembershipStatus.BLOCKED
+    : getMembershipStatus(data, isAdmin, vipExpiresAt);
+  const vipAccess = isAdmin || (accountStatus === 'active' && computedStatus === MembershipStatus.APPROVED && isFutureDate(vipExpiresAt));
 
   return {
     id: uid,
@@ -132,15 +153,22 @@ const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: 
     displayName: data.displayName || firebaseUser?.displayName || email.split('@')[0],
     emailVerified: isAdmin || firebaseUser?.emailVerified === true || data.emailVerified === true,
     membershipStatus: computedStatus as MembershipStatus,
-    status: computedStatus,
+    status: accountStatus,
+    accountStatus,
     role,
     isAdmin,
     registeredAt: createdAt.split('T')[0],
-    selectedPlan: data.selectedPlan,
+    selectedPlan: data.selectedPlan || data.plan || 'free',
+    plan: data.plan || data.selectedPlan || 'free',
     planName: data.planName,
     planDurationDays: data.planDurationDays,
     membershipExpDate: vipExpiresAt?.split('T')[0],
+    vipAccess,
+    vipExpiresAt: vipExpiresAt || null,
     vip_expires_at: vipExpiresAt || null,
+    approvedAt: toIsoString(data.approvedAt) || null,
+    approvedBy: data.approvedBy || null,
+    adminNote: data.adminNote || '',
   };
 };
 
@@ -154,11 +182,18 @@ const createInitialUserDocument = async (firebaseUser: FirebaseUser, selectedPla
     email,
     displayName: firebaseUser.displayName || email.split('@')[0],
     selectedPlan: plan.id,
+    plan: isAdmin ? 'elite_90' : 'free',
     planName: plan.name,
     planDurationDays: plan.durationDays,
     role: isAdmin ? 'admin' : 'user',
-    status: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.PENDING,
+    status: 'active',
+    membershipStatus: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.FREE,
+    vipAccess: isAdmin,
+    vipExpiresAt: isAdmin ? getExpiryDate(3650) : null,
     vip_expires_at: isAdmin ? getExpiryDate(3650) : null,
+    approvedAt: isAdmin ? serverTimestamp() : null,
+    approvedBy: isAdmin ? email : null,
+    adminNote: '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -235,14 +270,31 @@ export const authService = {
       planName: plan.name,
       planDurationDays: plan.durationDays,
       role: isAdmin ? 'admin' : 'user',
-      status: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.PENDING,
+      status: 'active',
+      membershipStatus: isAdmin ? MembershipStatus.APPROVED : (plan.id === 'free' ? MembershipStatus.FREE : MembershipStatus.PENDING),
+      plan: isAdmin ? 'elite_90' : 'free',
+      vipAccess: isAdmin,
+      vipExpiresAt: isAdmin ? getExpiryDate(3650) : null,
       vip_expires_at: isAdmin ? getExpiryDate(3650) : null,
+      approvedAt: isAdmin ? serverTimestamp() : null,
+      approvedBy: isAdmin ? normalizedEmail : null,
+      adminNote: '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
 
     try {
-      await setDoc(doc(db, 'users', credential.user.uid), payload);
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', credential.user.uid), payload);
+      batch.set(doc(collection(db, 'adminNotifications')), {
+        type: 'new_user_registration',
+        userEmail: normalizedEmail,
+        username: payload.displayName,
+        selectedPlan: plan.id,
+        createdAt: serverTimestamp(),
+        read: false,
+      });
+      await batch.commit();
     } catch (error) {
       throw createDetailedError('Firestore users profil nije upisan', error);
     }
@@ -261,31 +313,138 @@ export const authService = {
       .sort((a, b) => (b.registeredAt || '').localeCompare(a.registeredAt || ''));
   },
 
-  approveUser: async (user: User) => {
-    const duration = user.planDurationDays || getPlanById(user.selectedPlan).durationDays;
+  activatePlan: async (user: User, planId: PlanId, adminEmail?: string | null) => {
+    const plan = getPlanById(planId);
     await updateDoc(doc(db, 'users', user.id), {
-      status: MembershipStatus.APPROVED,
-      vip_expires_at: getExpiryDate(duration),
+      membershipStatus: MembershipStatus.APPROVED,
+      plan: plan.id,
+      selectedPlan: plan.id,
+      planName: plan.name,
+      planDurationDays: plan.durationDays,
+      status: 'active',
+      vipAccess: true,
+      vipExpiresAt: getExpiryDate(plan.durationDays),
+      vip_expires_at: getExpiryDate(plan.durationDays),
+      approvedAt: serverTimestamp(),
+      approvedBy: adminEmail || auth.currentUser?.email || null,
       updatedAt: serverTimestamp(),
     });
+  },
+
+  approveUser: async (user: User, adminEmail?: string | null) => {
+    const planId = (user.selectedPlan && user.selectedPlan !== 'free' ? user.selectedPlan : 'gold_30') as PlanId;
+    await authService.activatePlan(user, planId, adminEmail);
   },
 
   rejectUser: async (userId: string) => {
     await updateDoc(doc(db, 'users', userId), {
-      status: MembershipStatus.BLOCKED,
+      membershipStatus: MembershipStatus.REMOVED,
+      plan: 'free',
+      selectedPlan: 'free',
+      vipAccess: false,
+      vipExpiresAt: null,
+      vip_expires_at: null,
       updatedAt: serverTimestamp(),
     });
   },
 
-  extendUser: async (user: User) => {
-    const duration = user.planDurationDays || getPlanById(user.selectedPlan).durationDays;
+  extendUser: async (user: User, days?: number) => {
+    const duration = days || user.planDurationDays || getPlanById(user.selectedPlan).durationDays || 7;
     const base = user.vip_expires_at && isFutureDate(user.vip_expires_at)
       ? new Date(user.vip_expires_at)
       : new Date();
 
     await updateDoc(doc(db, 'users', user.id), {
-      status: MembershipStatus.APPROVED,
+      membershipStatus: MembershipStatus.APPROVED,
+      status: 'active',
+      vipAccess: true,
+      vipExpiresAt: getExpiryDate(duration, base),
       vip_expires_at: getExpiryDate(duration, base),
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  removeVip: async (userId: string) => {
+    await updateDoc(doc(db, 'users', userId), {
+      membershipStatus: MembershipStatus.REMOVED,
+      plan: 'free',
+      selectedPlan: 'free',
+      vipAccess: false,
+      vipExpiresAt: null,
+      vip_expires_at: null,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  blockUser: async (userId: string) => {
+    await updateDoc(doc(db, 'users', userId), {
+      status: 'blocked',
+      membershipStatus: MembershipStatus.BLOCKED,
+      vipAccess: false,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  unblockUser: async (userId: string) => {
+    await updateDoc(doc(db, 'users', userId), {
+      status: 'active',
+      membershipStatus: MembershipStatus.FREE,
+      plan: 'free',
+      selectedPlan: 'free',
+      vipAccess: false,
+      vipExpiresAt: null,
+      vip_expires_at: null,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  updateAdminNote: async (userId: string, adminNote: string) => {
+    await updateDoc(doc(db, 'users', userId), {
+      adminNote,
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  getAdminNotifications: async (): Promise<AdminNotification[]> => {
+    const snapshot = await getDocs(collection(db, 'adminNotifications'));
+    return snapshot.docs
+      .map((notificationDoc) => {
+        const data = notificationDoc.data();
+        return {
+          id: notificationDoc.id,
+          type: data.type || 'new_user_registration',
+          userEmail: data.userEmail || '',
+          username: data.username || '',
+          selectedPlan: data.selectedPlan || 'free',
+          createdAt: toIsoString(data.createdAt) || new Date().toISOString(),
+          read: data.read === true,
+        } as AdminNotification;
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  subscribeAdminNotifications: (callback: (notifications: AdminNotification[]) => void) => {
+    return onSnapshot(collection(db, 'adminNotifications'), (snapshot) => {
+      callback(snapshot.docs
+        .map((notificationDoc) => {
+          const data = notificationDoc.data();
+          return {
+            id: notificationDoc.id,
+            type: data.type || 'new_user_registration',
+            userEmail: data.userEmail || '',
+            username: data.username || '',
+            selectedPlan: data.selectedPlan || 'free',
+            createdAt: toIsoString(data.createdAt) || new Date().toISOString(),
+            read: data.read === true,
+          } as AdminNotification;
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    });
+  },
+
+  markNotificationRead: async (notificationId: string) => {
+    await updateDoc(doc(db, 'adminNotifications', notificationId), {
+      read: true,
       updatedAt: serverTimestamp(),
     });
   },

@@ -111,7 +111,7 @@ export default function Home() {
             <p className="text-neutral-400">Naša strategija nije sreća, već čista analiza i disciplina.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
               {
                 title: 'Rane Informacije',

@@ -5,9 +5,12 @@ import { authService, type RegisterPayload } from '../services/authService';
 const hasActiveVip = (user: User | null) => {
   if (!user) return false;
   if (user.isAdmin) return true;
-  if (user.membershipStatus !== MembershipStatus.APPROVED || !user.vip_expires_at) return false;
+  if (user.accountStatus === 'blocked' || user.status === 'blocked') return false;
+  if (user.vipAccess !== true || user.membershipStatus !== MembershipStatus.APPROVED) return false;
+  const expiry = user.vipExpiresAt || user.vip_expires_at;
+  if (!expiry) return false;
 
-  return new Date(user.vip_expires_at).getTime() > Date.now();
+  return new Date(expiry).getTime() > Date.now();
 };
 
 export function useAuth() {

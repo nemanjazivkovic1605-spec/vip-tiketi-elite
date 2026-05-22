@@ -76,7 +76,7 @@ const getTicketVisuals = (status: TicketStatus) => {
 const formatUnits = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}u`;
 
 export default function Tickets() {
-  const { canAccessVip } = useAuth();
+  const { user, canAccessVip } = useAuth();
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | TicketStatus>('all');
@@ -107,20 +107,22 @@ export default function Tickets() {
 
   const renderTicketBody = (tip: Tip, compact = false) => {
     const visuals = getTicketVisuals(tip.status);
-    const locked = isTicketLockedForUser(tip, canAccessVip);
+    const locked = isTicketLockedForUser(tip, user, canAccessVip);
 
     if (locked) {
       return (
         <div className="py-8 flex flex-col items-center text-center">
           <AlertCircle className="text-gold-500 mb-4" size={32} />
-          <h4 className="font-bold mb-2">VIP tiket zakljucan</h4>
-          <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-6">Potreban aktivan VIP nalog</p>
+          <h4 className="font-bold mb-2">{user ? 'Tiket zakljucan' : 'Registracija je potrebna'}</h4>
+          <p className="text-[10px] text-neutral-500 uppercase tracking-widest mb-6">
+            {user ? 'Potreban aktivan VIP nalog' : 'Napravite nalog da vidite FREE tipove'}
+          </p>
           <Link
-            to="/#pricing"
+            to={user ? '/#pricing' : '/register?plan=free'}
             onClick={(event) => event.stopPropagation()}
             className="px-6 py-2 bg-gold-500 text-black text-[10px] font-black rounded-lg"
           >
-            NADOGRADI
+            {user ? 'NADOGRADI' : 'REGISTRUJ SE'}
           </Link>
         </div>
       );
@@ -232,7 +234,7 @@ export default function Tickets() {
             {filteredTips.map((tip) => {
               const visuals = getTicketVisuals(tip.status);
               const profit = calculateTicketUnitsProfit(tip);
-              const locked = isTicketLockedForUser(tip, canAccessVip);
+              const locked = isTicketLockedForUser(tip, user, canAccessVip);
 
               return (
                 <motion.div
@@ -289,7 +291,7 @@ export default function Tickets() {
                       <div className={`rounded-2xl border px-5 py-4 flex items-center justify-between gap-4 ${visuals.totalBox}`}>
                         <div className="flex flex-col">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</span>
-                          <span className={`text-3xl font-display font-black ${visuals.odds}`}>{tip.totalOdds.toFixed(2)}</span>
+                          <span className={`text-3xl font-display font-black ${visuals.odds}`}>{locked ? '-' : tip.totalOdds.toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col text-right">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</span>
@@ -375,7 +377,9 @@ export default function Tickets() {
                 <div className={`mt-6 rounded-2xl border px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 ${selectedVisuals.totalBox}`}>
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</div>
-                    <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>{selectedTip.totalOdds.toFixed(2)}</div>
+                    <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>
+                      {isTicketLockedForUser(selectedTip, user, canAccessVip) ? '-' : selectedTip.totalOdds.toFixed(2)}
+                    </div>
                   </div>
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</div>
@@ -386,7 +390,7 @@ export default function Tickets() {
                     <div className={`text-xl font-display font-bold ${
                       calculateTicketUnitsProfit(selectedTip) > 0 ? 'text-green-300' : calculateTicketUnitsProfit(selectedTip) < 0 ? 'text-red-300' : 'text-neutral-300'
                     }`}>
-                      {formatUnits(calculateTicketUnitsProfit(selectedTip))}
+                      {isTicketLockedForUser(selectedTip, user, canAccessVip) ? '-' : formatUnits(calculateTicketUnitsProfit(selectedTip))}
                     </div>
                   </div>
                   <div>

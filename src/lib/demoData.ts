@@ -21,6 +21,14 @@ export const getDemoStats = (): GlobalStats => ({
 
 export const VIP_PACKAGES: VipPackage[] = [
   {
+    id: 'free',
+    name: 'FREE',
+    price: 0,
+    durationDays: 0,
+    features: ['Besplatan nalog', 'FREE tiketi posle registracije', 'Zaključani VIP tipovi'],
+    isPopular: false
+  },
+  {
     id: 'silver_7',
     name: 'SILVER 7 DANA',
     price: 15,

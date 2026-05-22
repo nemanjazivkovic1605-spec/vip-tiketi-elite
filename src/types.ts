@@ -13,11 +13,15 @@ export enum TipPublicationStatus {
 }
 
 export enum MembershipStatus {
+  FREE = 'free',
   PENDING = 'pending',
   APPROVED = 'approved',
+  REMOVED = 'removed',
   BLOCKED = 'blocked',
   EXPIRED = 'expired'
 }
+
+export type AccountStatus = 'active' | 'blocked';
 
 export interface Match {
   id?: string;
@@ -121,11 +125,28 @@ export interface User {
   membershipExpDate?: string;
   displayName?: string;
   selectedPlan?: string;
+  plan?: string;
   planName?: string;
   planDurationDays?: number;
   role?: 'admin' | 'user';
   status?: MembershipStatus | string;
+  accountStatus?: AccountStatus;
+  vipAccess?: boolean;
+  vipExpiresAt?: string | null;
   vip_expires_at?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  adminNote?: string;
+}
+
+export interface AdminNotification {
+  id: string;
+  type: 'new_user_registration';
+  userEmail: string;
+  username: string;
+  selectedPlan: string;
+  createdAt: string;
+  read: boolean;
 }
 
 export interface GlobalStats {

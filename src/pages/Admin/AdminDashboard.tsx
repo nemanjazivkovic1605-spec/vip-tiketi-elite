@@ -3,14 +3,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { 
   BarChart3, Users, FileText, Settings, LogOut, ChevronRight, 
-  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle
+  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle, Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { mockTipsService } from '../../services/mockTips';
 import { mockSettingsService } from '../../services/mockSettings';
 import { importedMatchesService } from '../../services/importedMatchesService';
 import { authService } from '../../services/authService';
-import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User } from '../../types';
+import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User, AdminNotification } from '../../types';
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import { calculateTotalOdds, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
@@ -26,7 +26,7 @@ type TicketBuilderItem = {
 
 type TicketAccessType = 'FREE' | 'VIP';
 type BuilderTicketType = 'VIP Dubl' | 'VIP Combo';
-type UserStatusFilter = 'all' | 'pending' | 'approved';
+type UserStatusFilter = 'all' | 'pending' | 'approved' | 'expired' | 'blocked' | 'free' | 'silver' | 'gold' | 'elite';
 type TipPublicationFilter = 'all' | 'draft' | 'published';
 
 type HistoricalPick = {
@@ -73,6 +73,9 @@ export default function AdminDashboard() {
   // Fake state for lists
   const [userList, setUserList] = useState<User[]>([]);
   const [userStatusFilter, setUserStatusFilter] = useState<UserStatusFilter>('all');
+  const [userSearch, setUserSearch] = useState('');
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [tips, setTips] = useState<Tip[]>([]);
   const [tipPublicationFilter, setTipPublicationFilter] = useState<TipPublicationFilter>('all');
   const [availableMatches, setAvailableMatches] = useState<ImportedMatch[]>([]);
@@ -138,16 +141,31 @@ export default function AdminDashboard() {
   }, [tips]);
 
   const filteredUsers = useMemo(() => {
-    if (userStatusFilter === 'pending') {
-      return userList.filter((currentUser) => currentUser.membershipStatus === MembershipStatus.PENDING);
-    }
+    const search = userSearch.trim().toLowerCase();
 
-    if (userStatusFilter === 'approved') {
-      return userList.filter((currentUser) => currentUser.membershipStatus === MembershipStatus.APPROVED);
-    }
+    return userList.filter((currentUser) => {
+      const plan = (currentUser.plan || 'free').toLowerCase();
+      const selectedPlan = (currentUser.selectedPlan || plan).toLowerCase();
+      const membership = currentUser.membershipStatus;
+      const accountStatus = currentUser.accountStatus || currentUser.status;
+      const matchesSearch = !search
+        || currentUser.email.toLowerCase().includes(search)
+        || (currentUser.displayName || '').toLowerCase().includes(search);
 
-    return userList;
-  }, [userList, userStatusFilter]);
+      const matchesFilter =
+        userStatusFilter === 'all'
+        || (userStatusFilter === 'pending' && membership === MembershipStatus.PENDING)
+        || (userStatusFilter === 'approved' && membership === MembershipStatus.APPROVED)
+        || (userStatusFilter === 'expired' && membership === MembershipStatus.EXPIRED)
+        || (userStatusFilter === 'blocked' && (membership === MembershipStatus.BLOCKED || accountStatus === 'blocked'))
+        || (userStatusFilter === 'free' && plan === 'free' && selectedPlan === 'free')
+        || (userStatusFilter === 'silver' && (plan === 'silver_7' || selectedPlan === 'silver_7'))
+        || (userStatusFilter === 'gold' && (plan === 'gold_30' || selectedPlan === 'gold_30'))
+        || (userStatusFilter === 'elite' && (plan === 'elite_90' || selectedPlan === 'elite_90'));
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [userList, userSearch, userStatusFilter]);
 
   const filteredTips = useMemo(() => {
     if (tipPublicationFilter === 'draft') {
@@ -165,9 +183,11 @@ export default function AdminDashboard() {
     refreshData();
     const unsubscribeTips = mockTipsService.subscribe(refreshData);
     const unsubscribeMatches = importedMatchesService.subscribe(refreshData);
+    const unsubscribeNotifications = authService.subscribeAdminNotifications(setNotifications);
     return () => {
       unsubscribeTips();
       unsubscribeMatches();
+      unsubscribeNotifications();
     };
   }, []);
 
@@ -178,10 +198,12 @@ export default function AdminDashboard() {
       mockTipsService.getStats()
     ]);
     const fetchedUsers = await authService.getUsers();
+    const fetchedNotifications = await authService.getAdminNotifications();
     setTips(fetchedTips);
     setAvailableMatches(fetchedMatches);
     setStats(fetchedStats);
     setUserList(fetchedUsers);
+    setNotifications(fetchedNotifications);
   };
 
   const handleCreateTip = async (newTip: Tip) => {
@@ -554,16 +576,41 @@ export default function AdminDashboard() {
     if (!userToUpdate) return;
 
     if (status === MembershipStatus.APPROVED) {
-      await authService.approveUser(userToUpdate);
+      await authService.approveUser(userToUpdate, user?.email);
     } else if (status === MembershipStatus.BLOCKED) {
-      await authService.rejectUser(userToUpdate.id);
+      await authService.blockUser(userToUpdate.id);
     }
 
     await refreshData();
   };
 
-  const handleExtendUser = async (userToExtend: User) => {
-    await authService.extendUser(userToExtend);
+  const handleActivateUserPlan = async (userToActivate: User, planId: 'silver_7' | 'gold_30' | 'elite_90') => {
+    await authService.activatePlan(userToActivate, planId, user?.email);
+    await refreshData();
+  };
+
+  const handleExtendUser = async (userToExtend: User, days = userToExtend.planDurationDays || 7) => {
+    await authService.extendUser(userToExtend, days);
+    await refreshData();
+  };
+
+  const handleRemoveVip = async (userId: string) => {
+    await authService.removeVip(userId);
+    await refreshData();
+  };
+
+  const handleUnblockUser = async (userId: string) => {
+    await authService.unblockUser(userId);
+    await refreshData();
+  };
+
+  const handleUpdateAdminNote = async (userId: string, adminNote: string) => {
+    await authService.updateAdminNote(userId, adminNote);
+    await refreshData();
+  };
+
+  const handleMarkNotificationRead = async (notificationId: string) => {
+    await authService.markNotificationRead(notificationId);
     await refreshData();
   };
 
@@ -1020,6 +1067,8 @@ export default function AdminDashboard() {
     { id: 'settings', label: 'PodeÅ¡avanja', icon: <Settings size={20} /> },
   ];
 
+  const unreadNotifications = notifications.filter((notification) => !notification.read);
+
   return (
     <div className="min-h-screen bg-neutral-950 flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -1077,6 +1126,69 @@ export default function AdminDashboard() {
               {isMobileMenuOpen ? <X /> : <Menu />}
             </button>
             <div className="flex items-center gap-4 ml-auto">
+               <div className="relative">
+                 <button
+                   type="button"
+                   onClick={() => setShowNotifications((value) => !value)}
+                   className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-neutral-300 transition-all hover:border-gold-500/40 hover:text-gold-500"
+                   aria-label="Admin obavestenja"
+                 >
+                   <Bell size={18} />
+                   {unreadNotifications.length > 0 && (
+                     <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold-500 px-1 text-[10px] font-black text-black">
+                       {unreadNotifications.length}
+                     </span>
+                   )}
+                 </button>
+
+                 {showNotifications && (
+                   <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-3xl border border-white/10 bg-neutral-950 shadow-2xl">
+                     <div className="border-b border-white/10 p-4">
+                       <div className="text-sm font-black">Admin obavestenja</div>
+                       <div className="text-[10px] uppercase tracking-widest text-neutral-500">{unreadNotifications.length} neprocitanih</div>
+                     </div>
+                     <div className="max-h-96 overflow-y-auto p-3">
+                       {notifications.length === 0 ? (
+                         <div className="p-4 text-sm text-neutral-500">Nema novih obavestenja.</div>
+                       ) : notifications.slice(0, 8).map((notification) => (
+                         <div
+                           key={notification.id}
+                           className={`mb-2 w-full rounded-2xl border p-3 text-left transition-all hover:border-gold-500/40 ${notification.read ? 'border-white/5 bg-white/[0.02]' : 'border-gold-500/30 bg-gold-500/10'}`}
+                         >
+                           <button
+                             type="button"
+                             onClick={() => {
+                               setActiveTab('users');
+                               setUserStatusFilter('pending');
+                               setShowNotifications(false);
+                             }}
+                             className="block w-full text-left"
+                           >
+                             <div className="text-[10px] font-black uppercase tracking-widest text-gold-500">Nova registracija</div>
+                             <div className="mt-1 text-sm font-bold">{notification.username || notification.userEmail}</div>
+                             <div className="text-xs text-neutral-500">{notification.userEmail}</div>
+                           </button>
+                           <div className="mt-2 flex items-center justify-between gap-3">
+                             <span className="text-[10px] uppercase text-neutral-400">{notification.selectedPlan}</span>
+                             {!notification.read && (
+                               <button
+                                 type="button"
+                                 onClick={(event) => {
+                                   event.stopPropagation();
+                                   handleMarkNotificationRead(notification.id);
+                                 }}
+                                 className="text-[10px] font-black uppercase text-gold-500"
+                               >
+                                 Procitano
+                               </button>
+                             )}
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+               </div>
                <div className="text-right hidden sm:block">
                   <div className="text-sm font-bold">{user?.displayName}</div>
                   <div className="text-xs text-neutral-500">Glavni Adminov</div>
@@ -1184,6 +1296,12 @@ export default function AdminDashboard() {
                            { label: 'Svi', value: 'all' },
                            { label: 'Pending', value: 'pending' },
                            { label: 'Aktivni VIP', value: 'approved' },
+                           { label: 'Expired', value: 'expired' },
+                           { label: 'Blocked', value: 'blocked' },
+                           { label: 'Free', value: 'free' },
+                           { label: 'Silver', value: 'silver' },
+                           { label: 'Gold', value: 'gold' },
+                           { label: 'Elite', value: 'elite' },
                          ].map((filterOption) => (
                            <button
                              key={filterOption.value}
@@ -1201,16 +1319,27 @@ export default function AdminDashboard() {
                        </div>
                     </div>
 
-                    <div className="glass rounded-[2rem] overflow-hidden">
+                    <div className="glass mb-6 rounded-3xl border-white/5 p-4">
+                      <input
+                        value={userSearch}
+                        onChange={(event) => setUserSearch(event.target.value)}
+                        placeholder="Pretraga po emailu ili username..."
+                        className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm font-bold text-neutral-200 outline-none transition-all placeholder:text-neutral-600 focus:border-gold-500/50"
+                      />
+                    </div>
+
+                    <div className="glass rounded-[2rem] overflow-x-auto">
                        <table className="w-full text-left border-collapse">
                           <thead>
                              <tr className="bg-white/5 text-[10px] text-neutral-500 uppercase font-black tracking-widest">
                                 <th className="px-6 py-4">Korisnik</th>
-                                 <th className="px-6 py-4">Paket</th>
-                                <th className="px-6 py-4">ÄŒlanstvo</th>
-                                 <th className="px-6 py-4">Registrovan</th>
-                                 <th className="px-6 py-4">VIP do</th>
-                                 <th className="px-6 py-4">Akcije</th>
+                                <th className="px-6 py-4">Email</th>
+                                <th className="px-6 py-4">Paket</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4">Registrovan</th>
+                                <th className="px-6 py-4">VIP do</th>
+                                <th className="px-6 py-4">Admin beleska</th>
+                                <th className="px-6 py-4">Akcije</th>
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
@@ -1220,49 +1349,56 @@ export default function AdminDashboard() {
                                      <div className="font-bold">{u.displayName || 'N/A'}</div>
                                      <div className="text-xs text-neutral-500">{u.email}</div>
                                   </td>
+                                  <td className="px-6 py-4">
+                                     <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${u.emailVerified ? 'bg-green-500/10 text-green-400' : 'bg-neutral-500/10 text-neutral-400'}`}>
+                                       {u.emailVerified ? 'verifikovan' : 'nije verifikovan'}
+                                     </span>
+                                  </td>
                                   <td className="px-6 py-4 text-xs font-bold text-neutral-300">
-                                     <div>{u.planName || 'Bez paketa'}</div>
+                                     <div>{u.planName || u.plan || u.selectedPlan || 'FREE'}</div>
+                                     {u.selectedPlan && u.selectedPlan !== u.plan && (
+                                       <div className="text-[10px] text-blue-400">Zahtev: {u.selectedPlan}</div>
+                                     )}
                                      {u.planDurationDays && <div className="text-[10px] text-neutral-500">{u.planDurationDays} dana</div>}
                                   </td>
                                   <td className="px-6 py-4 uppercase text-xs font-black">
                                      <span className={
                                         u.membershipStatus === 'approved' ? 'text-gold-500' : 
-                                        u.membershipStatus === 'pending' ? 'text-blue-500' : 'text-neutral-500'
+                                        u.membershipStatus === 'pending' ? 'text-blue-500' :
+                                        u.membershipStatus === 'blocked' ? 'text-red-400' : 'text-neutral-500'
                                      }>{u.membershipStatus}</span>
+                                     <div className="mt-1 text-[10px] text-neutral-600">{u.accountStatus || u.status || 'active'}</div>
                                   </td>
                                   <td className="px-6 py-4 text-xs text-neutral-400">{u.registeredAt || '-'}</td>
                                   <td className="px-6 py-4 text-xs text-neutral-400">{u.membershipExpDate || '-'}</td>
+                                  <td className="px-6 py-4 min-w-[180px]">
+                                    <textarea
+                                      defaultValue={u.adminNote || ''}
+                                      onBlur={(event) => {
+                                        if (event.target.value !== (u.adminNote || '')) {
+                                          handleUpdateAdminNote(u.id, event.target.value);
+                                        }
+                                      }}
+                                      className="min-h-16 w-full rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-neutral-300 outline-none focus:border-gold-500/40"
+                                      placeholder="Beleska..."
+                                    />
+                                  </td>
                                   <td className="px-6 py-4">
-                                     <div className="flex items-center gap-2">
-                                        {u.membershipStatus !== MembershipStatus.APPROVED && (
-                                          <button
-                                            onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.APPROVED)}
-                                            className="text-green-500 text-xs font-bold hover:underline"
-                                          >
-                                            Odobri
-                                          </button>
+                                     <div className="flex min-w-[360px] flex-wrap items-center gap-2">
+                                        <button onClick={() => handleActivateUserPlan(u, 'silver_7')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Silver 7</button>
+                                        <button onClick={() => handleActivateUserPlan(u, 'gold_30')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Gold 30</button>
+                                        <button onClick={() => handleActivateUserPlan(u, 'elite_90')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Elite 90</button>
+                                        <button onClick={() => handleExtendUser(u, 7)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+7 dana</button>
+                                        <button onClick={() => handleExtendUser(u, 30)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+30 dana</button>
+                                        <button onClick={() => handleExtendUser(u, 90)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+90 dana</button>
+                                        <button onClick={() => handleRemoveVip(u.id)} className="rounded-lg bg-orange-500/10 px-2 py-1 text-[10px] font-black text-orange-300 hover:bg-orange-500/20">Izbaci iz VIP</button>
+                                        {u.accountStatus === 'blocked' || u.membershipStatus === MembershipStatus.BLOCKED ? (
+                                          <button onClick={() => handleUnblockUser(u.id)} className="rounded-lg bg-green-500/10 px-2 py-1 text-[10px] font-black text-green-400 hover:bg-green-500/20">Odblokiraj</button>
+                                        ) : (
+                                          <button onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.BLOCKED)} className="rounded-lg bg-red-500/10 px-2 py-1 text-[10px] font-black text-red-400 hover:bg-red-500/20">Blokiraj</button>
                                         )}
-                                        {u.membershipStatus === MembershipStatus.APPROVED && (
-                                          <button
-                                            onClick={() => handleExtendUser(u)}
-                                            className="text-gold-500 text-xs font-bold hover:underline"
-                                          >
-                                            ProduÅ¾i
-                                          </button>
-                                        )}
-                                        {u.membershipStatus !== MembershipStatus.BLOCKED && (
-                                          <button 
-                                            onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.BLOCKED)}
-                                            className="text-red-500 text-xs font-bold hover:underline"
-                                          >
-                                            Odbij
-                                          </button>
-                                        )}
-                                        <button 
-                                          onClick={() => handleDeleteUser(u.id)}
-                                          className="text-neutral-500 text-xs font-bold hover:underline ml-2"
-                                        >
-                                          ObriÅ¡i
+                                        <button onClick={() => handleDeleteUser(u.id)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-500 hover:text-red-400">
+                                          Obrisi
                                         </button>
                                      </div>
                                   </td>
@@ -1270,7 +1406,7 @@ export default function AdminDashboard() {
                               ))}
                               {filteredUsers.length === 0 && (
                                 <tr>
-                                  <td colSpan={6} className="px-6 py-10 text-center text-neutral-500 font-bold">
+                                  <td colSpan={8} className="px-6 py-10 text-center text-neutral-500 font-bold">
                                     Nema korisnika za izabrani filter.
                                   </td>
                                 </tr>

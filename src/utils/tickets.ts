@@ -1,4 +1,4 @@
-import { Tip, TicketStatus, Match } from '../types';
+import { Tip, TicketStatus, Match, User } from '../types';
 
 export const UNIT_VALUE_RSD = 1000;
 
@@ -84,5 +84,7 @@ export const calculateTicketUnitsProfit = (tip: Tip) => {
   return Number((-units).toFixed(2));
 };
 
-export const isTicketLockedForUser = (tip: Tip, canAccessVip: boolean) =>
-  tip.isVip && tip.status === TicketStatus.PENDING && !canAccessVip;
+export const isTicketLockedForUser = (tip: Tip, user: User | null, canAccessVip: boolean) => {
+  if (!user) return true;
+  return tip.isVip && !canAccessVip;
+};

@@ -47,8 +47,11 @@ service cloud.firestore {
         (
           incoming().uid == userId &&
           incoming().role == 'user' &&
-          incoming().status == 'pending' &&
-          incoming().vip_expires_at == null
+          incoming().status == 'active' &&
+          incoming().vipAccess == false &&
+          incoming().vipExpiresAt == null &&
+          incoming().vip_expires_at == null &&
+          incoming().membershipStatus in ['free', 'pending']
         )
       );
       allow update: if isAdmin() || (
@@ -58,13 +61,30 @@ service cloud.firestore {
           'email',
           'role',
           'status',
+          'accountStatus',
+          'membershipStatus',
+          'vipAccess',
+          'vipExpiresAt',
           'vip_expires_at',
           'selectedPlan',
+          'plan',
           'planName',
-          'planDurationDays'
+          'planDurationDays',
+          'approvedAt',
+          'approvedBy',
+          'adminNote'
         ])
       );
       allow delete: if isAdmin();
+    }
+
+    // Admin notifications
+    match /adminNotifications/{notificationId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isSignedIn() &&
+        incoming().type == 'new_user_registration' &&
+        incoming().userEmail == request.auth.token.email &&
+        incoming().read == false;
     }
 
     // Packages
