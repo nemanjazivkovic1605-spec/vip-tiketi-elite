@@ -46,6 +46,8 @@ const normalizeTip = (tip: Tip): Tip => {
   return {
     ...tip,
     id: tip.id || Math.random().toString(36).slice(2, 11),
+    ticketCode: tip.ticketCode || `T-${(tip.id || '').slice(0, 6).toUpperCase() || Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+    locked: Boolean(tip.locked),
     source: 'admin',
     publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
     status: tip.status || TicketStatus.PENDING,
@@ -98,9 +100,47 @@ const removeUndefined = <T>(value: T): T => {
 const sanitizePublicTip = (tip: Tip): Tip => {
   const normalized = normalizeTip(tip);
   const isVip = Boolean(normalized.isVip);
+  const isActive = normalized.status === TicketStatus.PENDING;
+
+  if (isActive) {
+    const lockedMatches = [{
+      id: `${normalized.id}-locked`,
+      teams: 'Meč zaključan',
+      homeTeam: '',
+      awayTeam: '',
+      league: '',
+      prediction: '',
+      odds: 1,
+      time: '',
+    }];
+
+    return {
+      ...normalized,
+      locked: true,
+      analysis: '',
+      result: '',
+      totalOdds: 1,
+      totalOddsOverride: false,
+      matches: lockedMatches.map((match, index) => ({
+        id: match.id || `${normalized.id}-locked-${index}`,
+        externalMatchId: '',
+        teams: 'Meč zaključan',
+        homeTeam: '',
+        awayTeam: '',
+        league: '',
+        prediction: '',
+        odds: 1,
+        time: '',
+        result: '',
+        status: normalized.status,
+        analysis: '',
+      })),
+    };
+  }
 
   return {
     ...normalized,
+    locked: false,
     analysis: '',
     matches: normalized.matches.map((match) => ({
       ...match,
@@ -137,12 +177,38 @@ const readPublishedFreeTips = async (): Promise<Tip[]> => {
   } as Tip)));
 };
 
+const readPublishedFullFreeTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(
+    getTicketsCollection(),
+    where('publicationStatus', '==', TipPublicationStatus.PUBLISHED),
+    where('isVip', '==', false),
+  ));
+  return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
+    ...ticketDoc.data(),
+    id: ticketDoc.id,
+  } as Tip)));
+};
+
+const readPublishedSafeVipTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(getPublicTicketsCollection(), where('isVip', '==', true)));
+  return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
+    ...ticketDoc.data(),
+    id: ticketDoc.id,
+  } as Tip)));
+};
+
 const readPublishedSafeTips = async (): Promise<Tip[]> => {
   const snapshot = await getDocs(query(getPublicTicketsCollection()));
   return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
     ...ticketDoc.data(),
     id: ticketDoc.id,
   } as Tip)));
+};
+
+const mergeTips = (...groups: Tip[][]) => {
+  const byId = new Map<string, Tip>();
+  groups.flat().forEach((tip) => byId.set(tip.id, tip));
+  return sortTips(Array.from(byId.values()));
 };
 
 const readPublishedTips = async (): Promise<Tip[]> => {
@@ -267,7 +333,15 @@ export const mockTipsService = {
   },
 
   getVisibleTips: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<Tip[]> => {
-    return access.canAccessVip ? readPublishedTips() : readPublishedSafeTips();
+    if (access.canAccessVip) return readPublishedTips();
+    if (access.canAccessFree) {
+      const [freeTips, vipSafeTips] = await Promise.all([
+        readPublishedFullFreeTips(),
+        readPublishedSafeVipTips(),
+      ]);
+      return mergeTips(freeTips, vipSafeTips);
+    }
+    return readPublishedSafeTips();
   },
 
   getPublishedTips: async (): Promise<Tip[]> => {
@@ -280,7 +354,7 @@ export const mockTipsService = {
   },
 
   getFreeTips: async (): Promise<Tip[]> => {
-    return readPublishedFreeTips();
+    return readPublishedFullFreeTips();
   },
 
   getStats: async (): Promise<GlobalStats> => {
@@ -364,6 +438,29 @@ export const mockTipsService = {
   },
 
   subscribe: (callback: () => void, access?: { canAccessFree: boolean; canAccessVip: boolean }): (() => void) => {
+    if (access?.canAccessFree && !access.canAccessVip) {
+      const unsubscribers = [
+        onSnapshot(
+          query(getTicketsCollection(), where('publicationStatus', '==', TipPublicationStatus.PUBLISHED), where('isVip', '==', false)),
+          () => callback(),
+          (error) => {
+            console.error('Free tickets subscription failed:', error);
+            callback();
+          }
+        ),
+        onSnapshot(
+          query(getPublicTicketsCollection(), where('isVip', '==', true)),
+          () => callback(),
+          (error) => {
+            console.error('Safe VIP tickets subscription failed:', error);
+            callback();
+          }
+        ),
+      ];
+
+      return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+    }
+
     const ticketsQuery = access
       ? access.canAccessVip
         ? query(getTicketsCollection(), where('publicationStatus', '==', TipPublicationStatus.PUBLISHED))

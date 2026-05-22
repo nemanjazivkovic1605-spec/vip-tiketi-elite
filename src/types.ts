@@ -101,6 +101,8 @@ export interface Tip {
   source?: 'admin' | 'demo';
   publicationStatus?: TipPublicationStatus;
   publishedAt?: string;
+  ticketCode?: string;
+  locked?: boolean;
   date: string;
   matches: Match[];
   totalOdds: number;

@@ -7,6 +7,21 @@ import { mockTipsService } from '../services/mockTips';
 import { MembershipStatus, TicketStatus, Tip, GlobalStats } from '../types';
 import { isPredictionLockedForUser } from '../utils/tickets';
 
+const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
+
+const formatPublishedAt = (tip: Tip) => {
+  const value = tip.publishedAt || tip.date;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return tip.date;
+  return date.toLocaleString('sr-Latn-RS', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export default function Dashboard() {
   const { user, isApproved, canAccessFree, canAccessVip } = useAuth();
   const [recentTips, setRecentTips] = useState<Tip[]>([]);
@@ -96,7 +111,7 @@ export default function Dashboard() {
                     <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${tip.isVip ? 'bg-gold-500 text-black' : 'bg-neutral-800 text-neutral-400'}`}>
                       {tip.isVip ? 'VIP' : 'FREE'}
                     </div>
-                    <span className="text-xs text-neutral-500 font-medium">{tip.date}</span>
+                    <span className="text-xs text-neutral-500 font-medium">{formatPublishedAt(tip)} · {tip.ticketCode || tip.id.slice(0, 8).toUpperCase()}</span>
                   </div>
                   <div className={`text-xs font-black uppercase tracking-widest ${
                     tip.status === TicketStatus.WON ? 'text-green-500' :
@@ -107,7 +122,15 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-4">
-                  {tip.matches.map((match, index) => {
+                  {isActiveLockedTicket(tip) ? (
+                    <div className="rounded-2xl border border-gold-500/20 bg-black/25 p-5 text-center">
+                      <Lock className="mx-auto mb-3 text-gold-500" size={24} />
+                      <div className="font-display text-lg font-black">Meč zaključan</div>
+                      <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-neutral-500">
+                        {tip.isVip ? 'VIP tip dostupan samo VIP članovima' : 'Registrujte se da biste videli FREE tip'}
+                      </p>
+                    </div>
+                  ) : tip.matches.map((match, index) => {
                     const locked = isPredictionLockedForUser(tip, user, canAccessFree, canAccessVip);
                     return (
                       <div key={match.id || index} className="flex flex-col gap-4 rounded-2xl border border-white/5 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between">

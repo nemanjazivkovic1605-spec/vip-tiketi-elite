@@ -76,6 +76,21 @@ const getTicketVisuals = (status: TicketStatus) => {
 
 const formatUnits = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}u`;
 
+const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
+
+const formatPublishedAt = (tip: Tip) => {
+  const value = tip.publishedAt || tip.date;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return tip.date;
+  return date.toLocaleString('sr-Latn-RS', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export default function Tickets() {
   const { user, isVerified, canAccessFree, canAccessVip } = useAuth();
   const [tips, setTips] = useState<Tip[]>([]);
@@ -185,6 +200,32 @@ export default function Tickets() {
 
   const renderTicketBody = (tip: Tip, compact = false) => {
     const visuals = getTicketVisuals(tip.status);
+
+    if (isActiveLockedTicket(tip)) {
+      return (
+        <div className={compact ? 'space-y-4' : 'p-6 space-y-5'}>
+          <div className="rounded-2xl border border-gold-500/20 bg-black/25 p-6 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-gold-500/30 bg-gold-500/10 text-gold-500">
+              <Lock size={24} />
+            </div>
+            <h3 className="font-display text-xl font-black text-neutral-100">Meč zaključan</h3>
+            <p className="mt-3 text-xs font-bold uppercase tracking-widest text-neutral-500">
+              {tip.isVip ? 'VIP tip dostupan samo VIP članovima' : 'Registrujte se da biste videli FREE tip'}
+            </p>
+            <div className="mt-5 grid gap-3 text-left text-xs sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-500">Ticket code</span>
+                <span className="font-display text-lg font-black text-gold-300">{tip.ticketCode || tip.id.slice(0, 8).toUpperCase()}</span>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-500">Objavljeno</span>
+                <span className="font-bold text-neutral-200">{formatPublishedAt(tip)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className={compact ? 'space-y-4' : 'p-6 space-y-5'}>
@@ -322,11 +363,11 @@ export default function Tickets() {
                             {visuals.label}
                           </div>
                           <div className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-black/30 text-gold-300 border-gold-500/20">
-                            {getTicketKind(tip.matches.length)}
+                            {isActiveLockedTicket(tip) ? 'TIP OBJAVLJEN' : getTicketKind(tip.matches.length)}
                           </div>
                         </div>
                         <span className="text-[10px] text-neutral-500 font-black uppercase tracking-[0.2em]">
-                          {tip.date} · {tip.matches.length} {tip.matches.length === 1 ? 'par' : 'parova'}
+                          {formatPublishedAt(tip)} · {tip.ticketCode || tip.id.slice(0, 8).toUpperCase()} · {isActiveLockedTicket(tip) ? 'Aktivan tip' : `${tip.matches.length} ${tip.matches.length === 1 ? 'par' : 'parova'}`}
                         </span>
                       </div>
 
@@ -343,7 +384,7 @@ export default function Tickets() {
                       <div className={`rounded-2xl border px-5 py-4 flex items-center justify-between gap-4 ${visuals.totalBox}`}>
                         <div className="flex flex-col">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</span>
-                          <span className={`text-3xl font-display font-black ${visuals.odds}`}>{tip.totalOdds.toFixed(2)}</span>
+                          <span className={`text-3xl font-display font-black ${visuals.odds}`}>{isActiveLockedTicket(tip) ? '—' : tip.totalOdds.toFixed(2)}</span>
                         </div>
                         <div className="flex flex-col text-right">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</span>
@@ -352,7 +393,7 @@ export default function Tickets() {
                         <div className="flex flex-col text-right">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">P/L</span>
                           <span className={`text-base font-display font-bold ${profit > 0 ? 'text-green-300' : profit < 0 ? 'text-red-300' : 'text-neutral-300'}`}>
-                            {formatUnits(profit)}
+                            {isActiveLockedTicket(tip) ? '—' : formatUnits(profit)}
                           </span>
                         </div>
                         <ChevronRight size={18} className="text-neutral-500" />
@@ -420,13 +461,13 @@ export default function Tickets() {
                     {selectedVisuals.label}
                   </span>
                   <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-black/30 text-gold-300 border-gold-500/20">
-                    {getTicketKind(selectedTip.matches.length)}
+                    {isActiveLockedTicket(selectedTip) ? 'TIP OBJAVLJEN' : getTicketKind(selectedTip.matches.length)}
                   </span>
                 </div>
 
                 <h2 className="text-3xl font-display font-black mb-2">Detalji tiketa</h2>
                 <p className="text-xs text-neutral-500 font-black uppercase tracking-[0.22em] mb-7">
-                  {selectedTip.date} · {selectedTip.matches.length} {selectedTip.matches.length === 1 ? 'par' : 'parova'}
+                  {formatPublishedAt(selectedTip)} · {selectedTip.ticketCode || selectedTip.id.slice(0, 8).toUpperCase()} · {isActiveLockedTicket(selectedTip) ? 'Aktivan tip' : `${selectedTip.matches.length} ${selectedTip.matches.length === 1 ? 'par' : 'parova'}`}
                 </p>
 
                 {renderTicketBody(selectedTip, true)}
@@ -434,7 +475,7 @@ export default function Tickets() {
                 <div className={`mt-6 rounded-2xl border px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 ${selectedVisuals.totalBox}`}>
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</div>
-                    <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>{selectedTip.totalOdds.toFixed(2)}</div>
+                    <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>{isActiveLockedTicket(selectedTip) ? '—' : selectedTip.totalOdds.toFixed(2)}</div>
                   </div>
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Units</div>
@@ -445,7 +486,7 @@ export default function Tickets() {
                     <div className={`text-xl font-display font-bold ${
                       calculateTicketUnitsProfit(selectedTip) > 0 ? 'text-green-300' : calculateTicketUnitsProfit(selectedTip) < 0 ? 'text-red-300' : 'text-neutral-300'
                     }`}>
-                      {formatUnits(calculateTicketUnitsProfit(selectedTip))}
+                      {isActiveLockedTicket(selectedTip) ? '—' : formatUnits(calculateTicketUnitsProfit(selectedTip))}
                     </div>
                   </div>
                   <div>

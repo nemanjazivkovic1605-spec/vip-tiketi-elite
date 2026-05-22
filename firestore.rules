@@ -71,7 +71,11 @@ service cloud.firestore {
 
     // Tickets
     match /tickets/{ticketId} {
-      allow read: if isAdmin() || hasVipAccess();
+      allow read: if isAdmin() || hasVipAccess() || (
+        hasVerifiedEmail() &&
+        resource.data.publicationStatus == 'PUBLISHED' &&
+        resource.data.isVip == false
+      );
       allow write: if isAdmin();
     }
 
