@@ -27,9 +27,16 @@ import {
 import { auth, db } from '../lib/firebase';
 import { VIP_PACKAGES } from '../lib/demoData';
 import { MembershipStatus, type AdminNotification, type User, type VipPackage } from '../types';
+import { sendWelcomeEmail } from './welcomeEmailService';
 
 export const SELECTED_PLAN_STORAGE_KEY = 'elite_selected_vip_plan';
 const TRUSTED_ADMIN_EMAILS = ['nemanjazivkovic1605@gmail.com'];
+const APP_BASE_URL = (import.meta.env.VITE_APP_URL || 'https://eliteviptips.com').replace(/\/+$/, '');
+
+const getEmailActionSettings = (continuePath: string) => ({
+  url: `${APP_BASE_URL}${continuePath}`,
+  handleCodeInApp: false,
+});
 
 export type RegisterPayload = {
   email: string;
@@ -49,7 +56,7 @@ export const getFirebaseErrorDetails = (error: unknown) => {
       'auth/user-not-found': 'Nalog sa ovom email adresom ne postoji. Prvo se registrujte.',
       'auth/wrong-password': 'Lozinka nije ispravna.',
       'auth/weak-password': 'Lozinka mora imati najmanje 6 karaktera.',
-      'auth/too-many-requests': 'Previse pokusaja. Sacekajte nekoliko minuta ili resetujte lozinku.',
+      'auth/too-many-requests': 'Previše pokušaja. Sačekajte nekoliko minuta ili resetujte lozinku.',
       'auth/operation-not-allowed': 'Email/Password provider nije uključen u Firebase Auth.',
       'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'Firebase API key nije validan.',
       'auth/invalid-api-key': 'Firebase API key nije validan.',
@@ -351,11 +358,19 @@ export const authService = {
 
     try {
       if (!isAdmin && !credential.user.emailVerified) {
-        await sendEmailVerification(credential.user);
+        await sendEmailVerification(credential.user, getEmailActionSettings('/login?verified=1'));
       }
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
     }
+
+    sendWelcomeEmail({
+      email: normalizedEmail,
+      name: payload.displayName,
+      planName: activePlan.name,
+    }).catch((error) => {
+      console.error('Welcome email failed:', getFirebaseErrorDetails(error));
+    });
 
     sessionStorage.removeItem(SELECTED_PLAN_STORAGE_KEY);
 
@@ -373,7 +388,7 @@ export const authService = {
       await reload(auth.currentUser);
       await auth.currentUser.getIdToken(true);
       if (!auth.currentUser.emailVerified) {
-        await sendEmailVerification(auth.currentUser);
+        await sendEmailVerification(auth.currentUser, getEmailActionSettings('/login?verified=1'));
       }
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
@@ -387,7 +402,7 @@ export const authService = {
 
   resetPassword: async (email: string) => {
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      await sendPasswordResetEmail(auth, email.trim(), getEmailActionSettings('/login?passwordReset=1'));
     } catch (error) {
       throw createDetailedError('Reset lozinke nije uspeo', error);
     }
