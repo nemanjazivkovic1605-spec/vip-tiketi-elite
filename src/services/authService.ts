@@ -88,6 +88,8 @@ export const isTrustedAdminEmail = (email?: string | null) =>
 export const getPlanById = (planId?: string | null): VipPackage =>
   VIP_PACKAGES.find((plan) => plan.id === planId) || VIP_PACKAGES[1];
 
+const ADMIN_PLAN_ID: PlanId = 'elite_90';
+
 export const saveSelectedPlan = (planId: string) => {
   sessionStorage.setItem(SELECTED_PLAN_STORAGE_KEY, planId);
 };
@@ -138,7 +140,7 @@ const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: 
   const email = normalizeEmail(data.email || firebaseUser?.email);
   const vipExpiresAt = getVipExpiresAt(data);
   const createdAt = toIsoString(data.createdAt) || new Date().toISOString();
-  const role = data.role === 'admin' || isTrustedAdminEmail(email) ? 'admin' : 'user';
+  const role = data.role === 'admin' || data.isAdmin === true || isTrustedAdminEmail(email) ? 'admin' : 'user';
   const isAdmin = role === 'admin';
   const accountStatus = data.status === 'blocked' || data.accountStatus === 'blocked' ? 'blocked' : 'active';
   const computedStatus = accountStatus === 'blocked'
@@ -175,17 +177,19 @@ const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: 
 const createInitialUserDocument = async (firebaseUser: FirebaseUser, selectedPlanId?: string) => {
   const email = normalizeEmail(firebaseUser.email);
   const isAdmin = isTrustedAdminEmail(email);
-  const plan = getPlanById(selectedPlanId);
+  const requestedPlan = getPlanById(selectedPlanId || 'free');
+  const activePlan = isAdmin ? getPlanById(ADMIN_PLAN_ID) : requestedPlan;
 
   const payload = {
     uid: firebaseUser.uid,
     email,
     displayName: firebaseUser.displayName || email.split('@')[0],
-    selectedPlan: plan.id,
-    plan: isAdmin ? 'elite_90' : 'free',
-    planName: plan.name,
-    planDurationDays: plan.durationDays,
+    selectedPlan: activePlan.id,
+    plan: isAdmin ? ADMIN_PLAN_ID : 'free',
+    planName: activePlan.name,
+    planDurationDays: activePlan.durationDays,
     role: isAdmin ? 'admin' : 'user',
+    isAdmin,
     status: 'active',
     membershipStatus: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.FREE,
     vipAccess: isAdmin,
@@ -201,6 +205,47 @@ const createInitialUserDocument = async (firebaseUser: FirebaseUser, selectedPla
   await setDoc(doc(db, 'users', firebaseUser.uid), payload, { merge: true });
 };
 
+const bootstrapAdminUserDocument = async (firebaseUser: FirebaseUser) => {
+  const email = normalizeEmail(firebaseUser.email);
+  if (!isTrustedAdminEmail(email)) return;
+
+  const adminPlan = getPlanById(ADMIN_PLAN_ID);
+  await setDoc(doc(db, 'users', firebaseUser.uid), {
+    uid: firebaseUser.uid,
+    email,
+    displayName: firebaseUser.displayName || email.split('@')[0],
+    selectedPlan: adminPlan.id,
+    plan: adminPlan.id,
+    planName: adminPlan.name,
+    planDurationDays: adminPlan.durationDays,
+    role: 'admin',
+    isAdmin: true,
+    status: 'active',
+    accountStatus: 'active',
+    membershipStatus: MembershipStatus.APPROVED,
+    vipAccess: true,
+    vipExpiresAt: getExpiryDate(3650),
+    vip_expires_at: getExpiryDate(3650),
+    approvedAt: serverTimestamp(),
+    approvedBy: email,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+};
+
+const ensureUserDocument = async (firebaseUser: FirebaseUser, selectedPlanId?: string): Promise<User> => {
+  const userRef = doc(db, 'users', firebaseUser.uid);
+  const snapshot = await getDoc(userRef);
+
+  if (!snapshot.exists()) {
+    await createInitialUserDocument(firebaseUser, selectedPlanId);
+  }
+
+  await bootstrapAdminUserDocument(firebaseUser);
+
+  const ensuredSnapshot = await getDoc(userRef);
+  return mapUserDoc(firebaseUser, ensuredSnapshot.data() || {}, firebaseUser.uid);
+};
+
 export const authService = {
   onUserChanged: (callback: (user: User | null) => void) => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
@@ -210,17 +255,7 @@ export const authService = {
       }
 
       try {
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const snapshot = await getDoc(userRef);
-
-        if (!snapshot.exists()) {
-          await createInitialUserDocument(firebaseUser);
-          const createdSnapshot = await getDoc(userRef);
-          callback(mapUserDoc(firebaseUser, createdSnapshot.data() || {}, firebaseUser.uid));
-          return;
-        }
-
-        callback(mapUserDoc(firebaseUser, snapshot.data(), firebaseUser.uid));
+        callback(await ensureUserDocument(firebaseUser));
       } catch (error) {
         console.error('Firebase user profile error:', error);
         callback(mapUserDoc(firebaseUser, {}, firebaseUser.uid));
@@ -230,20 +265,11 @@ export const authService = {
 
   login: async (email: string, password: string): Promise<User> => {
     const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-    const userRef = doc(db, 'users', credential.user.uid);
-    const snapshot = await getDoc(userRef);
-
-    if (!snapshot.exists()) {
-      await createInitialUserDocument(credential.user);
-      const createdSnapshot = await getDoc(userRef);
-      return mapUserDoc(credential.user, createdSnapshot.data() || {}, credential.user.uid);
-    }
-
-    return mapUserDoc(credential.user, snapshot.data(), credential.user.uid);
+    return ensureUserDocument(credential.user);
   },
 
   register: async ({ email, password, displayName, selectedPlan }: RegisterPayload): Promise<User> => {
-    const plan = getPlanById(selectedPlan);
+    const requestedPlan = getPlanById(selectedPlan);
     let credential;
 
     try {
@@ -262,17 +288,19 @@ export const authService = {
 
     const normalizedEmail = normalizeEmail(credential.user.email);
     const isAdmin = isTrustedAdminEmail(normalizedEmail);
+    const activePlan = isAdmin ? getPlanById(ADMIN_PLAN_ID) : requestedPlan;
     const payload = {
       uid: credential.user.uid,
       email: normalizedEmail,
       displayName: displayName?.trim() || normalizedEmail.split('@')[0],
-      selectedPlan: plan.id,
-      planName: plan.name,
-      planDurationDays: plan.durationDays,
+      selectedPlan: activePlan.id,
+      planName: activePlan.name,
+      planDurationDays: activePlan.durationDays,
       role: isAdmin ? 'admin' : 'user',
+      isAdmin,
       status: 'active',
-      membershipStatus: isAdmin ? MembershipStatus.APPROVED : (plan.id === 'free' ? MembershipStatus.FREE : MembershipStatus.PENDING),
-      plan: isAdmin ? 'elite_90' : 'free',
+      membershipStatus: isAdmin ? MembershipStatus.APPROVED : (activePlan.id === 'free' ? MembershipStatus.FREE : MembershipStatus.PENDING),
+      plan: isAdmin ? ADMIN_PLAN_ID : 'free',
       vipAccess: isAdmin,
       vipExpiresAt: isAdmin ? getExpiryDate(3650) : null,
       vip_expires_at: isAdmin ? getExpiryDate(3650) : null,
@@ -290,7 +318,7 @@ export const authService = {
         type: 'new_user_registration',
         userEmail: normalizedEmail,
         username: payload.displayName,
-        selectedPlan: plan.id,
+        selectedPlan: activePlan.id,
         createdAt: serverTimestamp(),
         read: false,
       });

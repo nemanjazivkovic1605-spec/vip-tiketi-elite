@@ -47,6 +47,7 @@ service cloud.firestore {
         (
           incoming().uid == userId &&
           incoming().role == 'user' &&
+          incoming().isAdmin == false &&
           incoming().status == 'active' &&
           incoming().vipAccess == false &&
           incoming().vipExpiresAt == null &&
@@ -60,6 +61,7 @@ service cloud.firestore {
           'uid',
           'email',
           'role',
+          'isAdmin',
           'status',
           'accountStatus',
           'membershipStatus',
