@@ -1,8 +1,28 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseOptions } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import firebaseConfig from '../../firebase-applet-config.json';
+import fallbackFirebaseConfig from '../../firebase-applet-config.json';
+
+type EliteFirebaseConfig = FirebaseOptions & {
+  firestoreDatabaseId?: string;
+};
+
+const getEnvValue = (key: keyof ImportMetaEnv) => {
+  const value = import.meta.env[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+};
+
+const firebaseConfig: EliteFirebaseConfig = {
+  apiKey: getEnvValue('VITE_FIREBASE_API_KEY') || fallbackFirebaseConfig.apiKey,
+  authDomain: getEnvValue('VITE_FIREBASE_AUTH_DOMAIN') || fallbackFirebaseConfig.authDomain,
+  projectId: getEnvValue('VITE_FIREBASE_PROJECT_ID') || fallbackFirebaseConfig.projectId,
+  appId: getEnvValue('VITE_FIREBASE_APP_ID') || fallbackFirebaseConfig.appId,
+  storageBucket: getEnvValue('VITE_FIREBASE_STORAGE_BUCKET') || fallbackFirebaseConfig.storageBucket,
+  messagingSenderId: getEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID') || fallbackFirebaseConfig.messagingSenderId,
+  measurementId: getEnvValue('VITE_FIREBASE_MEASUREMENT_ID') || fallbackFirebaseConfig.measurementId,
+  firestoreDatabaseId: getEnvValue('VITE_FIRESTORE_DATABASE_ID') || fallbackFirebaseConfig.firestoreDatabaseId,
+};
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);

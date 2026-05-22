@@ -6,6 +6,7 @@ import {
   updateProfile,
   type User as FirebaseUser,
 } from 'firebase/auth';
+import { FirebaseError } from 'firebase/app';
 import {
   collection,
   deleteDoc,
@@ -30,6 +31,49 @@ export type RegisterPayload = {
   password: string;
   displayName?: string;
   selectedPlan: string;
+};
+
+export const getFirebaseErrorDetails = (error: unknown) => {
+  if (error instanceof FirebaseError) {
+    const friendlyByCode: Record<string, string> = {
+      'auth/email-already-in-use': 'Email adresa je već registrovana.',
+      'auth/invalid-email': 'Email adresa nije validna.',
+      'auth/weak-password': 'Lozinka mora imati najmanje 6 karaktera.',
+      'auth/operation-not-allowed': 'Email/Password provider nije uključen u Firebase Auth.',
+      'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'Firebase API key nije validan.',
+      'auth/invalid-api-key': 'Firebase API key nije validan.',
+      'auth/network-request-failed': 'Mrežna greška pri povezivanju sa Firebase Auth.',
+      'auth/unauthorized-domain': 'Domen nije dodat u Firebase Auth Authorized domains.',
+      'permission-denied': 'Firestore pravila su odbila upis korisničkog profila.',
+    };
+
+    return {
+      code: error.code,
+      message: friendlyByCode[error.code] || error.message,
+      rawMessage: error.message,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      code: 'unknown',
+      message: error.message,
+      rawMessage: error.message,
+    };
+  }
+
+  return {
+    code: 'unknown',
+    message: String(error),
+    rawMessage: String(error),
+  };
+};
+
+const createDetailedError = (stage: string, error: unknown) => {
+  const details = getFirebaseErrorDetails(error);
+  const detailedError = new Error(`${stage}: ${details.message} (${details.code})`);
+  detailedError.name = details.code;
+  return detailedError;
 };
 
 const normalizeEmail = (email?: string | null) => (email || '').trim().toLowerCase();
@@ -165,10 +209,20 @@ export const authService = {
 
   register: async ({ email, password, displayName, selectedPlan }: RegisterPayload): Promise<User> => {
     const plan = getPlanById(selectedPlan);
-    const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    let credential;
 
-    if (displayName?.trim()) {
-      await updateProfile(credential.user, { displayName: displayName.trim() });
+    try {
+      credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    } catch (error) {
+      throw createDetailedError('Firebase Auth registracija nije uspela', error);
+    }
+
+    try {
+      if (displayName?.trim()) {
+        await updateProfile(credential.user, { displayName: displayName.trim() });
+      }
+    } catch (error) {
+      console.error('Firebase profile update error:', getFirebaseErrorDetails(error));
     }
 
     const normalizedEmail = normalizeEmail(credential.user.email);
@@ -187,7 +241,12 @@ export const authService = {
       updatedAt: serverTimestamp(),
     };
 
-    await setDoc(doc(db, 'users', credential.user.uid), payload);
+    try {
+      await setDoc(doc(db, 'users', credential.user.uid), payload);
+    } catch (error) {
+      throw createDetailedError('Firestore users profil nije upisan', error);
+    }
+
     sessionStorage.removeItem(SELECTED_PLAN_STORAGE_KEY);
 
     return mapUserDoc(credential.user, payload, credential.user.uid);

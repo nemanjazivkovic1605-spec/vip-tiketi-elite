@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { UserPlus, Mail, Lock, User, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
-import { getPlanById, getSavedSelectedPlan, saveSelectedPlan } from '../services/authService';
+import { getFirebaseErrorDetails, getPlanById, getSavedSelectedPlan, saveSelectedPlan } from '../services/authService';
 
 export default function Register() {
   const [searchParams] = useSearchParams();
@@ -45,8 +45,9 @@ export default function Register() {
       setConfirmPassword('');
       setDisplayName('');
     } catch (err) {
-      console.error('Registration error:', err);
-      setError('Greška prilikom registracije. Možda email već postoji ili Firebase nije dostupan.');
+      const details = getFirebaseErrorDetails(err);
+      console.error('Registration error:', details, err);
+      setError(`Greška prilikom registracije: ${details.message} Kod: ${details.code}`);
     } finally {
       setLoading(false);
     }
