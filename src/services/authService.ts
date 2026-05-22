@@ -1,6 +1,7 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -42,7 +43,11 @@ export const getFirebaseErrorDetails = (error: unknown) => {
     const friendlyByCode: Record<string, string> = {
       'auth/email-already-in-use': 'Email adresa je već registrovana.',
       'auth/invalid-email': 'Email adresa nije validna.',
+      'auth/invalid-credential': 'Neispravna email adresa ili lozinka. Ako nalog jos nije kreiran, prvo se registrujte.',
+      'auth/user-not-found': 'Nalog sa ovom email adresom ne postoji. Prvo se registrujte.',
+      'auth/wrong-password': 'Lozinka nije ispravna.',
       'auth/weak-password': 'Lozinka mora imati najmanje 6 karaktera.',
+      'auth/too-many-requests': 'Previse pokusaja. Sacekajte nekoliko minuta ili resetujte lozinku.',
       'auth/operation-not-allowed': 'Email/Password provider nije uključen u Firebase Auth.',
       'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'Firebase API key nije validan.',
       'auth/invalid-api-key': 'Firebase API key nije validan.',
@@ -333,6 +338,14 @@ export const authService = {
   },
 
   logout: () => signOut(auth),
+
+  resetPassword: async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (error) {
+      throw createDetailedError('Reset lozinke nije uspeo', error);
+    }
+  },
 
   getUsers: async (): Promise<User[]> => {
     const snapshot = await getDocs(collection(db, 'users'));

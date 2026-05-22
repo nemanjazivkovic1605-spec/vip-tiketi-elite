@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { LogIn, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { authService, getFirebaseErrorDetails } from '../services/authService';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,11 +11,14 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
@@ -25,9 +29,33 @@ export default function Login() {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError('Neispravna email adresa ili lozinka.');
+      const details = getFirebaseErrorDetails(err);
+      console.error('Firebase login error:', details);
+      setError(details.message || 'Neispravna email adresa ili lozinka.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setError('');
+    setSuccess('');
+
+    if (!email.trim()) {
+      setError('Unesite email adresu, pa kliknite na reset lozinke.');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await authService.resetPassword(email);
+      setSuccess('Email za reset lozinke je poslat. Proverite inbox i spam folder.');
+    } catch (err) {
+      const details = getFirebaseErrorDetails(err);
+      console.error('Firebase password reset error:', details);
+      setError(details.message || 'Reset lozinke nije uspeo.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -53,6 +81,12 @@ export default function Login() {
           </div>
         )}
 
+        {success && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 text-green-400 text-sm rounded-xl">
+            {success}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <label className="text-sm font-semibold text-neutral-400 pl-1">Email adresa</label>
@@ -72,7 +106,14 @@ export default function Login() {
           <div className="space-y-2">
             <div className="flex justify-between items-center pl-1">
               <label className="text-sm font-semibold text-neutral-400">Lozinka</label>
-              <Link to="#" className="text-xs text-gold-500 hover:underline">Zaboravljena lozinka?</Link>
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={resetLoading}
+                className="text-xs text-gold-500 hover:underline disabled:opacity-50"
+              >
+                {resetLoading ? 'Slanje...' : 'Zaboravljena lozinka?'}
+              </button>
             </div>
             <div className="relative group">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-600 group-focus-within:text-gold-500 transition-colors" size={20} />
