@@ -7,7 +7,7 @@ import { TrendingUp, Award, Calendar, ChevronRight, Zap, Target, ShieldCheck, Cl
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
-  const { user, isApproved, isVerified } = useAuth();
+  const { user, isApproved } = useAuth();
   const [recentTips, setRecentTips] = useState<Tip[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,7 @@ export default function Dashboard() {
           <div>
             <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Status Članarine</div>
             <div className={`text-sm font-bold ${isApproved ? 'text-gold-500' : 'text-neutral-400'}`}>
-              {isApproved ? 'AKTIVAN VIP' : 'NA ČEKANJU'}
+              {isApproved ? 'AKTIVAN VIP' : user?.membershipStatus === MembershipStatus.PENDING ? 'NA ČEKANJU' : 'ISTEKAO'}
             </div>
           </div>
         </div>
@@ -149,7 +149,9 @@ export default function Dashboard() {
                <Zap className="text-gold-500 mb-6" size={40} />
                <h3 className="text-2xl font-bold mb-4">Postani VIP Član</h3>
                <p className="text-neutral-400 text-sm leading-relaxed mb-8">
-                 Trenutno ste na besplatnom nalogu. VIP članovi dobijaju tipove sa preko 85% uspešnosti i rane informacije.
+                 {user?.membershipStatus === MembershipStatus.PENDING
+                   ? 'Vaš nalog čeka odobrenje administratora.'
+                   : 'Vaša VIP pretplata je istekla. Izaberite paket za obnovu.'}
                </p>
                <Link 
                  to="/#pricing" 

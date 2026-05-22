@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+﻿import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { 
@@ -6,12 +6,11 @@ import {
   Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { mockAuthService } from '../../services/mockAuth';
 import { mockTipsService } from '../../services/mockTips';
 import { mockSettingsService } from '../../services/mockSettings';
 import { importedMatchesService } from '../../services/importedMatchesService';
-import { DEMO_USERS } from '../../lib/demoData';
-import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus } from '../../types';
+import { authService } from '../../services/authService';
+import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User } from '../../types';
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import { calculateTotalOdds, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
@@ -72,7 +71,7 @@ export default function AdminDashboard() {
   const [editingTicket, setEditingTicket] = useState<Tip | null>(null);
   
   // Fake state for lists
-  const [userList, setUserList] = useState(DEMO_USERS);
+  const [userList, setUserList] = useState<User[]>([]);
   const [userStatusFilter, setUserStatusFilter] = useState<UserStatusFilter>('all');
   const [tips, setTips] = useState<Tip[]>([]);
   const [tipPublicationFilter, setTipPublicationFilter] = useState<TipPublicationFilter>('all');
@@ -178,7 +177,7 @@ export default function AdminDashboard() {
       importedMatchesService.getMatches(),
       mockTipsService.getStats()
     ]);
-    const fetchedUsers = mockAuthService.getUsers();
+    const fetchedUsers = await authService.getUsers();
     setTips(fetchedTips);
     setAvailableMatches(fetchedMatches);
     setStats(fetchedStats);
@@ -550,23 +549,35 @@ export default function AdminDashboard() {
     await refreshData();
   };
 
-  const handleUpdateUserStatus = (userId: string, status: MembershipStatus) => {
+  const handleUpdateUserStatus = async (userId: string, status: MembershipStatus) => {
     const userToUpdate = userList.find(u => u.id === userId);
-    if (userToUpdate) {
-      mockAuthService.updateUser({ ...userToUpdate, membershipStatus: status });
-      refreshData();
+    if (!userToUpdate) return;
+
+    if (status === MembershipStatus.APPROVED) {
+      await authService.approveUser(userToUpdate);
+    } else if (status === MembershipStatus.BLOCKED) {
+      await authService.rejectUser(userToUpdate.id);
     }
+
+    await refreshData();
   };
 
-  const handleDeleteUser = (userId: string) => {
-    if (confirm('Da li ste sigurni da želite da obrišete korisnika?')) {
-      mockAuthService.deleteUser(userId);
-      refreshData();
+  const handleExtendUser = async (userToExtend: User) => {
+    await authService.extendUser(userToExtend);
+    await refreshData();
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (confirm('Da li ste sigurni da Å¾elite da obriÅ¡ete korisnika?')) {
+      const userToDelete = userList.find(u => u.id === userId);
+      if (!userToDelete) return;
+      await authService.deleteUser(userToDelete);
+      await refreshData();
     }
   };
 
   const handleDeleteTip = async (tipId: string) => {
-    if (confirm('Da li ste sigurni da želite da obrišete ovaj tip?')) {
+    if (confirm('Da li ste sigurni da Å¾elite da obriÅ¡ete ovaj tip?')) {
       await mockTipsService.deleteTip(tipId);
       refreshData();
     }
@@ -588,10 +599,9 @@ export default function AdminDashboard() {
   };
 
   const handleResetData = async () => {
-    if (confirm('Ovo će vratiti sve podatke na fabrička podešavanja. Nastaviti?')) {
+    if (confirm('Ovo Ä‡e vratiti sve podatke na fabriÄka podeÅ¡avanja. Nastaviti?')) {
       await mockTipsService.resetTips();
       await importedMatchesService.clearMatches();
-      mockAuthService.resetUsers();
       mockSettingsService.resetSettings();
       setSettings(mockSettingsService.getSettings());
       refreshData();
@@ -699,7 +709,7 @@ export default function AdminDashboard() {
               Trenutni tiket
             </div>
             <h3 className="text-2xl font-display font-bold">
-              {getTicketKind(ticketCart.length)} · {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
+              {getTicketKind(ticketCart.length)} Â· {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
             </h3>
             <p className="text-xs text-neutral-500 mt-2">
               Podesite tip, kvotu i komentar za svaki mec, pa objavite tiket javno.
@@ -745,7 +755,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">
-                    #{index + 1} · {item.match.date} · {item.match.league}
+                    #{index + 1} Â· {item.match.date} Â· {item.match.league}
                   </div>
                   <div className="font-bold text-neutral-100">
                     {item.match.homeTeam} - {item.match.awayTeam}
@@ -853,7 +863,7 @@ export default function AdminDashboard() {
               Trenutni tiket
             </div>
             <h3 className="font-display text-xl font-bold">
-              {builderTicketType} · {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
+              {builderTicketType} Â· {ticketCart.length} {ticketCart.length === 1 ? 'par' : 'parova'}
             </h3>
             <p className="mt-2 text-xs text-neutral-500">
               Podesite tip za svaki mec, kvote i units za ceo tiket.
@@ -874,7 +884,7 @@ export default function AdminDashboard() {
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">
-                    #{index + 1} · {item.match.date} / FT
+                    #{index + 1} Â· {item.match.date} / FT
                   </div>
                   <div className="truncate text-sm font-black text-neutral-100">
                     {item.match.homeTeam} - {item.match.awayTeam}
@@ -1007,7 +1017,7 @@ export default function AdminDashboard() {
     { id: 'users', label: 'Korisnici', icon: <Users size={20} /> },
     { id: 'matches', label: 'Baza utakmica', icon: <Database size={20} /> },
     { id: 'tips', label: 'Tipovi', icon: <FileText size={20} /> },
-    { id: 'settings', label: 'Podešavanja', icon: <Settings size={20} /> },
+    { id: 'settings', label: 'PodeÅ¡avanja', icon: <Settings size={20} /> },
   ];
 
   return (
@@ -1087,7 +1097,7 @@ export default function AdminDashboard() {
                         { label: 'Ukupno Korisnika', value: userList.length, icon: <Users className="text-gold-500" /> },
                         { label: 'Aktivni VIP', value: userList.filter(u => u.membershipStatus === MembershipStatus.APPROVED).length, icon: <ShieldCheck className="text-gold-500" />, onClick: () => openUsersTab('approved') },
                         { label: 'Novi Zahtevi', value: userList.filter(u => u.membershipStatus === MembershipStatus.PENDING).length, icon: <Clock className="text-gold-500" />, highlight: true, onClick: () => openUsersTab('pending') },
-                        { label: 'Mesečni ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
+                        { label: 'MeseÄni ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
                       ].map((s, i) => (
                         <button
                           key={i}
@@ -1196,9 +1206,11 @@ export default function AdminDashboard() {
                           <thead>
                              <tr className="bg-white/5 text-[10px] text-neutral-500 uppercase font-black tracking-widest">
                                 <th className="px-6 py-4">Korisnik</th>
-                                <th className="px-6 py-4">Status Emaila</th>
-                                <th className="px-6 py-4">Članstvo</th>
-                                <th className="px-6 py-4">Akcije</th>
+                                 <th className="px-6 py-4">Paket</th>
+                                <th className="px-6 py-4">ÄŒlanstvo</th>
+                                 <th className="px-6 py-4">Registrovan</th>
+                                 <th className="px-6 py-4">VIP do</th>
+                                 <th className="px-6 py-4">Akcije</th>
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
@@ -1208,10 +1220,9 @@ export default function AdminDashboard() {
                                      <div className="font-bold">{u.displayName || 'N/A'}</div>
                                      <div className="text-xs text-neutral-500">{u.email}</div>
                                   </td>
-                                  <td className="px-6 py-4">
-                                     <span className={`px-2 py-1 rounded text-[10px] font-bold ${u.emailVerified ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                                        {u.emailVerified ? 'VERIFIKOVAN' : 'NEPOTVRĐEN'}
-                                     </span>
+                                  <td className="px-6 py-4 text-xs font-bold text-neutral-300">
+                                     <div>{u.planName || 'Bez paketa'}</div>
+                                     {u.planDurationDays && <div className="text-[10px] text-neutral-500">{u.planDurationDays} dana</div>}
                                   </td>
                                   <td className="px-6 py-4 uppercase text-xs font-black">
                                      <span className={
@@ -1219,14 +1230,24 @@ export default function AdminDashboard() {
                                         u.membershipStatus === 'pending' ? 'text-blue-500' : 'text-neutral-500'
                                      }>{u.membershipStatus}</span>
                                   </td>
+                                  <td className="px-6 py-4 text-xs text-neutral-400">{u.registeredAt || '-'}</td>
+                                  <td className="px-6 py-4 text-xs text-neutral-400">{u.membershipExpDate || '-'}</td>
                                   <td className="px-6 py-4">
                                      <div className="flex items-center gap-2">
                                         {u.membershipStatus !== MembershipStatus.APPROVED && (
-                                          <button 
+                                          <button
                                             onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.APPROVED)}
                                             className="text-green-500 text-xs font-bold hover:underline"
                                           >
                                             Odobri
+                                          </button>
+                                        )}
+                                        {u.membershipStatus === MembershipStatus.APPROVED && (
+                                          <button
+                                            onClick={() => handleExtendUser(u)}
+                                            className="text-gold-500 text-xs font-bold hover:underline"
+                                          >
+                                            ProduÅ¾i
                                           </button>
                                         )}
                                         {u.membershipStatus !== MembershipStatus.BLOCKED && (
@@ -1234,14 +1255,14 @@ export default function AdminDashboard() {
                                             onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.BLOCKED)}
                                             className="text-red-500 text-xs font-bold hover:underline"
                                           >
-                                            Blokiraj
+                                            Odbij
                                           </button>
                                         )}
                                         <button 
                                           onClick={() => handleDeleteUser(u.id)}
                                           className="text-neutral-500 text-xs font-bold hover:underline ml-2"
                                         >
-                                          Obriši
+                                          ObriÅ¡i
                                         </button>
                                      </div>
                                   </td>
@@ -1249,7 +1270,7 @@ export default function AdminDashboard() {
                               ))}
                               {filteredUsers.length === 0 && (
                                 <tr>
-                                  <td colSpan={4} className="px-6 py-10 text-center text-neutral-500 font-bold">
+                                  <td colSpan={6} className="px-6 py-10 text-center text-neutral-500 font-bold">
                                     Nema korisnika za izabrani filter.
                                   </td>
                                 </tr>
@@ -1362,7 +1383,7 @@ export default function AdminDashboard() {
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
                           <div>
-                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {resultTipMatch.league}</div>
+                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} Â· {resultTipMatch.league}</div>
                             <h3 className="text-xl font-bold">{resultTipMatch.homeTeam} - {resultTipMatch.awayTeam}</h3>
                             <p className="text-gold-500 font-display font-black mt-1">
                               {resultTipMatch.homeScore} - {resultTipMatch.awayScore}
@@ -1463,7 +1484,7 @@ export default function AdminDashboard() {
                         <div key={match.id} className="glass p-5 rounded-[2rem] border-white/5">
                           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
                             <div>
-                              <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {match.league}</div>
+                              <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} Â· {match.league}</div>
                               <div className="font-bold text-neutral-100 text-lg">{match.homeTeam} - {match.awayTeam}</div>
                               <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-neutral-500">
                                 <span>Rezultat: <strong className="text-gold-500">{match.homeScore} - {match.awayScore}</strong></span>
@@ -1623,7 +1644,7 @@ export default function AdminDashboard() {
                           {availableMatches.slice(0, 80).map((match) => (
                             <div key={match.id} className="bg-white/5 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                               <div>
-                                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {match.league}</div>
+                                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} Â· {match.league}</div>
                                 <div className="font-bold text-neutral-200">{match.homeTeam} - {match.awayTeam}</div>
                               </div>
                               <div className="flex items-center gap-3">
@@ -1665,7 +1686,7 @@ export default function AdminDashboard() {
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
                           <div>
-                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {resultTipMatch.league}</div>
+                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} Â· {resultTipMatch.league}</div>
                             <h3 className="text-xl font-bold">{resultTipMatch.homeTeam} - {resultTipMatch.awayTeam}</h3>
                             <p className="text-gold-500 font-display font-black mt-1">
                               {resultTipMatch.homeScore} - {resultTipMatch.awayScore}
@@ -1876,7 +1897,7 @@ export default function AdminDashboard() {
                                             onClick={(event) => event.stopPropagation()}
                                             className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] font-bold text-neutral-400 outline-none focus:border-gold-500/50 transition-all max-w-[150px]"
                                           >
-                                            <option value="">Poveži meč...</option>
+                                            <option value="">PoveÅ¾i meÄ...</option>
                                             {availableMatches.filter(am => am.date === tip.date).map(am => (
                                               <option key={am.id} value={am.id}>{am.homeTeam} - {am.awayTeam}</option>
                                             ))}
@@ -1898,7 +1919,7 @@ export default function AdminDashboard() {
               )}
               {activeTab === 'settings' && (
                  <motion.div key="settings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                    <h2 className="text-3xl font-display font-bold mb-8">Podešavanja sistema</h2>
+                    <h2 className="text-3xl font-display font-bold mb-8">PodeÅ¡avanja sistema</h2>
                     
                      <div className="max-w-xl space-y-6">
                        <div className="glass p-8 rounded-[2rem] border-white/5">
@@ -1932,7 +1953,7 @@ export default function AdminDashboard() {
                        <div className="glass p-8 rounded-[2rem] border-red-500/20">
                           <h3 className="text-xl font-bold mb-4 text-red-500">Opasna zona</h3>
                           <p className="text-neutral-400 text-sm mb-6">
-                             Resetovanjem podataka ćete izgubiti sve nove korisnike i tipove koje ste dodali u lokalni storage.
+                             Resetovanjem podataka Ä‡ete izgubiti sve nove korisnike i tipove koje ste dodali u lokalni storage.
                           </p>
                           <button 
                             onClick={handleResetData}
@@ -1950,7 +1971,7 @@ export default function AdminDashboard() {
                                 <span className="font-bold">v2.5.0-manual-import</span>
                              </div>
                              <div className="flex justify-between py-2 border-b border-white/5">
-                                <span className="text-neutral-500">Storage Režim</span>
+                                <span className="text-neutral-500">Storage ReÅ¾im</span>
                                 <span className="font-bold text-gold-500">Local Browser</span>
                              </div>
                              <div className="flex justify-between py-2">

@@ -1,44 +1,4 @@
-import { User, MembershipStatus, GlobalStats, VipPackage } from '../types';
-
-export const DEMO_USERS: User[] = [
-  {
-    id: 'u1',
-    email: 'admin@elitetips.com',
-    emailVerified: true,
-    membershipStatus: MembershipStatus.APPROVED,
-    isAdmin: true,
-    registeredAt: '2026-01-01',
-    displayName: 'Admin'
-  },
-  {
-    id: 'u2',
-    email: 'user@example.com',
-    emailVerified: true,
-    membershipStatus: MembershipStatus.APPROVED,
-    isAdmin: false,
-    registeredAt: '2026-02-15',
-    membershipExpDate: '2026-06-15',
-    displayName: 'Premium John'
-  },
-  {
-    id: 'u3',
-    email: 'pending@example.com',
-    emailVerified: true,
-    membershipStatus: MembershipStatus.PENDING,
-    isAdmin: false,
-    registeredAt: '2026-05-10',
-    displayName: 'Waitlist Will'
-  },
-  {
-    id: 'u4',
-    email: 'unverified@example.com',
-    emailVerified: false,
-    membershipStatus: MembershipStatus.PENDING,
-    isAdmin: false,
-    registeredAt: '2026-05-12',
-    displayName: 'Ghost Guest'
-  }
-];
+import { GlobalStats, VipPackage } from '../types';
 
 export const getDemoStats = (): GlobalStats => ({
   totalTips: 0,
@@ -61,7 +21,7 @@ export const getDemoStats = (): GlobalStats => ({
 
 export const VIP_PACKAGES: VipPackage[] = [
   {
-    id: 'p1',
+    id: 'silver_7',
     name: 'SILVER 7 DANA',
     price: 15,
     durationDays: 7,
@@ -69,7 +29,7 @@ export const VIP_PACKAGES: VipPackage[] = [
     isPopular: false
   },
   {
-    id: 'p2',
+    id: 'gold_30',
     name: 'GOLD 30 DANA',
     price: 40,
     durationDays: 30,
@@ -77,7 +37,7 @@ export const VIP_PACKAGES: VipPackage[] = [
     isPopular: true
   },
   {
-    id: 'p3',
+    id: 'elite_90',
     name: 'ELITE 90 DANA',
     price: 100,
     durationDays: 90,

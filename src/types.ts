@@ -112,6 +112,7 @@ export interface Tip {
 
 export interface User {
   id: string;
+  uid?: string;
   email: string;
   emailVerified: boolean;
   membershipStatus: MembershipStatus;
@@ -119,6 +120,12 @@ export interface User {
   registeredAt: string;
   membershipExpDate?: string;
   displayName?: string;
+  selectedPlan?: string;
+  planName?: string;
+  planDurationDays?: number;
+  role?: 'admin' | 'user';
+  status?: MembershipStatus | string;
+  vip_expires_at?: string | null;
 }
 
 export interface GlobalStats {

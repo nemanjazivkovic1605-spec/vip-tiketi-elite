@@ -8,9 +8,12 @@ service cloud.firestore {
     
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'nemanjazivkovic1605@gmail.com' &&
-        request.auth.token.email_verified == true
+        request.auth.token.email == 'nemanjazivkovic1605@gmail.com'
       );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isValidId(id) {
@@ -33,9 +36,35 @@ service cloud.firestore {
     // Tickets
     match /tickets/{ticketId} {
       allow read: if true;
-      // Static SPA currently uses app-level admin controls instead of Firebase Auth.
-      // Ticket data must be shared globally across browsers/devices.
-      allow write: if true;
+      allow write: if isAdmin();
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow create: if isOwner(userId) && (
+        isAdmin() ||
+        (
+          incoming().uid == userId &&
+          incoming().role == 'user' &&
+          incoming().status == 'pending' &&
+          incoming().vip_expires_at == null
+        )
+      );
+      allow update: if isAdmin() || (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'uid',
+          'email',
+          'role',
+          'status',
+          'vip_expires_at',
+          'selectedPlan',
+          'planName',
+          'planDurationDays'
+        ])
+      );
+      allow delete: if isAdmin();
     }
 
     // Packages

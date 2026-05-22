@@ -219,7 +219,7 @@ export default function Home() {
                 </div>
 
                 <Link
-                  to="/register"
+                  to={`/register?plan=${pkg.id}`}
                   className={`w-full py-4 rounded-2xl font-bold transition-all text-center ${pkg.isPopular ? 'bg-gold-500 hover:bg-gold-600 text-black ring-4 ring-gold-500/20' : 'bg-white/5 hover:bg-white/10'}`}
                 >
                   Izaberi paket

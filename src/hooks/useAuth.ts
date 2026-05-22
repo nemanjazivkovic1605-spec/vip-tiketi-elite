@@ -1,69 +1,69 @@
-import { useState, useEffect } from 'react';
-import { User, MembershipStatus } from '../types';
-import { AUTH_UPDATED_EVENT, mockAuthService } from '../services/mockAuth';
+import { useCallback, useEffect, useState } from 'react';
+import { MembershipStatus, type User } from '../types';
+import { authService, type RegisterPayload } from '../services/authService';
+
+const hasActiveVip = (user: User | null) => {
+  if (!user) return false;
+  if (user.isAdmin) return true;
+  if (user.membershipStatus !== MembershipStatus.APPROVED || !user.vip_expires_at) return false;
+
+  return new Date(user.vip_expires_at).getTime() > Date.now();
+};
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const syncCurrentUser = () => {
-      setUser(mockAuthService.getCurrentUser());
-    };
+    const unsubscribe = authService.onUserChanged((firebaseUser) => {
+      setUser(firebaseUser);
+      setLoading(false);
+    });
 
-    syncCurrentUser();
-    setLoading(false);
-
-    window.addEventListener(AUTH_UPDATED_EVENT, syncCurrentUser);
-    window.addEventListener('storage', syncCurrentUser);
-
-    return () => {
-      window.removeEventListener(AUTH_UPDATED_EVENT, syncCurrentUser);
-      window.removeEventListener('storage', syncCurrentUser);
-    };
+    return unsubscribe;
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
-      const loggedUser = await mockAuthService.login(email, password);
+      const loggedUser = await authService.login(email, password);
       setUser(loggedUser);
       return loggedUser;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const register = async (email: string, password: string) => {
+  const register = useCallback(async (payload: RegisterPayload) => {
     setLoading(true);
     try {
-      const newUser = await mockAuthService.register(email, password);
+      const newUser = await authService.register(payload);
       setUser(newUser);
       return newUser;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const logout = () => {
-    mockAuthService.logout();
+  const logout = useCallback(async () => {
+    await authService.logout();
     setUser(null);
-  };
+  }, []);
 
-  const isApproved = user?.membershipStatus === MembershipStatus.APPROVED;
+  const isApproved = hasActiveVip(user);
   const isVerified = user?.emailVerified === true;
-  const canAccessVip = user?.isAdmin || (isVerified && isApproved);
+  const canAccessVip = hasActiveVip(user);
   const isAdmin = user?.isAdmin === true;
 
-  return { 
-    user, 
-    loading, 
-    isAdmin, 
-    isApproved, 
-    isVerified, 
+  return {
+    user,
+    loading,
+    isAdmin,
+    isApproved,
+    isVerified,
     canAccessVip,
     login,
     register,
-    logout
+    logout,
   };
 }
