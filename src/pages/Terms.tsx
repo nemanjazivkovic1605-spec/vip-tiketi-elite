@@ -79,7 +79,7 @@ const termsSections: LegalSection[] = [
   {
     id: 'terms-13',
     title: 'Kontakt podrška',
-    body: 'Za sva pitanja korisnici mogu kontaktirati podršku putem kontakt forme ili email adrese: support@elitetips.com',
+    body: 'Za sva pitanja korisnici mogu kontaktirati podršku putem kontakt forme ili email adrese: support@eliteviptips.com',
   },
 ];
 

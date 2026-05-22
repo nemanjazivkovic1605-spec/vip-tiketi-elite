@@ -21,7 +21,7 @@ View your app in AI Studio: https://ai.studio/apps/baeb5e75-e490-4d35-a2a6-10aba
 
 ## Contact form EmailJS setup
 
-The public footer/contact email is `support@elitetips.com`, but contact form messages should be delivered to `nemanjazivkovic1605@gmail.com`.
+The public footer/contact email is `support@eliteviptips.com`, but contact form messages should be delivered to `nemanjazivkovic1605@gmail.com`.
 
 1. Create an EmailJS account at https://www.emailjs.com/.
 2. Add an email service connected to `nemanjazivkovic1605@gmail.com`.
@@ -45,7 +45,7 @@ The public footer/contact email is `support@elitetips.com`, but contact form mes
    - `VITE_EMAILJS_SERVICE_ID`
    - `VITE_EMAILJS_TEMPLATE_ID`
    - `VITE_EMAILJS_PUBLIC_KEY`
-   - `VITE_CONTACT_DISPLAY_EMAIL=support@elitetips.com`
+   - `VITE_CONTACT_DISPLAY_EMAIL=support@eliteviptips.com`
    - `VITE_CONTACT_TO_EMAIL=nemanjazivkovic1605@gmail.com`
 8. Add the same `VITE_...` variables in Vercel Project Settings -> Environment Variables.
 

@@ -13,7 +13,7 @@ const getEnvValue = (key: string) => {
 };
 
 export const CONTACT_DISPLAY_EMAIL =
-  getEnvValue('VITE_CONTACT_DISPLAY_EMAIL') || 'support@elitetips.com';
+  getEnvValue('VITE_CONTACT_DISPLAY_EMAIL') || 'support@eliteviptips.com';
 
 export const CONTACT_TO_EMAIL =
   getEnvValue('VITE_CONTACT_TO_EMAIL') || 'nemanjazivkovic1605@gmail.com';

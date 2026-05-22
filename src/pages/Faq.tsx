@@ -67,7 +67,7 @@ const faqItems: FaqItem[] = [
   },
   {
     question: 'Kako mogu kontaktirati podršku?',
-    answer: 'Putem kontakt forme na sajtu ili preko email podrške: support@elitetips.com',
+    answer: 'Putem kontakt forme na sajtu ili preko email podrške: support@eliteviptips.com',
   },
   {
     question: 'Zašto biste se pretplatili na ELITE VIP TIPS?',
@@ -249,11 +249,11 @@ export default function Faq() {
               </p>
             </div>
             <a
-              href="mailto:support@elitetips.com"
+              href="mailto:support@eliteviptips.com"
               className="inline-flex w-fit items-center gap-3 rounded-xl border border-gold-500/30 bg-black px-5 py-3 text-sm font-black uppercase tracking-widest text-gold-400 transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-lg hover:shadow-gold-500/20"
             >
               <Mail size={17} />
-              support@elitetips.com
+              support@eliteviptips.com
             </a>
           </div>
         </section>
