@@ -6,9 +6,11 @@ import { mockTipsService } from '../services/mockTips';
 import { footballApiService } from '../services/footballApiService';
 import { Tip, TicketStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
+import AdminTicketEditor from '../components/admin/AdminTicketEditor';
 import {
   calculateTicketUnitsProfit,
   canReadVipAnalysis,
+  formatTicketPublishedAt,
   getTicketKind,
   getTicketUnitsStake,
   isPredictionLockedForUser,
@@ -78,26 +80,16 @@ const formatUnits = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2
 
 const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
 
-const formatPublishedAt = (tip: Tip) => {
-  const value = tip.publishedAt || tip.date;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return tip.date;
-  return date.toLocaleString('sr-Latn-RS', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+const formatPublishedAt = formatTicketPublishedAt;
 
 export default function Tickets() {
-  const { user, isVerified, canAccessFree, canAccessVip } = useAuth();
+  const { user, isVerified, isAdmin, canAccessFree, canAccessVip } = useAuth();
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | TicketStatus>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'vip' | 'free'>('all');
   const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
+  const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
   const [accessMessage, setAccessMessage] = useState('');
   const isRealApiMode = footballApiService.isRealApiMode();
@@ -340,9 +332,21 @@ export default function Tickets() {
                   exit={{ opacity: 0, y: 12, scale: 0.97 }}
                   whileHover={{ y: -6 }}
                   transition={{ duration: 0.28, ease: 'easeOut' }}
-                  onClick={() => setSelectedTip(tip)}
+                  onClick={() => {
+                    if (isAdmin) {
+                      setEditingTip(tip);
+                      return;
+                    }
+                    setSelectedTip(tip);
+                  }}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') setSelectedTip(tip);
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      if (isAdmin) {
+                        setEditingTip(tip);
+                        return;
+                      }
+                      setSelectedTip(tip);
+                    }
                   }}
                   className={`relative overflow-hidden rounded-[2rem] border text-left transition-all duration-500 cursor-pointer ${visuals.card}`}
                 >
@@ -535,6 +539,14 @@ export default function Tickets() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {isAdmin && (
+        <AdminTicketEditor
+          tip={editingTip}
+          onClose={() => setEditingTip(null)}
+          onChanged={fetchData}
+        />
+      )}
     </div>
   );
 }

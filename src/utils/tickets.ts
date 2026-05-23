@@ -8,6 +8,67 @@ export const getTicketKind = (matchCount: number) => {
   return 'COMBO';
 };
 
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+export const normalizePublishedDate = (value?: string) => {
+  const raw = (value || '').trim();
+
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(raw)) {
+    const [day, month, year] = raw.split('.');
+    return `${year}-${month}-${day}`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    return raw.slice(0, 10);
+  }
+
+  return new Date().toISOString().split('T')[0];
+};
+
+export const normalizePublishedTime = (value?: string) => {
+  const raw = (value || '').trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  const minute = match ? Number(match[2]) : Math.floor(Math.random() * 60);
+
+  return `12:${pad2(Math.min(59, Math.max(0, Number.isFinite(minute) ? minute : 0)))}`;
+};
+
+export const generatePublishedTime = () => `12:${pad2(Math.floor(Math.random() * 60))}`;
+
+export const buildPublishedAt = (publishedDate: string, publishedTime: string) =>
+  `${normalizePublishedDate(publishedDate)}T${normalizePublishedTime(publishedTime)}:00`;
+
+export const generateTicketCode = (isVip: boolean, publishedDate: string, publishedTime: string) => {
+  const [year, month, day] = normalizePublishedDate(publishedDate).split('-');
+  const minute = normalizePublishedTime(publishedTime).slice(3, 5);
+  return `${isVip ? 'V' : 'F'}${day}${month}${year}12${minute}`;
+};
+
+export const getTicketPublicationMeta = (tip: Pick<Tip, 'date' | 'isVip' | 'publishedDate' | 'publishedTime'>) => {
+  const publishedDate = normalizePublishedDate(tip.publishedDate || tip.date);
+  const publishedTime = normalizePublishedTime(tip.publishedTime || generatePublishedTime());
+
+  return {
+    publishedDate,
+    publishedTime,
+    publishedAt: buildPublishedAt(publishedDate, publishedTime),
+    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime),
+  };
+};
+
+export const formatTicketPublishedAt = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date'>) => {
+  const value = tip.publishedAt || buildPublishedAt(tip.publishedDate || tip.date, tip.publishedTime || '12:00');
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return tip.date;
+  return date.toLocaleString('sr-Latn-RS', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export const getStatusLabel = (status: TicketStatus) => {
   if (status === TicketStatus.WON) return 'PROSLO';
   if (status === TicketStatus.LOST) return 'PALO';

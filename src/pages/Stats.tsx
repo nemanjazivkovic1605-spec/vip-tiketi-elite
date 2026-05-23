@@ -5,6 +5,7 @@ import { mockTipsService } from '../services/mockTips';
 import { GlobalStats, MonthlyStats, TicketStatus, Tip } from '../types';
 import { getTicketUnitsStake, isPredictionLockedForUser } from '../utils/tickets';
 import { useAuth } from '../hooks/useAuth';
+import AdminTicketEditor from '../components/admin/AdminTicketEditor';
 
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
@@ -27,25 +28,26 @@ const ticketRows = (tickets: Tip[]) =>
   );
 
 export default function Stats() {
-  const { user, canAccessFree, canAccessVip } = useAuth();
+  const { user, isAdmin, canAccessFree, canAccessVip } = useAuth();
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingTip, setEditingTip] = useState<Tip | null>(null);
+
+  const fetchData = async () => {
+    try {
+      const nextStats = await mockTipsService.getVisibleStats({ canAccessFree, canAccessVip });
+      setStats(nextStats);
+      setSelectedMonth((current) => {
+        if (!current) return nextStats.monthlyBreakdown[0] || null;
+        return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const nextStats = await mockTipsService.getVisibleStats({ canAccessFree, canAccessVip });
-        setStats(nextStats);
-        setSelectedMonth((current) => {
-          if (!current) return nextStats.monthlyBreakdown[0] || null;
-          return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
     return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
   }, [canAccessFree, canAccessVip]);
@@ -175,7 +177,8 @@ export default function Stats() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="hover:bg-white/[0.02] transition-colors"
+                        onClick={() => isAdmin && setEditingTip(row.ticket)}
+                        className={`hover:bg-white/[0.02] transition-colors ${isAdmin ? 'cursor-pointer' : ''}`}
                       >
                         <td className="py-4 pr-4 text-neutral-300 font-bold">{row.ticket.date}</td>
                         <td className="py-4 pr-4 text-neutral-400">{row.match.league || 'Fudbal'}</td>
@@ -207,6 +210,13 @@ export default function Stats() {
           )}
         </div>
       </div>
+      {isAdmin && (
+        <AdminTicketEditor
+          tip={editingTip}
+          onClose={() => setEditingTip(null)}
+          onChanged={fetchData}
+        />
+      )}
     </div>
   );
 }

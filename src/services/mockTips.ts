@@ -15,6 +15,7 @@ import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, MonthlyStats } fr
 import {
   calculateTicketUnitsProfit,
   calculateTotalOdds,
+  getTicketPublicationMeta,
   getTicketStake,
   getTicketUnitsStake,
   isFinishedForStats,
@@ -42,17 +43,31 @@ const normalizeTip = (tip: Tip): Tip => {
     }))
     : [];
   const totalOdds = calculateTotalOdds(matches);
+  const date = tip.date || new Date().toISOString().split('T')[0];
+  const publicationMeta = getTicketPublicationMeta({
+    date,
+    isVip: Boolean(tip.isVip),
+    publishedDate: tip.publishedDate,
+    publishedTime: tip.publishedTime,
+  });
+  const existingTicketCode = (tip.ticketCode || '').trim();
+  const ticketCode = existingTicketCode && !existingTicketCode.startsWith('T-')
+    ? existingTicketCode
+    : publicationMeta.ticketCode;
 
   return {
     ...tip,
     id: tip.id || Math.random().toString(36).slice(2, 11),
-    ticketCode: tip.ticketCode || `T-${(tip.id || '').slice(0, 6).toUpperCase() || Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+    publishedDate: publicationMeta.publishedDate,
+    publishedTime: publicationMeta.publishedTime,
+    publishedAt: publicationMeta.publishedAt,
+    ticketCode,
     locked: Boolean(tip.locked),
     source: 'admin',
     publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
     status: tip.status || TicketStatus.PENDING,
     isVip: Boolean(tip.isVip),
-    date: tip.date || new Date().toISOString().split('T')[0],
+    date,
     analysis: cleanAnalysis(tip.analysis),
     matches,
     totalOdds: tip.totalOddsOverride && Number.isFinite(tip.totalOdds) && tip.totalOdds > 0
@@ -160,6 +175,12 @@ const syncPublicTicket = async (tip: Tip) => {
 
   await setDoc(getPublicTicketDoc(normalized.id), removeUndefined(sanitizePublicTip(normalized)));
 };
+
+const needsTicketMetadataRepair = (original: Tip, normalized: Tip) =>
+  original.publishedDate !== normalized.publishedDate
+  || original.publishedTime !== normalized.publishedTime
+  || original.publishedAt !== normalized.publishedAt
+  || original.ticketCode !== normalized.ticketCode;
 
 const readAllTips = async (): Promise<Tip[]> => {
   const snapshot = await getDocs(query(getTicketsCollection()));
@@ -378,6 +399,20 @@ export const mockTipsService = {
     ]);
   },
 
+  syncTicketMetadata: async (tips?: Tip[]): Promise<void> => {
+    const sourceTips = tips || await readAllTips();
+    await Promise.all(sourceTips.map(async (tip) => {
+      const normalized = normalizeTip(tip);
+      if (!needsTicketMetadataRepair(tip, normalized)) return;
+      await setDoc(getTicketDoc(normalized.id), removeUndefined({
+        publishedDate: normalized.publishedDate,
+        publishedTime: normalized.publishedTime,
+        publishedAt: normalized.publishedAt,
+        ticketCode: normalized.ticketCode,
+      }), { merge: true });
+    }));
+  },
+
   resetTips: async (): Promise<void> => {
     const tips = await readAllTips();
     const publicTips = await getDocs(query(getPublicTicketsCollection()));
@@ -419,13 +454,15 @@ export const mockTipsService = {
   },
 
   publishTip: async (id: string): Promise<void> => {
-    await updateDoc(getTicketDoc(id), {
-      publicationStatus: TipPublicationStatus.PUBLISHED,
-      publishedAt: new Date().toISOString(),
-    });
     const snapshot = await getDoc(getTicketDoc(id));
     if (snapshot.exists()) {
-      await syncPublicTicket({ ...snapshot.data(), id: snapshot.id } as Tip);
+      const normalized = normalizeTip({
+        ...snapshot.data(),
+        id: snapshot.id,
+        publicationStatus: TipPublicationStatus.PUBLISHED,
+      } as Tip);
+      await setDoc(getTicketDoc(id), removeUndefined(normalized), { merge: true });
+      await syncPublicTicket(normalized);
     }
   },
 

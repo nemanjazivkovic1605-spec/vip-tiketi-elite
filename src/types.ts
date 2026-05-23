@@ -100,6 +100,8 @@ export interface Tip {
   id: string;
   source?: 'admin' | 'demo';
   publicationStatus?: TipPublicationStatus;
+  publishedDate?: string;
+  publishedTime?: string;
   publishedAt?: string;
   ticketCode?: string;
   locked?: boolean;

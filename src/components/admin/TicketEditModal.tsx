@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Plus, Trash2, X } from 'lucide-react';
 import { Match, TicketStatus, Tip, TipPublicationStatus } from '../../types';
-import { calculateTotalOdds, getDefaultUnitsStake, getTicketKind, getTicketUnitsStake, normalizeOdds, unitsToRsd } from '../../utils/tickets';
+import { calculateTotalOdds, generateTicketCode, getDefaultUnitsStake, getTicketKind, getTicketPublicationMeta, getTicketUnitsStake, normalizeOdds, normalizePublishedDate, normalizePublishedTime, unitsToRsd } from '../../utils/tickets';
 
 type TicketKind = 'SINGL' | 'DUBL' | 'COMBO';
 
@@ -46,12 +46,17 @@ const ensureKindMatchCount = (matches: Match[], kind: TicketKind) => {
 };
 
 export default function TicketEditModal({ tip, onClose, onSave, onDelete }: TicketEditModalProps) {
-  const [draft, setDraft] = useState<Tip>(() => ({
-    ...tip,
-    unitsStake: getTicketUnitsStake(tip),
-    stake: unitsToRsd(getTicketUnitsStake(tip)),
-    matches: tip.matches.length > 0 ? tip.matches.map((match) => ({ ...match })) : [emptyMatch()],
-  }));
+  const [draft, setDraft] = useState<Tip>(() => {
+    const meta = getTicketPublicationMeta(tip);
+    return {
+      ...tip,
+      ...meta,
+      ticketCode: tip.ticketCode || meta.ticketCode,
+      unitsStake: getTicketUnitsStake(tip),
+      stake: unitsToRsd(getTicketUnitsStake(tip)),
+      matches: tip.matches.length > 0 ? tip.matches.map((match) => ({ ...match })) : [emptyMatch()],
+    };
+  });
   const [selectedKind, setSelectedKind] = useState<TicketKind>(() => kindFromCount(tip.matches.length));
   const [totalOddsInput, setTotalOddsInput] = useState(String(tip.totalOdds || '1.00'));
   const [saving, setSaving] = useState(false);
@@ -59,8 +64,21 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
   const autoTotalOdds = useMemo(() => calculateTotalOdds(draft.matches), [draft.matches]);
   const displayedTotalOdds = draft.totalOddsOverride ? Number(totalOddsInput) || 1 : autoTotalOdds;
 
-  const updateDraft = (patch: Partial<Tip>) => {
-    setDraft((current) => ({ ...current, ...patch }));
+  const updateDraft = (patch: Partial<Tip>, regenerateCode = false) => {
+    setDraft((current) => {
+      const next = { ...current, ...patch };
+      if (!regenerateCode) return next;
+
+      const publishedDate = normalizePublishedDate(next.publishedDate || next.date);
+      const publishedTime = normalizePublishedTime(next.publishedTime);
+      return {
+        ...next,
+        publishedDate,
+        publishedTime,
+        publishedAt: `${publishedDate}T${publishedTime}:00`,
+        ticketCode: generateTicketCode(Boolean(next.isVip), publishedDate, publishedTime),
+      };
+    });
   };
 
   const updateMatch = (index: number, patch: Partial<Match>) => {
@@ -110,7 +128,9 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
         ? getDefaultUnitsStake(isVip, current.matches.length)
         : current.unitsStake;
 
-      return { ...current, isVip, unitsStake: nextUnits, stake: unitsToRsd(Number(nextUnits) || 0) };
+      const next = { ...current, isVip, unitsStake: nextUnits, stake: unitsToRsd(Number(nextUnits) || 0) };
+      const meta = getTicketPublicationMeta(next);
+      return { ...next, ...meta };
     });
   };
 
@@ -133,6 +153,9 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     const invalidMatch = matches.find((match) => !match.homeTeam || !match.awayTeam || !match.prediction);
     const unitsStake = Number(draft.unitsStake);
     const manualTotalOdds = Number(totalOddsInput);
+    const publishedDate = normalizePublishedDate(draft.publishedDate || draft.date);
+    const publishedTime = normalizePublishedTime(draft.publishedTime);
+    const publishedAt = `${publishedDate}T${publishedTime}:00`;
 
     if (invalidMatch || !Number.isFinite(unitsStake) || unitsStake < 1 || unitsStake > 10) {
       alert('Popunite domacina, gosta, tip igre i units od 1 do 10.');
@@ -149,9 +172,10 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
       source: 'admin',
       date: draft.date || new Date().toISOString().split('T')[0],
       publicationStatus,
-      publishedAt: publicationStatus === TipPublicationStatus.PUBLISHED
-        ? draft.publishedAt || new Date().toISOString()
-        : '',
+      publishedDate,
+      publishedTime,
+      publishedAt,
+      ticketCode: draft.ticketCode || generateTicketCode(Boolean(draft.isVip), publishedDate, publishedTime),
       matches,
       unitsStake: Number(unitsStake.toFixed(2)),
       stake: unitsToRsd(unitsStake),
@@ -258,7 +282,40 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
 
               <label className="block mb-4">
                 <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Datum</span>
-                <input type="date" value={draft.date} onChange={(event) => updateDraft({ date: event.target.value })} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                <input type="date" value={draft.date} onChange={(event) => updateDraft({ date: event.target.value, publishedDate: event.target.value }, true)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+              </label>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <label className="block">
+                  <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Datum objave</span>
+                  <input
+                    type="date"
+                    value={draft.publishedDate || draft.date}
+                    onChange={(event) => updateDraft({ publishedDate: event.target.value }, true)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Vreme objave</span>
+                  <input
+                    type="time"
+                    min="12:00"
+                    max="12:59"
+                    value={draft.publishedTime || '12:00'}
+                    onChange={(event) => updateDraft({ publishedTime: event.target.value }, true)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                  />
+                </label>
+              </div>
+
+              <label className="block mb-4">
+                <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Ticket code</span>
+                <input
+                  value={draft.ticketCode || ''}
+                  onChange={(event) => updateDraft({ ticketCode: event.target.value })}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-black tracking-widest text-gold-300 outline-none focus:border-gold-500/50"
+                  placeholder="F2205202612XX"
+                />
               </label>
 
               <label className="block mb-4">

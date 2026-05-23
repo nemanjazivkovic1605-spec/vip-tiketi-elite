@@ -199,6 +199,7 @@ export default function AdminDashboard() {
     ]);
     const fetchedUsers = await authService.getUsers();
     const fetchedNotifications = await authService.getAdminNotifications();
+    await mockTipsService.syncTicketMetadata(fetchedTips);
     await mockTipsService.syncPublicTickets(fetchedTips);
     setTips(fetchedTips);
     setAvailableMatches(fetchedMatches);

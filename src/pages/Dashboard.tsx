@@ -5,42 +5,34 @@ import { Award, ChevronRight, Clock, Lock, ShieldCheck, Target, TrendingUp, Zap 
 import { useAuth } from '../hooks/useAuth';
 import { mockTipsService } from '../services/mockTips';
 import { MembershipStatus, TicketStatus, Tip, GlobalStats } from '../types';
-import { isPredictionLockedForUser } from '../utils/tickets';
+import AdminTicketEditor from '../components/admin/AdminTicketEditor';
+import { formatTicketPublishedAt, isPredictionLockedForUser } from '../utils/tickets';
 
 const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
 
-const formatPublishedAt = (tip: Tip) => {
-  const value = tip.publishedAt || tip.date;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return tip.date;
-  return date.toLocaleString('sr-Latn-RS', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
+const formatPublishedAt = formatTicketPublishedAt;
 
 export default function Dashboard() {
-  const { user, isApproved, canAccessFree, canAccessVip } = useAuth();
+  const { user, isAdmin, isApproved, canAccessFree, canAccessVip } = useAuth();
   const [recentTips, setRecentTips] = useState<Tip[]>([]);
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingTip, setEditingTip] = useState<Tip | null>(null);
+
+  const fetchData = async () => {
+    try {
+      const [visibleTips, s] = await Promise.all([
+        mockTipsService.getVisibleTips({ canAccessFree, canAccessVip }),
+        mockTipsService.getVisibleStats({ canAccessFree, canAccessVip }),
+      ]);
+      setRecentTips(visibleTips.slice(0, 3));
+      setStats(s);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [visibleTips, s] = await Promise.all([
-          mockTipsService.getVisibleTips({ canAccessFree, canAccessVip }),
-          mockTipsService.getVisibleStats({ canAccessFree, canAccessVip }),
-        ]);
-        setRecentTips(visibleTips.slice(0, 3));
-        setStats(s);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
     return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
   }, [canAccessFree, canAccessVip]);
@@ -105,7 +97,11 @@ export default function Dashboard() {
 
           <div className="space-y-4">
             {recentTips.map((tip) => (
-              <div key={tip.id} className="glass p-6 rounded-[2rem] hover:border-gold-500/20 transition-all group">
+              <div
+                key={tip.id}
+                onClick={() => isAdmin && setEditingTip(tip)}
+                className={`glass p-6 rounded-[2rem] hover:border-gold-500/20 transition-all group ${isAdmin ? 'cursor-pointer' : ''}`}
+              >
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${tip.isVip ? 'bg-gold-500 text-black' : 'bg-neutral-800 text-neutral-400'}`}>
@@ -165,6 +161,7 @@ export default function Dashboard() {
 
                 <Link
                   to="/tickets"
+                  onClick={(event) => event.stopPropagation()}
                   className="mt-6 w-full py-3 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all group-hover:text-gold-500"
                 >
                   Otvori tiket <ChevronRight size={16} />
@@ -220,6 +217,13 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      {isAdmin && (
+        <AdminTicketEditor
+          tip={editingTip}
+          onClose={() => setEditingTip(null)}
+          onChanged={fetchData}
+        />
+      )}
     </div>
   );
 }
