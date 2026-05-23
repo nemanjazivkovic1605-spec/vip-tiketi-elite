@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -13,9 +14,9 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { DailyAnalysisItem } from '../types';
-import { apiFootballService } from './apiFootballService';
 
 const COLLECTION = 'dailyAnalyses';
+const inFlightPulls = new Map<string, AbortController>();
 
 const toIsoString = (value: unknown) => {
   if (!value) return undefined;
@@ -28,8 +29,12 @@ const toIsoString = (value: unknown) => {
 
 const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => ({
   id,
-  source: 'manual',
+  source: data.source === 'api-basketball' ? 'api-basketball' : data.source === 'api-football' ? 'api-football' : 'manual',
   sport: data.sport === 'basketball' ? 'basketball' : 'football',
+  status: ['ACTIVE', 'WON', 'LOST', 'HIDDEN'].includes(data.status) ? data.status : 'ACTIVE',
+  manualOverride: data.manualOverride === true,
+  topPick: data.topPick === true,
+  units: Number.isFinite(Number(data.units)) ? Number(data.units) : undefined,
   fixtureId: Number.isFinite(Number(data.fixtureId)) ? Number(data.fixtureId) : undefined,
   date: data.date || new Date().toISOString().split('T')[0],
   time: data.time || '20:00',
@@ -70,31 +75,44 @@ const readManual = async () => {
 };
 
 const publicManualForDate = (items: DailyAnalysisItem[], date: string) =>
-  items.filter((item) => item.date === date && item.enabled && !item.hidden);
+  sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && item.status === 'ACTIVE')).slice(0, 5);
 
-const mergeAnalyses = (manual: DailyAnalysisItem[], api: DailyAnalysisItem[]) => {
-  const blockedFixtureIds = new Set(
-    manual
-      .filter((item) => item.hidden && item.fixtureId)
-      .map((item) => item.fixtureId),
-  );
-  const manualPublic = manual.filter((item) => item.enabled && !item.hidden);
-  const manualFixtureIds = new Set(manualPublic.map((item) => item.fixtureId).filter(Boolean));
+const getStableAnalysisId = (analysis: DailyAnalysisItem) => {
+  if (analysis.id && !analysis.id.startsWith('manual-daily-')) return analysis.id;
+  if (analysis.fixtureId && analysis.source) return `${analysis.source}-${analysis.fixtureId}`;
+  return `manual-daily-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+};
 
-  return sortAnalyses([
-    ...manualPublic,
-    ...api.filter((item) => !blockedFixtureIds.has(item.fixtureId) && !manualFixtureIds.has(item.fixtureId)),
-  ]).slice(0, 5);
+const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
+  const id = getStableAnalysisId(analysis);
+  const ref = doc(db, COLLECTION, id);
+  const existingSnapshot = await getDoc(ref);
+
+  if (existingSnapshot.exists()) {
+    const existing = normalizeManual(existingSnapshot.data(), existingSnapshot.id);
+    if (existing.manualOverride) {
+      return { saved: false, skippedManualOverride: true };
+    }
+  }
+
+  await setDoc(ref, {
+    ...analysis,
+    id,
+    source: analysis.source,
+    manualOverride: false,
+    status: analysis.status || 'ACTIVE',
+    enabled: analysis.enabled !== false,
+    hidden: analysis.hidden === true,
+    updatedAt: serverTimestamp(),
+    createdAt: existingSnapshot.exists() ? existingSnapshot.data().createdAt : serverTimestamp(),
+  }, { merge: true });
+
+  return { saved: true, skippedManualOverride: false };
 };
 
 export const dailyAnalysesService = {
   getForDate: async (date: string): Promise<DailyAnalysisItem[]> => {
-    const [manual, api] = await Promise.all([
-      readManual().then((items) => publicManualForDate(items, date)).catch(() => []),
-      apiFootballService.fetchDailyAnalysesForDate(date),
-    ]);
-
-    return mergeAnalyses(manual, api);
+    return readManual().then((items) => publicManualForDate(items, date)).catch(() => []);
   },
 
   getAdminAnalyses: async (): Promise<DailyAnalysisItem[]> => {
@@ -106,8 +124,11 @@ export const dailyAnalysesService = {
     await setDoc(doc(db, COLLECTION, id), {
       ...analysis,
       id,
-      source: 'manual',
+      source: analysis.source || 'manual',
+      status: analysis.status || 'ACTIVE',
+      manualOverride: true,
       odds: Number(analysis.odds) || 1,
+      units: Number(analysis.units) || 3,
       sortOrder: Number(analysis.sortOrder) || 0,
       enabled: analysis.enabled !== false,
       hidden: analysis.hidden === true,
@@ -119,8 +140,36 @@ export const dailyAnalysesService = {
   updateManualAnalysis: async (id: string, patch: Partial<DailyAnalysisItem>): Promise<void> => {
     await updateDoc(doc(db, COLLECTION, id), {
       ...patch,
+      manualOverride: true,
       updatedAt: serverTimestamp(),
     });
+  },
+
+  pullFromApiForDate: async (date: string): Promise<{ saved: number; skippedManualOverride: number; fetched: number }> => {
+    const previous = inFlightPulls.get(date);
+    if (previous) previous.abort();
+
+    const controller = new AbortController();
+    inFlightPulls.set(date, controller);
+
+    try {
+      const { apiFootballService } = await import('./apiFootballService');
+      const analyses = await apiFootballService.fetchDailyAnalysesForDate(date, controller.signal);
+      let saved = 0;
+      let skippedManualOverride = 0;
+
+      for (const analysis of analyses) {
+        const result = await saveApiAnalysisIfAllowed(analysis);
+        if (result.saved) saved += 1;
+        if (result.skippedManualOverride) skippedManualOverride += 1;
+      }
+
+      return { saved, skippedManualOverride, fetched: analyses.length };
+    } finally {
+      if (inFlightPulls.get(date) === controller) {
+        inFlightPulls.delete(date);
+      }
+    }
   },
 
   deleteManualAnalysis: async (id: string): Promise<void> => {

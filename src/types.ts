@@ -219,11 +219,16 @@ export type DailyAnalysisAccess = 'FREE' | 'VIP';
 export type DailyAnalysisSource = 'api-football' | 'api-basketball' | 'manual';
 export type DailyAnalysisSport = 'football' | 'basketball';
 export type DailyAnalysisRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+export type DailyAnalysisStatus = 'ACTIVE' | 'WON' | 'LOST' | 'HIDDEN';
 
 export interface DailyAnalysisItem {
   id: string;
   source: DailyAnalysisSource;
   sport?: DailyAnalysisSport;
+  status?: DailyAnalysisStatus;
+  manualOverride?: boolean;
+  topPick?: boolean;
+  units?: number;
   fixtureId?: number;
   date: string;
   time: string;

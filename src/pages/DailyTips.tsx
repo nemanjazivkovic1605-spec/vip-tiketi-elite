@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, ShieldCheck, Sparkles, Star, TrendingUp } from 'lucide-react';
 import { DailyAnalysisItem } from '../types';
-import { getDailyAnalysisDates } from '../services/apiFootballService';
+import { getDailyAnalysisDates } from '../utils/dailyDates';
 import { dailyAnalysesService } from '../services/dailyAnalysesService';
 import { useAuth } from '../hooks/useAuth';
 
@@ -234,7 +234,7 @@ export default function DailyTips() {
             Dnevni <span className="gold-text">Tipovi</span>
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-400 md:text-base">
-            Kurirani izbor najboljih fudbalskih i košarkaških value pickova za Balkan VIP zajednicu.
+            Svakodnevno izdvajamo najbolje mečeve i najstabilnije tipove dana na osnovu statistike, forme i tržišta kvota.
           </p>
         </div>
 
@@ -272,7 +272,7 @@ export default function DailyTips() {
         ) : (
           <div className="rounded-[2rem] border border-white/10 bg-black/35 px-6 py-16 text-center">
             <TrendingUp className="mx-auto mb-4 text-gold-500" size={38} />
-            <h2 className="font-display text-xl font-black text-white md:text-2xl">Današnje analize se trenutno pripremaju.</h2>
+            <h2 className="font-display text-xl font-black text-white md:text-2xl">Trenutno nema dostupnih tipova za izabrani dan.</h2>
           </div>
         )}
       </section>

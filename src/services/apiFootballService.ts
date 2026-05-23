@@ -23,18 +23,6 @@ type ApiFixture = {
   };
 };
 
-type ApiPrediction = {
-  comparison?: {
-    form?: {
-      home?: string;
-      away?: string;
-    };
-  };
-  predictions?: {
-    advice?: string;
-  };
-};
-
 type BasketballGame = {
   id: number;
   date: string;
@@ -73,31 +61,11 @@ const getApiKey = (sport: DailyAnalysisSport) => {
   return import.meta.env.VITE_FOOTBALL_API_KEY?.trim();
 };
 
-const formatIsoDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-export const getDailyAnalysisDates = () => {
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  const dayAfterTomorrow = new Date(today);
-  dayAfterTomorrow.setDate(today.getDate() + 2);
-
-  return [
-    { key: 'today', label: 'Danas', date: formatIsoDate(today) },
-    { key: 'tomorrow', label: 'Sutra', date: formatIsoDate(tomorrow) },
-    { key: 'dayAfterTomorrow', label: 'Prekosutra', date: formatIsoDate(dayAfterTomorrow) },
-  ] as const;
-};
-
 const requestSportsApi = async <T>(
   sport: DailyAnalysisSport,
   path: string,
   params: Record<string, string | number>,
+  signal?: AbortSignal,
 ) => {
   const apiKey = getApiKey(sport);
   if (!apiKey) return null;
@@ -110,6 +78,7 @@ const requestSportsApi = async <T>(
     headers: {
       'x-apisports-key': apiKey,
     },
+    signal,
   });
 
   if (!response.ok) {
@@ -118,12 +87,6 @@ const requestSportsApi = async <T>(
 
   const payload = await response.json() as { response?: T; errors?: unknown };
   return payload.response || null;
-};
-
-const parsePercent = (value?: string) => {
-  if (!value) return null;
-  const parsed = Number(value.replace('%', '').trim());
-  return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : null;
 };
 
 const stableNumber = (seed: string, min: number, max: number) => {
@@ -274,26 +237,25 @@ const generateFootballPick = (
   awayForm: number | null,
   seed: string,
   access: DailyAnalysisAccess,
-  advice?: string,
 ) => {
-  const normalizedAdvice = (advice || '').toLowerCase();
   const hasData = homeForm !== null && awayForm !== null;
   const averageTotal = hasData ? 'Golovi: stabilan napadacki ritam' : 'Golovi: nedovoljno podataka';
   const h2hNote = hasData ? 'H2H: bez ekstremnog odstupanja' : 'H2H: nedovoljno podataka';
+  const variant = stableIndex(seed, 7);
 
-  if (normalizedAdvice.includes('both team') || normalizedAdvice.includes('btts')) {
+  if (variant === 0) {
     const odds = stableNumber(`${seed}-gg`, 1.65, 1.95);
     return buildPick('GG', odds, 72, 78, pickTemplate(seed, footballGgTemplates), averageTotal, h2hNote, access);
   }
 
-  if (normalizedAdvice.includes('over 2.5') || normalizedAdvice.includes('over 3.5')) {
+  if (variant === 1) {
     const odds = stableNumber(`${seed}-over25`, 1.72, 2.10);
     return buildPick('Over 2.5', odds, 68, 73, pickTemplate(seed, footballOver25Templates), averageTotal, h2hNote, access);
   }
 
-  if (normalizedAdvice.includes('over 1.5') || normalizedAdvice.includes('goals')) {
+  if (variant === 2 || !hasData) {
     const odds = stableNumber(`${seed}-over15`, 1.30, 1.55);
-    return buildPick('Over 1.5', odds, 79, 84, pickTemplate(seed, footballOver15Templates), averageTotal, h2hNote, access);
+    return buildPick('Over 1.5', hasData ? odds : 0, hasData ? 79 : 58, hasData ? 84 : 58, pickTemplate(seed, hasData ? footballOver15Templates : lowDataTemplates), averageTotal, h2hNote, access);
   }
 
   if (hasData) {
@@ -355,28 +317,22 @@ const generateBasketballPick = (seed: string, leagueName: string, access: DailyA
   return buildPick('Handicap favorit', 0, 66 + Math.min(8, leagueBoost / 3), 63 + leagueBoost, pickTemplate(seed, basketballSpreadTemplates), averageTotal, h2hNote, access);
 };
 
-const fetchFootballPrediction = async (fixtureId: number) => {
-  try {
-    const response = await requestSportsApi<ApiPrediction[]>('football', '/predictions', { fixture: fixtureId });
-    return response?.[0] || null;
-  } catch {
-    return null;
-  }
-};
-
 const mapFootballFixture = async (fixture: ApiFixture, sortOrder: number): Promise<RankedAnalysis> => {
   const seed = `football-${fixture.fixture.id}-${fixture.teams.home.name}-${fixture.teams.away.name}`;
-  const predictionData = await fetchFootballPrediction(fixture.fixture.id);
-  const homeFormPercent = parsePercent(predictionData?.comparison?.form?.home);
-  const awayFormPercent = parsePercent(predictionData?.comparison?.form?.away);
+  const homeFormPercent = null;
+  const awayFormPercent = null;
   const provisionalAccess: DailyAnalysisAccess = sortOrder < 2 ? 'FREE' : 'VIP';
-  const pick = generateFootballPick(homeFormPercent, awayFormPercent, seed, provisionalAccess, predictionData?.predictions?.advice);
+  const pick = generateFootballPick(homeFormPercent, awayFormPercent, seed, provisionalAccess);
   const date = new Date(fixture.fixture.date);
 
   return {
     id: `api-football-${fixture.fixture.id}`,
     source: 'api-football',
     sport: 'football',
+    status: 'ACTIVE',
+    manualOverride: false,
+    topPick: pick.badges.includes('ELITE PICK'),
+    units: provisionalAccess === 'VIP' ? 5 : 3,
     fixtureId: fixture.fixture.id,
     date: fixture.fixture.date.slice(0, 10),
     time: Number.isFinite(date.getTime())
@@ -417,6 +373,10 @@ const mapBasketballGame = (game: BasketballGame, sortOrder: number): RankedAnaly
     id: `api-basketball-${game.id}`,
     source: 'api-basketball',
     sport: 'basketball',
+    status: 'ACTIVE',
+    manualOverride: false,
+    topPick: pick.badges.includes('ELITE PICK'),
+    units: provisionalAccess === 'VIP' ? 5 : 3,
     fixtureId: game.id,
     date: game.date.slice(0, 10),
     time: game.time || (Number.isFinite(gameDate.getTime())
@@ -461,9 +421,9 @@ const basketballCandidateScore = (game: BasketballGame) => {
   return hasLogos + timeScore + leaguePopularity(game.league.name, 'basketball') + stableNumber(`${game.id}-basket-candidate`, 0, 14);
 };
 
-const fetchFootballAnalyses = async (date: string): Promise<RankedAnalysis[]> => {
+const fetchFootballAnalyses = async (date: string, signal?: AbortSignal): Promise<RankedAnalysis[]> => {
   try {
-    const fixtures = await requestSportsApi<ApiFixture[]>('football', '/fixtures', { date, timezone: TIMEZONE });
+    const fixtures = await requestSportsApi<ApiFixture[]>('football', '/fixtures', { date, timezone: TIMEZONE }, signal);
     if (!fixtures?.length) return [];
 
     const candidates = fixtures
@@ -477,9 +437,9 @@ const fetchFootballAnalyses = async (date: string): Promise<RankedAnalysis[]> =>
   }
 };
 
-const fetchBasketballAnalyses = async (date: string): Promise<RankedAnalysis[]> => {
+const fetchBasketballAnalyses = async (date: string, signal?: AbortSignal): Promise<RankedAnalysis[]> => {
   try {
-    const games = await requestSportsApi<BasketballGame[]>('basketball', '/games', { date, timezone: TIMEZONE });
+    const games = await requestSportsApi<BasketballGame[]>('basketball', '/games', { date, timezone: TIMEZONE }, signal);
     if (!games?.length) return [];
 
     return games
@@ -493,10 +453,10 @@ const fetchBasketballAnalyses = async (date: string): Promise<RankedAnalysis[]> 
 };
 
 export const apiFootballService = {
-  fetchDailyAnalysesForDate: async (date: string): Promise<DailyAnalysisItem[]> => {
+  fetchDailyAnalysesForDate: async (date: string, signal?: AbortSignal): Promise<DailyAnalysisItem[]> => {
     const [football, basketball] = await Promise.all([
-      fetchFootballAnalyses(date),
-      fetchBasketballAnalyses(date),
+      fetchFootballAnalyses(date, signal),
+      fetchBasketballAnalyses(date, signal),
     ]);
 
     return [...football, ...basketball]
