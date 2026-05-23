@@ -216,11 +216,14 @@ export interface AppSettings {
 }
 
 export type DailyAnalysisAccess = 'FREE' | 'VIP';
-export type DailyAnalysisSource = 'api-football' | 'manual';
+export type DailyAnalysisSource = 'api-football' | 'api-basketball' | 'manual';
+export type DailyAnalysisSport = 'football' | 'basketball';
+export type DailyAnalysisRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface DailyAnalysisItem {
   id: string;
   source: DailyAnalysisSource;
+  sport?: DailyAnalysisSport;
   fixtureId?: number;
   date: string;
   time: string;
@@ -236,6 +239,11 @@ export interface DailyAnalysisItem {
   prediction: string;
   odds: number;
   reasoning: string;
+  confidence?: number;
+  riskLevel?: DailyAnalysisRiskLevel;
+  averageTotal?: string;
+  h2hNote?: string;
+  badges?: string[];
   access: DailyAnalysisAccess;
   sortOrder: number;
   enabled: boolean;

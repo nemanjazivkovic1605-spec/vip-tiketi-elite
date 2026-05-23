@@ -34,6 +34,19 @@ const cleanAnalysis = (analysis?: string) => {
   return value;
 };
 
+const shouldUseRealPublishTime = (tip: Tip, wasAlreadyPublished: boolean) =>
+  !wasAlreadyPublished
+  && tip.publicationStatus === TipPublicationStatus.PUBLISHED
+  && tip.status === TicketStatus.PENDING;
+
+const withRealPublishTimeForNewActiveTicket = (tip: Tip, wasAlreadyPublished: boolean): Tip => {
+  if (!shouldUseRealPublishTime(tip, wasAlreadyPublished)) return tip;
+  return {
+    ...tip,
+    publishedAt: new Date().toISOString(),
+  };
+};
+
 const normalizeTip = (tip: Tip): Tip => {
   const matches = Array.isArray(tip.matches)
     ? tip.matches.map((match) => ({
@@ -54,13 +67,14 @@ const normalizeTip = (tip: Tip): Tip => {
   const ticketCode = existingTicketCode && !existingTicketCode.startsWith('T-')
     ? existingTicketCode
     : publicationMeta.ticketCode;
+  const explicitPublishedAt = (tip.publishedAt || '').trim();
 
   return {
     ...tip,
     id: tip.id || Math.random().toString(36).slice(2, 11),
     publishedDate: publicationMeta.publishedDate,
     publishedTime: publicationMeta.publishedTime,
-    publishedAt: publicationMeta.publishedAt,
+    publishedAt: explicitPublishedAt || publicationMeta.publishedAt,
     ticketCode,
     locked: Boolean(tip.locked),
     source: 'admin',
@@ -423,7 +437,11 @@ export const mockTipsService = {
   },
 
   addTip: async (tip: Tip): Promise<void> => {
-    const normalized = normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT });
+    const normalized = normalizeTip(withRealPublishTimeForNewActiveTicket({
+      ...tip,
+      source: 'admin',
+      publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
+    }, false));
     await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
     await syncPublicTicket(normalized);
   },
@@ -441,7 +459,10 @@ export const mockTipsService = {
   },
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
-    const normalized = normalizeTip(updatedTip);
+    const existingSnapshot = await getDoc(getTicketDoc(updatedTip.id));
+    const wasAlreadyPublished = existingSnapshot.exists()
+      && (existingSnapshot.data() as Tip).publicationStatus === TipPublicationStatus.PUBLISHED;
+    const normalized = normalizeTip(withRealPublishTimeForNewActiveTicket(updatedTip, wasAlreadyPublished));
     await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized), { merge: true });
     await syncPublicTicket(normalized);
   },
@@ -456,11 +477,15 @@ export const mockTipsService = {
   publishTip: async (id: string): Promise<void> => {
     const snapshot = await getDoc(getTicketDoc(id));
     if (snapshot.exists()) {
-      const normalized = normalizeTip({
+      const existingTip = {
         ...snapshot.data(),
         id: snapshot.id,
         publicationStatus: TipPublicationStatus.PUBLISHED,
-      } as Tip);
+      } as Tip;
+      const normalized = normalizeTip(withRealPublishTimeForNewActiveTicket(
+        existingTip,
+        (snapshot.data() as Tip).publicationStatus === TipPublicationStatus.PUBLISHED,
+      ));
       await setDoc(getTicketDoc(id), removeUndefined(normalized), { merge: true });
       await syncPublicTicket(normalized);
     }

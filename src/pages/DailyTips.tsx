@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BarChart3, CalendarDays, Lock, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, ShieldCheck, Sparkles, Star, TrendingUp } from 'lucide-react';
 import { DailyAnalysisItem } from '../types';
-import { apiFootballService, getDailyAnalysisDates } from '../services/apiFootballService';
+import { getDailyAnalysisDates } from '../services/apiFootballService';
 import { dailyAnalysesService } from '../services/dailyAnalysesService';
 import { useAuth } from '../hooks/useAuth';
 
@@ -10,127 +10,183 @@ const formatDate = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString('sr-Latn-RS', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric',
   });
 
+const riskStyle = {
+  LOW: 'border-green-500/25 bg-green-500/10 text-green-300',
+  MEDIUM: 'border-gold-500/25 bg-gold-500/10 text-gold-300',
+  HIGH: 'border-orange-500/25 bg-orange-500/10 text-orange-300',
+};
+
+const sportLabel = (sport?: string) => sport === 'basketball' ? 'KOŠARKA' : 'FUDBAL';
+
+const SportIcon = ({ sport }: { sport?: string }) => (
+  <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl border border-gold-500/20 bg-gold-500/10 text-gold-300">
+    {sport === 'basketball' ? <CircleDot size={15} /> : <Dumbbell size={15} />}
+  </span>
+);
+
 const TeamLogo = ({ src, name }: { src?: string; name: string }) => (
-  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
     {src ? (
-      <img src={src} alt={name} className="h-10 w-10 object-contain" loading="lazy" />
+      <img src={src} alt={name} className="h-8 w-8 object-contain" loading="lazy" />
     ) : (
-      <span className="font-display text-lg font-black text-gold-400">{name.slice(0, 1)}</span>
+      <span className="font-display text-base font-black text-gold-400">{name.slice(0, 1)}</span>
     )}
   </div>
 );
 
-const FormBar = ({ label, value }: { label: string; value?: number | null }) => (
+const FormLine = ({ label, value }: { label: string; value?: number | null }) => (
   <div>
-    <div className="mb-2 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-neutral-500">
+    <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-neutral-500">
       <span>{label}</span>
-      <span>{value === null || value === undefined ? 'Nedovoljno podataka' : `${value}%`}</span>
+      <span>{value === null || value === undefined ? 'Nedovoljno' : `${value}%`}</span>
     </div>
-    <div className="h-2 overflow-hidden rounded-full bg-white/10">
+    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
       <div
-        className={`h-full rounded-full ${value === null || value === undefined ? 'w-1/4 bg-neutral-700' : 'bg-gradient-to-r from-orange-500 to-gold-400'}`}
-        style={{ width: value === null || value === undefined ? '28%' : `${value}%` }}
+        className={`h-full rounded-full ${value === null || value === undefined ? 'bg-neutral-700' : 'bg-gradient-to-r from-orange-500 to-gold-400'}`}
+        style={{ width: value === null || value === undefined ? '30%' : `${value}%` }}
       />
     </div>
   </div>
 );
 
-const LockedContent = ({ text }: { text: string }) => (
+const Metric = ({ label, value }: { label: string; value?: string | number }) => (
+  <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2">
+    <div className="text-[8px] font-black uppercase tracking-widest text-neutral-500">{label}</div>
+    <div className="mt-1 text-xs font-black text-neutral-200">{value || 'Nedovoljno podataka'}</div>
+  </div>
+);
+
+const LockedPanel = () => (
   <button
     type="button"
     onClick={() => alert('VIP analiza je dostupna samo aktivnim VIP članovima.')}
-    className="relative w-full overflow-hidden rounded-2xl border border-gold-500/20 bg-gold-500/10 px-4 py-4 text-left"
+    className="relative min-h-[96px] w-full overflow-hidden rounded-2xl border border-gold-500/20 bg-gold-500/10 px-4 py-3 text-left transition-all hover:border-gold-500/40 hover:bg-gold-500/[0.14]"
   >
-    <span className="select-none text-sm text-neutral-300 blur-[5px]">{text}</span>
-    <span className="absolute inset-0 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-gold-300">
-      <Lock size={15} /> VIP sadržaj zaključan
+    <span className="block select-none text-sm leading-6 text-neutral-300 blur-[5px]">
+      Detaljna VIP analiza, value ulaz, market signal i procena rizika dostupni su samo članovima.
+    </span>
+    <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-[10px] font-black uppercase tracking-widest text-gold-300">
+      <Lock size={16} /> VIP analiza zaključana
     </span>
   </button>
 );
 
 const AnalysisCard = ({ item, canAccessVip }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean }) => {
   const isVipLocked = item.access === 'VIP' && !canAccessVip;
+  const hasOdds = Number.isFinite(Number(item.odds)) && Number(item.odds) > 1;
+  const confidence = item.confidence || 0;
+  const isElite = (item.badges || []).some((badge) => badge === 'ELITE PICK' || badge === 'HIGH VALUE');
+  const risk = item.riskLevel || 'MEDIUM';
 
   return (
     <motion.article
       layout
-      initial={{ opacity: 0, y: 18 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 12 }}
-      className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(245,124,0,0.15),transparent_34%),linear-gradient(180deg,rgba(18,18,18,0.96),rgba(5,5,5,0.96))] p-5 shadow-[0_18px_70px_rgba(0,0,0,0.35)] transition-all hover:-translate-y-1 hover:border-gold-500/35 hover:shadow-[0_0_45px_rgba(245,124,0,0.16)] md:p-6"
+      exit={{ opacity: 0, y: 10 }}
+      className={`group relative overflow-hidden rounded-[1.45rem] border bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(4,4,4,0.98))] p-3.5 shadow-[0_14px_45px_rgba(0,0,0,0.34)] transition-all hover:-translate-y-0.5 md:p-4 ${
+        isElite
+          ? 'border-gold-500/35 shadow-[0_0_44px_rgba(245,124,0,0.14)]'
+          : 'border-white/10 hover:border-gold-500/30 hover:shadow-[0_0_32px_rgba(245,124,0,0.1)]'
+      }`}
     >
-      <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-gold-500/10 blur-3xl transition-opacity group-hover:opacity-100" />
+      <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gold-500/10 blur-3xl" />
 
-      <div className="relative mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="relative flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-gold-500/25 bg-gold-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-gold-300">
+          <SportIcon sport={item.sport} />
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-neutral-300">
+            {sportLabel(item.sport)}
+          </span>
+          <span className="max-w-[180px] truncate rounded-full border border-gold-500/20 bg-gold-500/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-gold-300 md:max-w-[260px]">
             {item.league}
           </span>
-          <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
+          <span className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${
             item.access === 'VIP'
-              ? 'border-gold-500/40 bg-gold-500 text-black'
+              ? 'border-gold-500/45 bg-gold-500 text-black'
               : 'border-white/10 bg-white/5 text-neutral-300'
           }`}>
             {item.access}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-500">
-          <CalendarDays size={13} /> {formatDate(item.date)} · {item.time || '--:--'}
+        <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
+          <CalendarDays size={12} /> {formatDate(item.date)} · {item.time || '--:--'}
         </div>
       </div>
 
-      <div className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-3xl border border-white/10 bg-black/25 p-4">
-        <div className="flex flex-col items-center gap-3 text-center">
+      <div className="relative mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-2xl border border-white/10 bg-black/25 p-3">
+        <div className="flex min-w-0 items-center gap-2">
           <TeamLogo src={item.homeLogo} name={item.homeTeam} />
-          <div className="font-display text-lg font-black leading-tight text-white">{item.homeTeam}</div>
+          <div className="min-w-0 truncate font-display text-sm font-black text-white md:text-base">{item.homeTeam}</div>
         </div>
-        <div className="rounded-full border border-gold-500/25 bg-gold-500/10 px-3 py-1 text-[10px] font-black text-gold-300">VS</div>
-        <div className="flex flex-col items-center gap-3 text-center">
+        <div className="rounded-full border border-gold-500/25 bg-gold-500/10 px-2.5 py-1 text-[9px] font-black text-gold-300">VS</div>
+        <div className="flex min-w-0 items-center justify-end gap-2 text-right">
+          <div className="min-w-0 truncate font-display text-sm font-black text-white md:text-base">{item.awayTeam}</div>
           <TeamLogo src={item.awayLogo} name={item.awayTeam} />
-          <div className="font-display text-lg font-black leading-tight text-white">{item.awayTeam}</div>
         </div>
       </div>
 
-      <div className="relative mt-5 grid gap-4 md:grid-cols-2">
-        <FormBar label="Forma domaćina" value={item.homeFormPercent} />
-        <FormBar label="Forma gosta" value={item.awayFormPercent} />
+      <div className="relative mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_120px]">
+        <FormLine label="Forma domaćina" value={item.homeFormPercent} />
+        <FormLine label="Forma gosta" value={item.awayFormPercent} />
+        <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2">
+          <div className="mb-1 flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-neutral-500">
+            <span>Confidence</span>
+            <span>{confidence ? `${confidence}%` : 'N/A'}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-gradient-to-r from-gold-500 to-orange-500" style={{ width: `${confidence || 35}%` }} />
+          </div>
+        </div>
       </div>
 
-      {item.formNote && (
-        <div className="relative mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-bold text-neutral-500">
-          {item.formNote}
-        </div>
-      )}
+      <div className="relative mt-3 flex flex-wrap gap-2">
+        {(item.badges || []).map((badge) => (
+          <span key={badge} className="inline-flex items-center gap-1 rounded-full border border-gold-500/25 bg-gold-500/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-gold-300">
+            {badge === 'ELITE PICK' ? <Star size={11} /> : badge === 'HIGH VALUE' ? <Flame size={11} /> : <ShieldCheck size={11} />}
+            {badge}
+          </span>
+        ))}
+        <span className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${riskStyle[risk]}`}>
+          Rizik: {risk === 'LOW' ? 'Nizak' : risk === 'MEDIUM' ? 'Srednji' : 'Visok'}
+        </span>
+      </div>
 
-      <div className="relative mt-5 grid gap-4 md:grid-cols-[160px_1fr]">
-        <div className="rounded-2xl border border-gold-500/20 bg-gold-500/[0.08] p-4">
-          <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-neutral-500">Predlog</div>
+      <div className="relative mt-3 grid gap-2 md:grid-cols-[150px_1fr]">
+        <div className="rounded-2xl border border-gold-500/20 bg-gold-500/[0.08] p-3">
+          <div className="text-[8px] font-black uppercase tracking-widest text-neutral-500">Predlog</div>
           {isVipLocked ? (
-            <div className="inline-flex items-center gap-2 rounded-xl bg-black/30 px-3 py-2 text-xs font-black uppercase tracking-widest text-gold-300">
-              <Lock size={14} /> VIP tip
+            <div className="mt-2 inline-flex items-center gap-2 rounded-xl bg-black/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gold-300">
+              <Lock size={13} /> VIP Pick
             </div>
           ) : (
-            <div className="font-display text-3xl font-black text-gold-300">{item.prediction}</div>
+            <div className="mt-1 font-display text-2xl font-black text-gold-300">{item.prediction}</div>
           )}
-          <div className="mt-3 text-[9px] font-black uppercase tracking-widest text-neutral-500">Kvota</div>
-          <div className="font-display text-2xl font-black text-white">{isVipLocked ? '--' : item.odds.toFixed(2)}</div>
+          <div className="mt-2 text-[8px] font-black uppercase tracking-widest text-neutral-500">Kvota</div>
+          <div className="font-display text-xl font-black text-white">
+            {isVipLocked ? 'VIP' : hasOdds ? item.odds.toFixed(2) : 'Kvota uskoro'}
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-          <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-neutral-500">
-            <BarChart3 size={13} /> Statističko obrazloženje
+        <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+          <div className="mb-2 flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-neutral-500">
+            <BarChart3 size={12} /> VIP analiza
           </div>
           {isVipLocked ? (
-            <LockedContent text={item.reasoning || 'VIP analiza je zaključana za korisnike bez aktivne članarine.'} />
+            <LockedPanel />
           ) : (
-            <p className="text-sm leading-7 text-neutral-300">
-              {item.reasoning || 'Analiza nije dodata za ovaj meč.'}
+            <p className="text-sm leading-6 text-neutral-300">
+              {item.reasoning || 'Analiza se priprema za ovaj meč.'}
             </p>
           )}
         </div>
+      </div>
+
+      <div className="relative mt-3 grid gap-2 sm:grid-cols-2">
+        <Metric label={item.sport === 'basketball' ? 'Prosek poena' : 'Prosek golova'} value={item.averageTotal} />
+        <Metric label="H2H" value={item.h2hNote} />
       </div>
     </motion.article>
   );
@@ -168,43 +224,27 @@ export default function DailyTips() {
   const activeItems = itemsByDate[activeDate] || [];
 
   return (
-    <div className="min-h-screen bg-neutral-950 px-6 py-12 text-neutral-100">
+    <div className="min-h-screen bg-neutral-950 px-4 py-8 text-neutral-100 md:px-6 md:py-10">
       <section className="mx-auto max-w-7xl">
-        <div className="mb-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-          <div>
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-gold-500/25 bg-gold-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-gold-300">
-              <Sparkles size={14} /> API-Football real match feed
-            </div>
-            <h1 className="font-display text-4xl font-black tracking-tight md:text-6xl">
-              Dnevne <span className="gold-text">Analize</span>
-            </h1>
-            <p className="mt-5 max-w-3xl text-base leading-8 text-neutral-400">
-              Aktuelni mečevi za danas, sutra i prekosutra iz realnog API feed-a, uz disciplinovane predloge tipova,
-              procenu rizika i kratko statističko obrazloženje u Elite VIP Tips stilu.
-            </p>
+        <div className="mb-6 max-w-4xl">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-gold-500/25 bg-gold-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.22em] text-gold-300">
+            <Sparkles size={13} /> Premium value picks
           </div>
-
-          <div className="rounded-[2rem] border border-white/10 bg-black/30 p-5">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-500">
-              <ShieldCheck size={14} className="text-gold-500" /> Filtrirane lige
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {apiFootballService.targetLeagues.map((league) => (
-                <span key={league.id} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-neutral-300">
-                  {league.name}
-                </span>
-              ))}
-            </div>
-          </div>
+          <h1 className="font-display text-3xl font-black tracking-tight md:text-5xl">
+            Dnevni <span className="gold-text">Tipovi</span>
+          </h1>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-400 md:text-base">
+            Kurirani izbor najboljih fudbalskih i košarkaških value pickova za Balkan VIP zajednicu.
+          </p>
         </div>
 
-        <div className="mb-8 flex flex-wrap gap-3">
+        <div className="mb-5 flex flex-wrap gap-2">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`rounded-2xl border px-5 py-3 text-xs font-black uppercase tracking-widest transition-all ${
+              className={`rounded-xl border px-3.5 py-2 text-[10px] font-black uppercase tracking-widest transition-all md:px-4 ${
                 activeTab === tab.key
                   ? 'border-gold-500 bg-gold-500 text-black shadow-lg shadow-gold-500/20'
                   : 'border-white/10 bg-white/5 text-neutral-400 hover:border-gold-500/35 hover:text-gold-300'
@@ -216,13 +256,13 @@ export default function DailyTips() {
         </div>
 
         {loading ? (
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             {[0, 1, 2, 3].map((item) => (
-              <div key={item} className="h-96 animate-pulse rounded-[2rem] border border-white/10 bg-white/[0.03]" />
+              <div key={item} className="h-72 animate-pulse rounded-[1.45rem] border border-white/10 bg-white/[0.03]" />
             ))}
           </div>
         ) : activeItems.length > 0 ? (
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             <AnimatePresence mode="popLayout">
               {activeItems.map((item) => (
                 <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} />
@@ -230,12 +270,9 @@ export default function DailyTips() {
             </AnimatePresence>
           </div>
         ) : (
-          <div className="rounded-[2.5rem] border border-white/10 bg-black/35 px-6 py-20 text-center">
-            <TrendingUp className="mx-auto mb-5 text-gold-500" size={42} />
-            <h2 className="font-display text-2xl font-black text-white">Trenutno nema dostupnih analiza.</h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-neutral-500">
-              API trenutno ne vraća utakmice iz izabranih liga za ovaj dan, a admin nije dodao ručne analize.
-            </p>
+          <div className="rounded-[2rem] border border-white/10 bg-black/35 px-6 py-16 text-center">
+            <TrendingUp className="mx-auto mb-4 text-gold-500" size={38} />
+            <h2 className="font-display text-xl font-black text-white md:text-2xl">Današnje analize se trenutno pripremaju.</h2>
           </div>
         )}
       </section>
