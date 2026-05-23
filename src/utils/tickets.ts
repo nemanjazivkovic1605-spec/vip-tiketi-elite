@@ -10,6 +10,12 @@ export const getTicketKind = (matchCount: number) => {
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 
+export const formatLocalIsoDate = (date: Date) =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+
+export const formatLocalTime = (date: Date) =>
+  `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+
 export const normalizePublishedDate = (value?: string) => {
   const raw = (value || '').trim();
 
@@ -24,6 +30,13 @@ export const normalizePublishedDate = (value?: string) => {
 
   return new Date().toISOString().split('T')[0];
 };
+
+const stableMinute = (seed: string) => {
+  const hash = seed.split('').reduce((acc, char, index) => acc + char.charCodeAt(0) * (index + 1), 0);
+  return hash % 60;
+};
+
+export const generateStablePublishedTime = (seed: string) => `12:${pad2(stableMinute(seed || 'ticket'))}`;
 
 export const normalizePublishedTime = (value?: string) => {
   const raw = (value || '').trim();
@@ -44,9 +57,10 @@ export const generateTicketCode = (isVip: boolean, publishedDate: string, publis
   return `${isVip ? 'V' : 'F'}${day}${month}${year}12${minute}`;
 };
 
-export const getTicketPublicationMeta = (tip: Pick<Tip, 'date' | 'isVip' | 'publishedDate' | 'publishedTime'>) => {
+export const getTicketPublicationMeta = (tip: Pick<Tip, 'date' | 'isVip' | 'publishedDate' | 'publishedTime'> & Partial<Pick<Tip, 'id'>>) => {
   const publishedDate = normalizePublishedDate(tip.publishedDate || tip.date);
-  const publishedTime = normalizePublishedTime(tip.publishedTime || generatePublishedTime());
+  const stableSeed = `${tip.id || 'ticket'}-${publishedDate}-${tip.isVip ? 'vip' : 'free'}`;
+  const publishedTime = normalizePublishedTime(tip.publishedTime || generateStablePublishedTime(stableSeed));
 
   return {
     publishedDate,

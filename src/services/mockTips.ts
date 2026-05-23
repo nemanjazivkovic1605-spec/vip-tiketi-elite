@@ -15,12 +15,16 @@ import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, MonthlyStats } fr
 import {
   calculateTicketUnitsProfit,
   calculateTotalOdds,
+  formatLocalIsoDate,
+  formatLocalTime,
+  generateTicketCode,
   getTicketPublicationMeta,
   getTicketStake,
   getTicketUnitsStake,
   isFinishedForStats,
   isSettledTicket,
   normalizeOdds,
+  normalizePublishedDate,
   unitsToRsd,
 } from '../utils/tickets';
 
@@ -39,11 +43,27 @@ const shouldUseRealPublishTime = (tip: Tip, wasAlreadyPublished: boolean) =>
   && tip.publicationStatus === TipPublicationStatus.PUBLISHED
   && tip.status === TicketStatus.PENDING;
 
+const buildPublicationAt = (publishedDate: string, publishedTime: string) =>
+  `${publishedDate}T${publishedTime}:00`;
+
+const getRealPublicationMeta = (tip: Pick<Tip, 'isVip'>, now = new Date()) => {
+  const publishedDate = formatLocalIsoDate(now);
+  const publishedTime = formatLocalTime(now);
+
+  return {
+    publishedDate,
+    publishedTime,
+    publishedAt: buildPublicationAt(publishedDate, publishedTime),
+    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime),
+  };
+};
+
 const withRealPublishTimeForNewActiveTicket = (tip: Tip, wasAlreadyPublished: boolean): Tip => {
   if (!shouldUseRealPublishTime(tip, wasAlreadyPublished)) return tip;
+  const meta = getRealPublicationMeta(tip);
   return {
     ...tip,
-    publishedAt: new Date().toISOString(),
+    ...meta,
   };
 };
 
@@ -57,29 +77,44 @@ const normalizeTip = (tip: Tip): Tip => {
     : [];
   const totalOdds = calculateTotalOdds(matches);
   const date = tip.date || new Date().toISOString().split('T')[0];
-  const publicationMeta = getTicketPublicationMeta({
-    date,
-    isVip: Boolean(tip.isVip),
-    publishedDate: tip.publishedDate,
-    publishedTime: tip.publishedTime,
-  });
+  const publicationStatus = tip.publicationStatus || TipPublicationStatus.DRAFT;
+  const status = tip.status || TicketStatus.PENDING;
+  const explicitPublishedAt = (tip.publishedAt || '').trim();
+  const explicitPublishedDate = normalizePublishedDate(tip.publishedDate || date);
+  const explicitPublishedAtDate = new Date(explicitPublishedAt);
+  const isActivePublished = publicationStatus === TipPublicationStatus.PUBLISHED && status === TicketStatus.PENDING;
+  const publicationMeta = isActivePublished && explicitPublishedAt && Number.isFinite(explicitPublishedAtDate.getTime())
+    ? {
+      publishedDate: formatLocalIsoDate(explicitPublishedAtDate),
+      publishedTime: formatLocalTime(explicitPublishedAtDate),
+      publishedAt: explicitPublishedAt,
+      ticketCode: generateTicketCode(Boolean(tip.isVip), formatLocalIsoDate(explicitPublishedAtDate), formatLocalTime(explicitPublishedAtDate)),
+    }
+    : isActivePublished
+      ? getRealPublicationMeta(tip)
+      : getTicketPublicationMeta({
+        id: tip.id,
+        date,
+        isVip: Boolean(tip.isVip),
+        publishedDate: date,
+        publishedTime: explicitPublishedDate === normalizePublishedDate(date) ? tip.publishedTime : undefined,
+      });
   const existingTicketCode = (tip.ticketCode || '').trim();
   const ticketCode = existingTicketCode && !existingTicketCode.startsWith('T-')
     ? existingTicketCode
     : publicationMeta.ticketCode;
-  const explicitPublishedAt = (tip.publishedAt || '').trim();
 
   return {
     ...tip,
     id: tip.id || Math.random().toString(36).slice(2, 11),
     publishedDate: publicationMeta.publishedDate,
     publishedTime: publicationMeta.publishedTime,
-    publishedAt: explicitPublishedAt || publicationMeta.publishedAt,
+    publishedAt: publicationMeta.publishedAt,
     ticketCode,
     locked: Boolean(tip.locked),
     source: 'admin',
-    publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
-    status: tip.status || TicketStatus.PENDING,
+    publicationStatus,
+    status,
     isVip: Boolean(tip.isVip),
     date,
     analysis: cleanAnalysis(tip.analysis),
