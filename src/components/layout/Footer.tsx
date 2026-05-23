@@ -29,6 +29,7 @@ export default function Footer() {
             <h4 className="text-sm font-black uppercase tracking-widest mb-6">Linkovi</h4>
             <ul className="space-y-4 text-neutral-500 text-sm font-medium">
               <li><Link to="/results" className="hover:text-gold-500 transition-colors">Rezultati</Link></li>
+              <li><Link to="/daily-tips" className="hover:text-gold-500 transition-colors">Dnevne Analize</Link></li>
               <li><Link to="/stats" className="hover:text-gold-500 transition-colors">Statistika</Link></li>
               <li><Link to="/register" className="hover:text-gold-500 transition-colors">Članarina</Link></li>
               <li><Link to="/login" className="hover:text-gold-500 transition-colors">Prijavi se</Link></li>

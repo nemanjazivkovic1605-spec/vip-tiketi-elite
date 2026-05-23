@@ -9,8 +9,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { mockTipsService } from '../../services/mockTips';
 import { mockSettingsService } from '../../services/mockSettings';
 import { importedMatchesService } from '../../services/importedMatchesService';
+import { dailyAnalysesService } from '../../services/dailyAnalysesService';
 import { authService } from '../../services/authService';
-import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User, AdminNotification } from '../../types';
+import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User, AdminNotification, DailyAnalysisItem } from '../../types';
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import { calculateTotalOdds, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
@@ -64,7 +65,7 @@ const evaluatePrediction = (prediction: string, match: ImportedMatch): TicketSta
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'matches' | 'tips' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'matches' | 'tips' | 'analyses' | 'settings'>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTipModalOpen, setIsTipModalOpen] = useState(false);
   const [editingTip, setEditingTip] = useState<Tip | undefined>(undefined);
@@ -77,6 +78,28 @@ export default function AdminDashboard() {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [tips, setTips] = useState<Tip[]>([]);
+  const [dailyAnalyses, setDailyAnalyses] = useState<DailyAnalysisItem[]>([]);
+  const [dailyAnalysisForm, setDailyAnalysisForm] = useState<DailyAnalysisItem>({
+    id: '',
+    source: 'manual',
+    date: new Date().toISOString().split('T')[0],
+    time: '20:00',
+    league: '',
+    homeTeam: '',
+    awayTeam: '',
+    homeLogo: '',
+    awayLogo: '',
+    homeFormPercent: null,
+    awayFormPercent: null,
+    formNote: '',
+    prediction: 'Over 1.5',
+    odds: 1.5,
+    reasoning: '',
+    access: 'FREE',
+    sortOrder: 0,
+    enabled: true,
+    hidden: false,
+  });
   const [tipPublicationFilter, setTipPublicationFilter] = useState<TipPublicationFilter>('all');
   const [availableMatches, setAvailableMatches] = useState<ImportedMatch[]>([]);
   const [matchTeamFilter, setMatchTeamFilter] = useState('');
@@ -185,19 +208,22 @@ export default function AdminDashboard() {
     refreshData();
     const unsubscribeTips = mockTipsService.subscribe(refreshData);
     const unsubscribeMatches = importedMatchesService.subscribe(refreshData);
+    const unsubscribeDailyAnalyses = dailyAnalysesService.subscribeAdmin(refreshData);
     const unsubscribeNotifications = authService.subscribeAdminNotifications(setNotifications);
     return () => {
       unsubscribeTips();
       unsubscribeMatches();
+      unsubscribeDailyAnalyses();
       unsubscribeNotifications();
     };
   }, []);
 
   const refreshData = async () => {
-    const [fetchedTips, fetchedMatches, fetchedStats] = await Promise.all([
+    const [fetchedTips, fetchedMatches, fetchedStats, fetchedDailyAnalyses] = await Promise.all([
       mockTipsService.getAllTips(),
       importedMatchesService.getMatches(),
-      mockTipsService.getStats()
+      mockTipsService.getStats(),
+      dailyAnalysesService.getAdminAnalyses(),
     ]);
     const fetchedUsers = await authService.getUsers();
     const fetchedNotifications = await authService.getAdminNotifications();
@@ -206,6 +232,7 @@ export default function AdminDashboard() {
     setTips(fetchedTips);
     setAvailableMatches(fetchedMatches);
     setStats(fetchedStats);
+    setDailyAnalyses(fetchedDailyAnalyses);
     setUserList(fetchedUsers);
     setNotifications(fetchedNotifications);
   };
@@ -552,6 +579,58 @@ export default function AdminDashboard() {
       await importedMatchesService.deleteMatch(matchId);
       await refreshData();
     }
+  };
+
+  const resetDailyAnalysisForm = () => {
+    setDailyAnalysisForm({
+      id: '',
+      source: 'manual',
+      date: new Date().toISOString().split('T')[0],
+      time: '20:00',
+      league: '',
+      homeTeam: '',
+      awayTeam: '',
+      homeLogo: '',
+      awayLogo: '',
+      homeFormPercent: null,
+      awayFormPercent: null,
+      formNote: '',
+      prediction: 'Over 1.5',
+      odds: 1.5,
+      reasoning: '',
+      access: 'FREE',
+      sortOrder: 0,
+      enabled: true,
+      hidden: false,
+    });
+  };
+
+  const handleEditDailyAnalysis = (analysis: DailyAnalysisItem) => {
+    setDailyAnalysisForm({ ...analysis });
+  };
+
+  const handleSaveDailyAnalysis = async () => {
+    if (!dailyAnalysisForm.date || !dailyAnalysisForm.league || !dailyAnalysisForm.homeTeam || !dailyAnalysisForm.awayTeam) {
+      alert('Popunite datum, ligu, domaćina i gosta.');
+      return;
+    }
+
+    await dailyAnalysesService.saveManualAnalysis({
+      ...dailyAnalysisForm,
+      id: dailyAnalysisForm.id || `manual-daily-${Date.now()}`,
+      odds: Number(dailyAnalysisForm.odds) || 1,
+      sortOrder: Number(dailyAnalysisForm.sortOrder) || 0,
+      homeFormPercent: dailyAnalysisForm.homeFormPercent === null ? null : Number(dailyAnalysisForm.homeFormPercent),
+      awayFormPercent: dailyAnalysisForm.awayFormPercent === null ? null : Number(dailyAnalysisForm.awayFormPercent),
+    });
+    resetDailyAnalysisForm();
+    await refreshData();
+  };
+
+  const handleDeleteDailyAnalysis = async (id: string) => {
+    if (!confirm('Da li želite da obrišete ovu dnevnu analizu?')) return;
+    await dailyAnalysesService.deleteManualAnalysis(id);
+    await refreshData();
   };
 
   const handleClearImportedMatches = async () => {
@@ -1102,6 +1181,7 @@ export default function AdminDashboard() {
     { id: 'users', label: 'Korisnici', icon: <Users size={20} /> },
     { id: 'matches', label: 'Baza utakmica', icon: <Database size={20} /> },
     { id: 'tips', label: 'Tipovi', icon: <FileText size={20} /> },
+    { id: 'analyses', label: 'Dnevne analize', icon: <TrendingUp size={20} /> },
     { id: 'settings', label: 'Podešavanja', icon: <Settings size={20} /> },
   ];
 
@@ -2097,6 +2177,130 @@ export default function AdminDashboard() {
                        ))}
                     </div>
                  </motion.div>
+              )}
+              {activeTab === 'analyses' && (
+                <motion.div key="analyses" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                  <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                      <h2 className="text-3xl font-display font-bold">Dnevne analize</h2>
+                      <p className="mt-2 text-sm text-neutral-500">Ručne analize iz Firestore baze imaju prioritet nad API prikazom. Sakrivene ili isključene analize nisu javno vidljive.</p>
+                    </div>
+                    <Link to="/daily-tips" className="rounded-2xl border border-gold-500/30 bg-gold-500/10 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gold-300 hover:bg-gold-500 hover:text-black">
+                      Otvori public stranicu
+                    </Link>
+                  </div>
+
+                  <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+                    <div className="glass rounded-[2rem] border-white/5 p-6">
+                      <h3 className="mb-5 text-xl font-bold">{dailyAnalysisForm.id ? 'Izmeni analizu' : 'Dodaj ručnu analizu'}</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Datum</span>
+                          <input type="date" value={dailyAnalysisForm.date} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, date: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Vreme</span>
+                          <input type="time" value={dailyAnalysisForm.time} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, time: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="col-span-2 block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Liga</span>
+                          <input value={dailyAnalysisForm.league} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, league: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" placeholder="Premier League" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Domaćin</span>
+                          <input value={dailyAnalysisForm.homeTeam} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, homeTeam: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Gost</span>
+                          <input value={dailyAnalysisForm.awayTeam} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, awayTeam: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Forma domaćin %</span>
+                          <input type="number" min="0" max="100" value={dailyAnalysisForm.homeFormPercent ?? ''} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, homeFormPercent: event.target.value === '' ? null : Number(event.target.value) })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" placeholder="Nedovoljno" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Forma gost %</span>
+                          <input type="number" min="0" max="100" value={dailyAnalysisForm.awayFormPercent ?? ''} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, awayFormPercent: event.target.value === '' ? null : Number(event.target.value) })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" placeholder="Nedovoljno" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
+                          <select value={dailyAnalysisForm.prediction} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, prediction: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50">
+                            {['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5'].map((option) => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Kvota</span>
+                          <input type="number" min="1" step="0.01" value={dailyAnalysisForm.odds} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, odds: Number(event.target.value) })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">FREE / VIP</span>
+                          <select value={dailyAnalysisForm.access} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, access: event.target.value as 'FREE' | 'VIP' })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50">
+                            <option value="FREE">FREE</option>
+                            <option value="VIP">VIP</option>
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Redosled</span>
+                          <input type="number" value={dailyAnalysisForm.sortOrder} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, sortOrder: Number(event.target.value) })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="col-span-2 block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Obrazloženje</span>
+                          <textarea value={dailyAnalysisForm.reasoning} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, reasoning: event.target.value })} rows={4} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-neutral-300">
+                          <input type="checkbox" checked={dailyAnalysisForm.enabled} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, enabled: event.target.checked })} />
+                          Uključeno
+                        </label>
+                        <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-neutral-300">
+                          <input type="checkbox" checked={dailyAnalysisForm.hidden === true} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, hidden: event.target.checked })} />
+                          Sakriveno
+                        </label>
+                      </div>
+                      <div className="mt-5 grid grid-cols-2 gap-3">
+                        <button onClick={handleSaveDailyAnalysis} className="rounded-2xl bg-gold-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black hover:bg-gold-600">Sačuvaj</button>
+                        <button onClick={resetDailyAnalysisForm} className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:bg-white/10">Novo</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {dailyAnalyses.map((analysis) => (
+                        <div key={analysis.id} className="glass rounded-[2rem] border-white/5 p-5">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                              <div className="mb-2 flex flex-wrap gap-2">
+                                <span className="rounded-full border border-gold-500/25 bg-gold-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-gold-300">{analysis.access}</span>
+                                <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${analysis.enabled && !analysis.hidden ? 'border-green-500/25 bg-green-500/10 text-green-300' : 'border-red-500/25 bg-red-500/10 text-red-300'}`}>
+                                  {analysis.enabled && !analysis.hidden ? 'Aktivno' : 'Sakriveno'}
+                                </span>
+                              </div>
+                              <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{analysis.date} · {analysis.time} · {analysis.league}</div>
+                              <div className="mt-2 font-display text-xl font-black text-white">{analysis.homeTeam} - {analysis.awayTeam}</div>
+                              <div className="mt-2 text-sm text-neutral-400">Tip: <span className="font-black text-gold-400">{analysis.prediction}</span> · Kvota {analysis.odds.toFixed(2)}</div>
+                              {analysis.reasoning && <p className="mt-3 max-w-3xl text-xs leading-6 text-neutral-500">{analysis.reasoning}</p>}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button onClick={() => handleEditDailyAnalysis(analysis)} className="rounded-xl bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:text-gold-400">Izmeni</button>
+                              <button onClick={() => dailyAnalysesService.updateManualAnalysis(analysis.id, { hidden: !analysis.hidden }).then(refreshData)} className="rounded-xl bg-orange-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 hover:bg-orange-500/20">
+                                {analysis.hidden ? 'Prikaži' : 'Sakrij'}
+                              </button>
+                              <button onClick={() => dailyAnalysesService.updateManualAnalysis(analysis.id, { enabled: !analysis.enabled }).then(refreshData)} className="rounded-xl bg-blue-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-300 hover:bg-blue-500/20">
+                                {analysis.enabled ? 'Isključi' : 'Uključi'}
+                              </button>
+                              <button onClick={() => handleDeleteDailyAnalysis(analysis.id)} className="rounded-xl bg-red-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 hover:bg-red-500/20">Obriši</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {dailyAnalyses.length === 0 && (
+                        <div className="glass rounded-[2rem] border-white/5 p-10 text-center text-neutral-500 font-bold">
+                          Još nema ručno dodatih dnevnih analiza.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
               )}
               {activeTab === 'settings' && (
                  <motion.div key="settings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>

@@ -214,3 +214,32 @@ export interface AppSettings {
   viberLink: string;
   contactEmail: string;
 }
+
+export type DailyAnalysisAccess = 'FREE' | 'VIP';
+export type DailyAnalysisSource = 'api-football' | 'manual';
+
+export interface DailyAnalysisItem {
+  id: string;
+  source: DailyAnalysisSource;
+  fixtureId?: number;
+  date: string;
+  time: string;
+  league: string;
+  leagueId?: number;
+  homeTeam: string;
+  awayTeam: string;
+  homeLogo?: string;
+  awayLogo?: string;
+  homeFormPercent?: number | null;
+  awayFormPercent?: number | null;
+  formNote?: string;
+  prediction: string;
+  odds: number;
+  reasoning: string;
+  access: DailyAnalysisAccess;
+  sortOrder: number;
+  enabled: boolean;
+  hidden?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}

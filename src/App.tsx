@@ -21,6 +21,7 @@ const Terms = lazy(() => import('./pages/Terms'));
 const Faq = lazy(() => import('./pages/Faq'));
 const BankrollManagement = lazy(() => import('./pages/BankrollManagement'));
 const DailyAnalysis = lazy(() => import('./pages/DailyAnalysis'));
+const DailyTips = lazy(() => import('./pages/DailyTips'));
 const EarlyInformation = lazy(() => import('./pages/EarlyInformation'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -75,6 +76,9 @@ export default function App() {
                 <Route path="/cesta-pitanja" element={<Faq />} />
                 <Route path="/bankroll-management" element={<BankrollManagement />} />
                 <Route path="/daily-analysis" element={<DailyAnalysis />} />
+                <Route path="/daily-tips" element={<DailyTips />} />
+                <Route path="/dnevne-analize" element={<DailyTips />} />
+                <Route path="/dnevni-tipovi" element={<DailyTips />} />
                 <Route path="/early-information" element={<EarlyInformation />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/legal" element={<Terms />} />
