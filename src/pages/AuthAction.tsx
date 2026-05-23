@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { applyActionCode, checkActionCode, confirmPasswordReset, reload, verifyPasswordResetCode } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
 import { getFirebaseErrorDetails } from '../services/authService';
+import { MembershipStatus } from '../types';
 
 type ActionState = 'loading' | 'ready' | 'success' | 'error';
 
@@ -62,8 +63,30 @@ export default function AuthAction() {
           if (auth.currentUser) {
             await reload(auth.currentUser);
             await auth.currentUser.getIdToken(true);
-            await setDoc(doc(db, 'users', auth.currentUser.uid), {
+            const userRef = doc(db, 'users', auth.currentUser.uid);
+            const userSnapshot = await getDoc(userRef);
+            const data = userSnapshot.data() || {};
+            const vipExpiresAt = data.vipExpiresAt?.toDate ? data.vipExpiresAt.toDate().toISOString() : data.vipExpiresAt;
+            const hasActiveVip = data.membershipStatus === MembershipStatus.APPROVED
+              && (data.vipAccess === true || data.vipApproved === true)
+              && vipExpiresAt
+              && new Date(vipExpiresAt).getTime() > Date.now();
+
+            await setDoc(userRef, {
               emailVerified: true,
+              verified: true,
+              status: 'active',
+              accountStatus: 'active',
+              ...(hasActiveVip ? {} : {
+                membershipStatus: MembershipStatus.FREE,
+                plan: 'free',
+                planName: 'FREE',
+                planDurationDays: 0,
+                vipAccess: false,
+                vipApproved: false,
+                vipExpiresAt: null,
+                vip_expires_at: null,
+              }),
               updatedAt: serverTimestamp(),
             }, { merge: true });
           }

@@ -152,13 +152,15 @@ export default function AdminDashboard() {
         || currentUser.email.toLowerCase().includes(search)
         || (currentUser.displayName || '').toLowerCase().includes(search);
 
+      const isVipActive = currentUser.membershipStatus === MembershipStatus.APPROVED && currentUser.vipAccess === true;
+      const isFreeAccount = currentUser.emailVerified === true && !isVipActive && accountStatus !== 'blocked';
       const matchesFilter =
         userStatusFilter === 'all'
         || (userStatusFilter === 'pending' && membership === MembershipStatus.PENDING)
         || (userStatusFilter === 'approved' && membership === MembershipStatus.APPROVED)
         || (userStatusFilter === 'expired' && membership === MembershipStatus.EXPIRED)
         || (userStatusFilter === 'blocked' && (membership === MembershipStatus.BLOCKED || accountStatus === 'blocked'))
-        || (userStatusFilter === 'free' && plan === 'free' && selectedPlan === 'free')
+        || (userStatusFilter === 'free' && isFreeAccount)
         || (userStatusFilter === 'silver' && (plan === 'silver_7' || selectedPlan === 'silver_7'))
         || (userStatusFilter === 'gold' && (plan === 'gold_30' || selectedPlan === 'gold_30'))
         || (userStatusFilter === 'elite' && (plan === 'elite_90' || selectedPlan === 'elite_90'));
@@ -586,6 +588,16 @@ export default function AdminDashboard() {
     await refreshData();
   };
 
+  const handleVerifyUser = async (userToVerify: User) => {
+    await authService.verifyUser(userToVerify);
+    await refreshData();
+  };
+
+  const handleSetFreeUser = async (userToUpdate: User) => {
+    await authService.setFreeUser(userToUpdate);
+    await refreshData();
+  };
+
   const handleActivateUserPlan = async (userToActivate: User, planId: 'silver_7' | 'gold_30' | 'elite_90') => {
     await authService.activatePlan(userToActivate, planId, user?.email);
     await refreshData();
@@ -596,8 +608,8 @@ export default function AdminDashboard() {
     await refreshData();
   };
 
-  const handleRemoveVip = async (userId: string) => {
-    await authService.removeVip(userId);
+  const handleRemoveVip = async (userToUpdate: User) => {
+    await authService.setFreeUser(userToUpdate);
     await refreshData();
   };
 
@@ -672,6 +684,30 @@ export default function AdminDashboard() {
   const openTipsTab = (filter: TipPublicationFilter) => {
     setTipPublicationFilter(filter);
     setActiveTab('tips');
+  };
+
+  const getUserAccountLabel = (currentUser: User) => {
+    if (currentUser.accountStatus === 'blocked' || currentUser.membershipStatus === MembershipStatus.BLOCKED) return 'BLOKIRAN';
+    if (!currentUser.emailVerified) return 'PENDING';
+    if (currentUser.vipAccess && currentUser.membershipStatus === MembershipStatus.APPROVED) return 'VIP';
+    if (currentUser.emailVerified) return 'FREE';
+    return 'PENDING';
+  };
+
+  const getUserAccountClass = (currentUser: User) => {
+    const label = getUserAccountLabel(currentUser);
+    if (label === 'VIP') return 'border-gold-500/30 bg-gold-500/10 text-gold-400';
+    if (label === 'FREE') return 'border-green-500/25 bg-green-500/10 text-green-400';
+    if (label === 'BLOKIRAN') return 'border-red-500/30 bg-red-500/10 text-red-400';
+    return 'border-blue-500/25 bg-blue-500/10 text-blue-300';
+  };
+
+  const getUserPackageLabel = (currentUser: User) => {
+    if ((currentUser.vipAccess || currentUser.vipApproved) && currentUser.membershipStatus === MembershipStatus.APPROVED) {
+      return currentUser.planName || currentUser.plan || 'VIP';
+    }
+
+    return 'Nema paket';
   };
 
   const autoGradeTip = async (tipId: string) => {
@@ -1336,8 +1372,9 @@ export default function AdminDashboard() {
                              <tr className="bg-white/5 text-[10px] text-neutral-500 uppercase font-black tracking-widest">
                                 <th className="px-6 py-4">Korisnik</th>
                                 <th className="px-6 py-4">Email</th>
+                                <th className="px-6 py-4">Verifikacija</th>
+                                <th className="px-6 py-4">Status naloga</th>
                                 <th className="px-6 py-4">Paket</th>
-                                <th className="px-6 py-4">Status</th>
                                 <th className="px-6 py-4">Registrovan</th>
                                 <th className="px-6 py-4">VIP do</th>
                                 <th className="px-6 py-4">Admin beleska</th>
@@ -1349,30 +1386,30 @@ export default function AdminDashboard() {
                                <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
                                   <td className="px-6 py-4">
                                      <div className="font-bold">{u.displayName || 'N/A'}</div>
-                                     <div className="text-xs text-neutral-500">{u.email}</div>
-                                  </td>
-                                  <td className="px-6 py-4">
-                                     <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${u.emailVerified ? 'bg-green-500/10 text-green-400' : 'bg-neutral-500/10 text-neutral-400'}`}>
-                                       {u.emailVerified ? 'verifikovan' : 'nije verifikovan'}
-                                     </span>
+                                     <div className="text-xs text-neutral-500">ID: {u.id.slice(0, 8)}</div>
                                   </td>
                                   <td className="px-6 py-4 text-xs font-bold text-neutral-300">
-                                     <div>{u.planName || u.plan || u.selectedPlan || 'FREE'}</div>
-                                     {u.selectedPlan && u.selectedPlan !== u.plan && (
-                                       <div className="text-[10px] text-blue-400">Zahtev: {u.selectedPlan}</div>
-                                     )}
-                                     {u.planDurationDays && <div className="text-[10px] text-neutral-500">{u.planDurationDays} dana</div>}
+                                     {u.email}
                                   </td>
-                                  <td className="px-6 py-4 uppercase text-xs font-black">
-                                     <span className={
-                                        u.membershipStatus === 'approved' ? 'text-gold-500' : 
-                                        u.membershipStatus === 'pending' ? 'text-blue-500' :
-                                        u.membershipStatus === 'blocked' ? 'text-red-400' : 'text-neutral-500'
-                                     }>{u.membershipStatus}</span>
-                                     <div className={`mt-1 text-[10px] ${u.vipApproved ? 'text-green-400' : 'text-neutral-600'}`}>
-                                       VIP: {u.vipApproved ? 'odobren' : 'nije odobren'}
+                                  <td className="px-6 py-4">
+                                     <span className={`inline-flex rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${u.emailVerified ? 'border-green-500/25 bg-green-500/10 text-green-400' : 'border-neutral-500/20 bg-neutral-500/10 text-neutral-400'}`}>
+                                       {u.emailVerified ? 'VERIFIKOVAN' : 'NIJE VERIFIKOVAN'}
+                                     </span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                     <span className={`inline-flex rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${getUserAccountClass(u)}`}>
+                                       {getUserAccountLabel(u)}
+                                     </span>
+                                     <div className="mt-2 text-[10px] font-bold uppercase tracking-widest text-neutral-600">
+                                       VIP: {u.vipAccess ? 'aktivan' : 'zakljucan'}
                                      </div>
-                                     <div className="mt-1 text-[10px] text-neutral-600">{u.accountStatus || u.status || 'active'}</div>
+                                  </td>
+                                  <td className="px-6 py-4 text-xs font-bold text-neutral-300">
+                                     <div>{getUserPackageLabel(u)}</div>
+                                     {u.selectedPlan && u.selectedPlan !== 'free' && !u.vipAccess && (
+                                       <div className="mt-1 text-[10px] text-blue-400">Zahtev: {u.selectedPlan}</div>
+                                     )}
+                                     {u.vipAccess && u.planDurationDays ? <div className="text-[10px] text-neutral-500">{u.planDurationDays} dana</div> : null}
                                   </td>
                                   <td className="px-6 py-4 text-xs text-neutral-400">{u.registeredAt || '-'}</td>
                                   <td className="px-6 py-4 text-xs text-neutral-400">{u.membershipExpDate || '-'}</td>
@@ -1389,21 +1426,23 @@ export default function AdminDashboard() {
                                     />
                                   </td>
                                   <td className="px-6 py-4">
-                                     <div className="flex min-w-[360px] flex-wrap items-center gap-2">
-                                        <button onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.APPROVED)} className="rounded-lg bg-green-500/10 px-2 py-1 text-[10px] font-black text-green-400 hover:bg-green-500/20">Odobri VIP</button>
-                                        <button onClick={() => handleRemoveVip(u.id)} className="rounded-lg bg-orange-500/10 px-2 py-1 text-[10px] font-black text-orange-300 hover:bg-orange-500/20">Ukloni VIP</button>
-                                        <button onClick={() => handleActivateUserPlan(u, 'silver_7')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Silver 7</button>
-                                        <button onClick={() => handleActivateUserPlan(u, 'gold_30')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Gold 30</button>
-                                        <button onClick={() => handleActivateUserPlan(u, 'elite_90')} className="rounded-lg bg-gold-500/10 px-2 py-1 text-[10px] font-black text-gold-400 hover:bg-gold-500/20">Aktiviraj Elite 90</button>
-                                        <button onClick={() => handleExtendUser(u, 7)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+7 dana</button>
-                                        <button onClick={() => handleExtendUser(u, 30)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+30 dana</button>
-                                        <button onClick={() => handleExtendUser(u, 90)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-300 hover:bg-white/10">+90 dana</button>
+                                     <div className="grid min-w-[520px] grid-cols-2 gap-2 xl:grid-cols-3">
+                                        <button disabled={u.emailVerified} onClick={() => handleVerifyUser(u)} className="rounded-xl bg-green-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-green-400 hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-35">Verifikuj nalog</button>
+                                        <button onClick={() => handleSetFreeUser(u)} className="rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:bg-white/10">Free</button>
+                                        <button onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.APPROVED)} className="rounded-xl bg-green-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-green-400 hover:bg-green-500/20">Odobri VIP</button>
+                                        <button onClick={() => handleRemoveVip(u)} className="rounded-xl bg-orange-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 hover:bg-orange-500/20">Ukini VIP</button>
+                                        <button onClick={() => handleActivateUserPlan(u, 'silver_7')} className="rounded-xl bg-gold-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gold-400 hover:bg-gold-500/20">Silver 7</button>
+                                        <button onClick={() => handleActivateUserPlan(u, 'gold_30')} className="rounded-xl bg-gold-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gold-400 hover:bg-gold-500/20">Gold 30</button>
+                                        <button onClick={() => handleActivateUserPlan(u, 'elite_90')} className="rounded-xl bg-gold-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gold-400 hover:bg-gold-500/20">Elite 90</button>
+                                        <button onClick={() => handleExtendUser(u, 7)} className="rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:bg-white/10">+7 dana</button>
+                                        <button onClick={() => handleExtendUser(u, 30)} className="rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:bg-white/10">+30 dana</button>
+                                        <button onClick={() => handleExtendUser(u, 90)} className="rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:bg-white/10">+90 dana</button>
                                         {u.accountStatus === 'blocked' || u.membershipStatus === MembershipStatus.BLOCKED ? (
-                                          <button onClick={() => handleUnblockUser(u.id)} className="rounded-lg bg-green-500/10 px-2 py-1 text-[10px] font-black text-green-400 hover:bg-green-500/20">Odblokiraj</button>
+                                          <button onClick={() => handleUnblockUser(u.id)} className="rounded-xl bg-green-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-green-400 hover:bg-green-500/20">Odblokiraj</button>
                                         ) : (
-                                          <button onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.BLOCKED)} className="rounded-lg bg-red-500/10 px-2 py-1 text-[10px] font-black text-red-400 hover:bg-red-500/20">Blokiraj</button>
+                                          <button onClick={() => handleUpdateUserStatus(u.id, MembershipStatus.BLOCKED)} className="rounded-xl bg-red-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 hover:bg-red-500/20">Blokiraj</button>
                                         )}
-                                        <button onClick={() => handleDeleteUser(u.id)} className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-black text-neutral-500 hover:text-red-400">
+                                        <button onClick={() => handleDeleteUser(u.id)} className="rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-red-400">
                                           Obriši
                                         </button>
                                      </div>
@@ -1412,7 +1451,7 @@ export default function AdminDashboard() {
                               ))}
                               {filteredUsers.length === 0 && (
                                 <tr>
-                                  <td colSpan={8} className="px-6 py-10 text-center text-neutral-500 font-bold">
+                                  <td colSpan={9} className="px-6 py-10 text-center text-neutral-500 font-bold">
                                     Nema korisnika za izabrani filter.
                                   </td>
                                 </tr>

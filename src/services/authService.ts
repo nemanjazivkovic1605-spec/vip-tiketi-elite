@@ -157,18 +157,30 @@ const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: 
   const role = data.role === 'admin' || data.isAdmin === true || isTrustedAdminEmail(email) ? 'admin' : 'user';
   const isAdmin = role === 'admin';
   const accountStatus = data.status === 'blocked' || data.accountStatus === 'blocked' ? 'blocked' : 'active';
+  const emailVerified = isAdmin || firebaseUser?.emailVerified === true || data.emailVerified === true || data.verified === true;
+  const rawMembership = getMembershipStatus(data, isAdmin, vipExpiresAt);
+  const hasActiveVipEntitlement = accountStatus === 'active'
+    && (data.vipApproved === true || data.vipAccess === true)
+    && rawMembership === MembershipStatus.APPROVED
+    && isFutureDate(vipExpiresAt);
+  const hasActiveVip = emailVerified && hasActiveVipEntitlement;
   const computedStatus = accountStatus === 'blocked'
     ? MembershipStatus.BLOCKED
-    : getMembershipStatus(data, isAdmin, vipExpiresAt);
-  const vipApproved = isAdmin || data.vipApproved === true || data.vipAccess === true;
-  const vipAccess = isAdmin || (accountStatus === 'active' && vipApproved && computedStatus === MembershipStatus.APPROVED && isFutureDate(vipExpiresAt));
+    : isAdmin || hasActiveVip
+      ? MembershipStatus.APPROVED
+      : emailVerified
+        ? MembershipStatus.FREE
+        : rawMembership;
+  const vipApproved = isAdmin || hasActiveVipEntitlement;
+  const vipAccess = isAdmin || hasActiveVip;
 
   return {
     id: uid,
     uid,
     email,
     displayName: data.displayName || firebaseUser?.displayName || email.split('@')[0],
-    emailVerified: isAdmin || firebaseUser?.emailVerified === true || data.emailVerified === true,
+    emailVerified,
+    verified: emailVerified,
     membershipStatus: computedStatus as MembershipStatus,
     status: accountStatus,
     accountStatus,
@@ -187,6 +199,72 @@ const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: 
     approvedAt: toIsoString(data.approvedAt) || null,
     approvedBy: data.approvedBy || null,
     adminNote: data.adminNote || '',
+  };
+};
+
+const getFreePlanPayload = () => {
+  const freePlan = getPlanById('free');
+  return {
+    membershipStatus: MembershipStatus.FREE,
+    plan: freePlan.id,
+    planName: freePlan.name,
+    planDurationDays: freePlan.durationDays,
+    vipAccess: false,
+    vipApproved: false,
+    vipExpiresAt: null,
+    vip_expires_at: null,
+  };
+};
+
+const getAccessNormalizationPayload = (firebaseUser: FirebaseUser, data: DocumentData) => {
+  const email = normalizeEmail(data.email || firebaseUser.email);
+  const isAdmin = isTrustedAdminEmail(email) || data.role === 'admin' || data.isAdmin === true;
+  if (isAdmin) return null;
+
+  const emailVerified = firebaseUser.emailVerified === true || data.emailVerified === true || data.verified === true;
+  const accountStatus = data.status === 'blocked' || data.accountStatus === 'blocked' ? 'blocked' : 'active';
+  const vipExpiresAt = getVipExpiresAt(data);
+  const hasActiveVip = accountStatus === 'active'
+    && data.membershipStatus === MembershipStatus.APPROVED
+    && (data.vipApproved === true || data.vipAccess === true)
+    && isFutureDate(vipExpiresAt);
+
+  if (accountStatus === 'blocked') {
+    return {
+      emailVerified,
+      vipAccess: false,
+      vipApproved: false,
+      updatedAt: serverTimestamp(),
+    };
+  }
+
+  if (hasActiveVip) {
+    return {
+      emailVerified,
+      membershipStatus: MembershipStatus.APPROVED,
+      status: 'active',
+      accountStatus: 'active',
+      vipAccess: true,
+      vipApproved: true,
+      updatedAt: serverTimestamp(),
+    };
+  }
+
+  if (emailVerified) {
+    return {
+      emailVerified: true,
+      verified: true,
+      status: 'active',
+      accountStatus: 'active',
+      ...getFreePlanPayload(),
+      updatedAt: serverTimestamp(),
+    };
+  }
+
+  return {
+    emailVerified: false,
+    verified: false,
+    updatedAt: serverTimestamp(),
   };
 };
 
@@ -264,8 +342,12 @@ const ensureUserDocument = async (firebaseUser: FirebaseUser, selectedPlanId?: s
 
   await bootstrapAdminUserDocument(firebaseUser);
 
+  const latestSnapshot = await getDoc(userRef);
+  const normalizationPayload = getAccessNormalizationPayload(firebaseUser, latestSnapshot.data() || {});
+
   await setDoc(userRef, {
-    emailVerified: isTrustedAdminEmail(firebaseUser.email) || firebaseUser.emailVerified,
+    emailVerified: isTrustedAdminEmail(firebaseUser.email) || firebaseUser.emailVerified || latestSnapshot.data()?.emailVerified === true,
+    ...(normalizationPayload || {}),
     updatedAt: serverTimestamp(),
   }, { merge: true });
 
@@ -439,6 +521,27 @@ export const authService = {
     await authService.activatePlan(user, planId, adminEmail);
   },
 
+  verifyUser: async (user: User) => {
+    const hasActiveVip = user.membershipStatus === MembershipStatus.APPROVED && isFutureDate(user.vipExpiresAt || user.vip_expires_at);
+    await updateDoc(doc(db, 'users', user.id), {
+      emailVerified: true,
+      verified: true,
+      status: 'active',
+      accountStatus: 'active',
+      ...(hasActiveVip ? {} : getFreePlanPayload()),
+      updatedAt: serverTimestamp(),
+    });
+  },
+
+  setFreeUser: async (user: User) => {
+    await updateDoc(doc(db, 'users', user.id), {
+      status: 'active',
+      accountStatus: 'active',
+      ...getFreePlanPayload(),
+      updatedAt: serverTimestamp(),
+    });
+  },
+
   rejectUser: async (userId: string) => {
     await updateDoc(doc(db, 'users', userId), {
       membershipStatus: MembershipStatus.REMOVED,
@@ -471,6 +574,8 @@ export const authService = {
 
   removeVip: async (userId: string) => {
     await updateDoc(doc(db, 'users', userId), {
+      status: 'active',
+      accountStatus: 'active',
       membershipStatus: MembershipStatus.REMOVED,
       plan: 'free',
       selectedPlan: 'free',
@@ -485,6 +590,7 @@ export const authService = {
   blockUser: async (userId: string) => {
     await updateDoc(doc(db, 'users', userId), {
       status: 'blocked',
+      accountStatus: 'blocked',
       membershipStatus: MembershipStatus.BLOCKED,
       vipAccess: false,
       vipApproved: false,
@@ -495,6 +601,7 @@ export const authService = {
   unblockUser: async (userId: string) => {
     await updateDoc(doc(db, 'users', userId), {
       status: 'active',
+      accountStatus: 'active',
       membershipStatus: MembershipStatus.FREE,
       plan: 'free',
       selectedPlan: 'free',

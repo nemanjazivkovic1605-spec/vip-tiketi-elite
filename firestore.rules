@@ -24,7 +24,15 @@ service cloud.firestore {
     }
 
     function hasVerifiedEmail() {
-      return isAdmin() || (isSignedIn() && request.auth.token.email_verified == true);
+      return isAdmin() || (
+        isSignedIn() && (
+          request.auth.token.email_verified == true ||
+          (
+            exists(userPath(request.auth.uid)) &&
+            get(userPath(request.auth.uid)).data.emailVerified == true
+          )
+        )
+      );
     }
 
     function currentUser() {
@@ -105,8 +113,37 @@ service cloud.firestore {
       );
       allow update: if isAdmin() || (
         isOwner(userId) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emailVerified', 'updatedAt']) &&
-        incoming().emailVerified == request.auth.token.email_verified
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emailVerified', 'verified', 'updatedAt']) &&
+        incoming().emailVerified == request.auth.token.email_verified &&
+        (!request.resource.data.keys().hasAny(['verified']) || incoming().verified == request.auth.token.email_verified)
+      ) || (
+        isOwner(userId) &&
+        (request.auth.token.email_verified == true || existing().emailVerified == true) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'emailVerified',
+          'verified',
+          'status',
+          'accountStatus',
+          'membershipStatus',
+          'plan',
+          'planName',
+          'planDurationDays',
+          'vipAccess',
+          'vipApproved',
+          'vipExpiresAt',
+          'vip_expires_at',
+          'updatedAt'
+        ]) &&
+        incoming().emailVerified == true &&
+        incoming().verified == true &&
+        incoming().status == 'active' &&
+        incoming().accountStatus == 'active' &&
+        incoming().membershipStatus == 'free' &&
+        incoming().plan == 'free' &&
+        incoming().vipAccess == false &&
+        incoming().vipApproved == false &&
+        incoming().vipExpiresAt == null &&
+        incoming().vip_expires_at == null
       ) || (
         isOwner(userId) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
