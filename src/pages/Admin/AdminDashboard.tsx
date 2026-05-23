@@ -1276,7 +1276,7 @@ export default function AdminDashboard() {
     { id: 'users', label: 'Korisnici', icon: <Users size={20} /> },
     { id: 'matches', label: 'Baza utakmica', icon: <Database size={20} /> },
     { id: 'tips', label: 'Tipovi', icon: <FileText size={20} /> },
-    { id: 'analyses', label: 'Dnevne analize', icon: <TrendingUp size={20} /> },
+    { id: 'analyses', label: 'Dnevni Tipovi', icon: <TrendingUp size={20} /> },
     { id: 'settings', label: 'Podešavanja', icon: <Settings size={20} /> },
   ];
 
