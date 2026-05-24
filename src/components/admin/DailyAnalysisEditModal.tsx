@@ -11,6 +11,10 @@ type DailyAnalysisEditModalProps = {
 };
 
 const fieldClass = 'w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50';
+const getWriteErrorMessage = (action: string, writeError: unknown) => {
+  const details = writeError instanceof Error ? writeError.message : String(writeError);
+  return `${action} nije uspelo. ${details}`;
+};
 
 export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDelete }: DailyAnalysisEditModalProps) {
   const [draft, setDraft] = useState<DailyAnalysisItem>({ ...analysis });
@@ -40,7 +44,7 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
       onClose();
     } catch (saveError) {
       console.error('Daily analysis save failed:', saveError);
-      setError('Čuvanje nije uspelo. Proverite pristup bazi i pokušajte ponovo.');
+      setError(getWriteErrorMessage('Čuvanje', saveError));
     } finally {
       setSaving(false);
     }
@@ -59,7 +63,7 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
       onClose();
     } catch (deleteError) {
       console.error('Daily analysis delete failed:', deleteError);
-      setError('Brisanje nije uspelo. Pokušajte ponovo.');
+      setError(getWriteErrorMessage('Brisanje', deleteError));
     } finally {
       setSaving(false);
     }
