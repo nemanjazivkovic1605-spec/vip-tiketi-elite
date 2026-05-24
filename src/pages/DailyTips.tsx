@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, Pencil, ShieldCheck, Sparkles, Star, TrendingUp } from 'lucide-react';
-import { DailyAnalysisItem } from '../types';
+import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
 import { getDailyAnalysisDates } from '../utils/dailyDates';
-import { dailyAnalysesService } from '../services/dailyAnalysesService';
+import { dailyAnalysesService, isQuickResultPredictionSupported } from '../services/dailyAnalysesService';
 import { useAuth } from '../hooks/useAuth';
 import DailyAnalysisEditModal from '../components/admin/DailyAnalysisEditModal';
 
@@ -74,7 +74,7 @@ const LockedPanel = () => (
   </button>
 );
 
-const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void }) => {
+const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onResultSaved }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void; onResultSaved: () => Promise<void> }) => {
   const access = item.type || item.access;
   const isVipLocked = item.locked === true || (access === 'VIP' && !canAccessVip);
   const hasOdds = Number.isFinite(Number(item.odds)) && Number(item.odds) > 1;
@@ -83,6 +83,53 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit }: { key?: React.Key
   const risk = item.riskLevel || 'MEDIUM';
   const homeTeam = item.homeTeam || 'Meč';
   const awayTeam = item.awayTeam || 'zaključan';
+  const [homeScore, setHomeScore] = useState<number | ''>(item.homeScore ?? '');
+  const [awayScore, setAwayScore] = useState<number | ''>(item.awayScore ?? '');
+  const [manualStatus, setManualStatus] = useState<DailyAnalysisStatus>(item.status || 'ACTIVE');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const supportedPrediction = isQuickResultPredictionSupported(item.prediction || '');
+  const showManualStatus = !supportedPrediction && homeScore !== '' && awayScore !== '';
+
+  useEffect(() => {
+    setHomeScore(item.homeScore ?? '');
+    setAwayScore(item.awayScore ?? '');
+    setManualStatus(item.status || 'ACTIVE');
+    setErrorMessage(null);
+  }, [item.id, item.homeScore, item.awayScore, item.status]);
+
+  const handleSaveResult = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setErrorMessage(null);
+
+    if (homeScore === '' || awayScore === '') {
+      setErrorMessage('Unesite rezultat za oba tima.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const patch: Partial<DailyAnalysisItem> = {
+        homeScore,
+        awayScore,
+      };
+
+      if (supportedPrediction) {
+        patch.prediction = item.prediction;
+      } else {
+        patch.status = manualStatus;
+      }
+
+      await dailyAnalysesService.updateManualAnalysis(item.id, patch);
+      await onResultSaved();
+    } catch (error) {
+      console.error('Failed to save daily analysis result:', error);
+      setErrorMessage('Greška prilikom upisa rezultata.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <motion.article
@@ -90,20 +137,11 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit }: { key?: React.Key
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 10 }}
-      onClick={isAdmin ? () => onEdit(item) : undefined}
-      onKeyDown={isAdmin ? (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onEdit(item);
-        }
-      } : undefined}
-      role={isAdmin ? 'button' : undefined}
-      tabIndex={isAdmin ? 0 : undefined}
       className={`group relative overflow-hidden rounded-[1.45rem] border bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(4,4,4,0.98))] p-3.5 shadow-[0_14px_45px_rgba(0,0,0,0.34)] transition-all hover:-translate-y-0.5 md:p-4 ${
         isElite
           ? 'border-gold-500/35 shadow-[0_0_44px_rgba(245,124,0,0.14)]'
           : 'border-white/10 hover:border-gold-500/30 hover:shadow-[0_0_32px_rgba(245,124,0,0.1)]'
-      } ${isAdmin ? 'cursor-pointer' : ''}`}
+      }`}
     >
       <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gold-500/10 blur-3xl" />
 
@@ -209,6 +247,71 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit }: { key?: React.Key
         </div>
       </div>
 
+      {isAdmin && !isVipLocked && (
+        <div className="relative mt-4 rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="mb-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <label className="space-y-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              <span>Domaćin</span>
+              <input
+                type="number"
+                min={0}
+                value={homeScore}
+                onChange={(event) => setHomeScore(event.target.value === '' ? '' : Number(event.target.value))}
+                className="w-full rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white outline-none focus:border-gold-500/50"
+              />
+            </label>
+            <label className="space-y-1 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              <span>Gost</span>
+              <input
+                type="number"
+                min={0}
+                value={awayScore}
+                onChange={(event) => setAwayScore(event.target.value === '' ? '' : Number(event.target.value))}
+                className="w-full rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white outline-none focus:border-gold-500/50"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={handleSaveResult}
+              className="inline-flex min-h-[46px] items-center justify-center rounded-2xl bg-gold-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              ✔ Upiši rezultat
+            </button>
+          </div>
+
+          <div className="mb-3 text-[10px] uppercase tracking-widest text-neutral-400">
+            {supportedPrediction ? (
+              'Sistem će automatski proceniti status za ovu prognozu.'
+            ) : (
+              'Tip nije podržan za automatsko računanje. Izaberite status ručno.'
+            )}
+          </div>
+
+          {showManualStatus && (
+            <label className="mb-3 flex flex-col gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
+              <span>Odaberite status</span>
+              <select
+                value={manualStatus}
+                onChange={(event) => setManualStatus(event.target.value as DailyAnalysisStatus)}
+                className="rounded-2xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white outline-none focus:border-gold-500/50"
+              >
+                <option value="WON">PROŠAO</option>
+                <option value="LOST">PAO</option>
+                <option value="POSTPONED">ODLOŽENO</option>
+                <option value="REFUND">POVRAT</option>
+              </select>
+            </label>
+          )}
+
+          {errorMessage && (
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] font-black uppercase tracking-widest text-red-200">
+              {errorMessage}
+            </div>
+          )}
+        </div>
+      )}
+
       {!isVipLocked && <div className="relative mt-3 grid gap-2 sm:grid-cols-2">
         <Metric label={item.sport === 'basketball' ? 'Prosek poena' : 'Prosek golova'} value={item.averageTotal} />
         <Metric label="H2H" value={item.h2hNote} />
@@ -307,7 +410,7 @@ export default function DailyTips() {
           <div className="grid gap-4 lg:grid-cols-2">
             <AnimatePresence mode="popLayout">
               {activeItems.map((item) => (
-                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} isAdmin={isAdmin} onEdit={setEditingAnalysis} />
+                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} isAdmin={isAdmin} onEdit={setEditingAnalysis} onResultSaved={refreshAnalyses} />
               ))}
             </AnimatePresence>
           </div>

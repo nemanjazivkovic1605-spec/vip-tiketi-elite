@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { AlertCircle, Calendar, CheckCircle2, Clock, Search, XCircle } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
 import { Match, TicketStatus, Tip } from '../types';
+import { isPublicFinishedTicket } from '../utils/tickets';
 
 type PublishedResult = {
   tip: Tip;
@@ -26,6 +27,8 @@ const formatDate = (date: string) => {
 const statusLabel = (status: TicketStatus) => {
   if (status === TicketStatus.WON) return 'PROSLO';
   if (status === TicketStatus.LOST) return 'PALO';
+  if (status === TicketStatus.POSTPONED) return 'ODLOŽENO';
+  if (status === TicketStatus.REFUND) return 'POVRAT';
   return 'AKTIVAN';
 };
 
@@ -36,6 +39,14 @@ const getStatusMeta = (status: TicketStatus) => {
 
   if (status === TicketStatus.LOST) {
     return { className: 'text-red-500', badge: 'bg-red-500/10 border-red-500/20 text-red-500', icon: <XCircle size={14} /> };
+  }
+
+  if (status === TicketStatus.POSTPONED) {
+    return { className: 'text-blue-500', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-500', icon: <Clock size={14} /> };
+  }
+
+  if (status === TicketStatus.REFUND) {
+    return { className: 'text-cyan-500', badge: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-500', icon: <XCircle size={14} /> };
   }
 
   return { className: 'text-neutral-500', badge: 'bg-white/5 border-white/10 text-neutral-400', icon: <Clock size={14} /> };
@@ -65,7 +76,7 @@ export default function Results() {
 
   const results = useMemo<PublishedResult[]>(() => {
     return tips
-      .filter((tip) => tip.status === TicketStatus.WON || tip.status === TicketStatus.LOST)
+      .filter((tip) => isPublicFinishedTicket(tip.status))
       .flatMap((tip) => tip.matches.map((match) => ({ tip, match })));
   }, [tips]);
 

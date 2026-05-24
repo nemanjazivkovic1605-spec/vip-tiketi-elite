@@ -222,6 +222,8 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
               <option value="ACTIVE">Aktivan</option>
               <option value="WON">Prošao</option>
               <option value="LOST">Pao</option>
+              <option value="POSTPONED">Odloženo</option>
+              <option value="REFUND">Povrat</option>
               <option value="HIDDEN">Sakriven</option>
             </select>
           </label>

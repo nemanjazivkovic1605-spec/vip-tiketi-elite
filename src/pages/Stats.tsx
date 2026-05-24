@@ -15,7 +15,8 @@ const statusMeta = (status: TicketStatus) => {
   if (status === TicketStatus.WON) return { label: '✓ POGOĐENO', className: 'text-green-300 bg-green-500/10 border-green-500/20' };
   if (status === TicketStatus.LOST) return { label: '✕ PROMAŠENO', className: 'text-red-300 bg-red-500/10 border-red-500/20' };
   if (status === TicketStatus.POSTPONED) return { label: 'ODLOŽENO', className: 'text-blue-300 bg-blue-500/10 border-blue-500/20' };
-  return { label: 'KVOTA 1 / POVRAT', className: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20' };
+  if (status === TicketStatus.REFUND) return { label: 'KVOTA 1 / POVRAT', className: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20' };
+  return { label: 'AKTIVAN', className: 'text-neutral-400 bg-white/5 border-white/10' };
 };
 
 const ticketRows = (tickets: Tip[]) =>

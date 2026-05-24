@@ -43,7 +43,7 @@ const normalizeNumber = (value: unknown): number | undefined => {
 const formatScoreResult = (homeScore?: number, awayScore?: number): string | undefined =>
   homeScore !== undefined && awayScore !== undefined ? `${homeScore}:${awayScore}` : undefined;
 
-const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: number, awayScore?: number): DailyAnalysisStatus | undefined => {
+export const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: number, awayScore?: number): DailyAnalysisStatus | undefined => {
   if (homeScore === undefined || awayScore === undefined) return undefined;
   const total = homeScore + awayScore;
   const normalized = prediction.trim().toUpperCase();
@@ -75,11 +75,14 @@ const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: number, awa
   return undefined;
 };
 
+export const isQuickResultPredictionSupported = (prediction: string) =>
+  evaluateDailyAnalysisStatus(prediction, 1, 1) !== undefined;
+
 const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => ({
   id,
   source: data.source === 'api-basketball' ? 'api-basketball' : data.source === 'api-football' ? 'api-football' : 'manual',
   sport: data.sport === 'basketball' ? 'basketball' : 'football',
-  status: ['ACTIVE', 'WON', 'LOST', 'HIDDEN'].includes(data.status) ? data.status : 'ACTIVE',
+  status: ['ACTIVE', 'WON', 'LOST', 'POSTPONED', 'REFUND', 'HIDDEN'].includes(data.status) ? data.status : 'ACTIVE',
   manualOverride: data.manualOverride === true,
   topPick: data.topPick === true,
   units: Number.isFinite(Number(data.units)) ? Number(data.units) : undefined,

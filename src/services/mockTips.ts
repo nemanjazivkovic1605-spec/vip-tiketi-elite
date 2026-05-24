@@ -11,7 +11,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, MonthlyStats } from '../types';
+import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, MonthlyStats, DailyAnalysisItem } from '../types';
 import {
   calculateTicketUnitsProfit,
   calculateTotalOdds,
@@ -94,6 +94,117 @@ const sortTips = (tips: Tip[]) =>
 
 const publicOnly = (tips: Tip[]) =>
   tips.filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED);
+
+const DAILY_ANALYSES_COLLECTION = 'dailyAnalyses';
+const getDailyAnalysesCollection = () => collection(db, DAILY_ANALYSES_COLLECTION);
+
+const normalizeDailyAnalysisDoc = (analysisDoc: any): DailyAnalysisItem => {
+  const data = analysisDoc.data() as Record<string, unknown>;
+
+  return {
+    id: analysisDoc.id,
+    source: 'manual',
+    sport: typeof data.sport === 'string' && data.sport === 'basketball' ? 'basketball' : 'football',
+    status: typeof data.status === 'string' ? data.status as DailyAnalysisItem['status'] : 'ACTIVE',
+    manualOverride: data.manualOverride === true,
+    topPick: data.topPick === true,
+    units: Number.isFinite(Number(data.units)) ? Number(data.units) : undefined,
+    date: typeof data.date === 'string' ? data.date : new Date().toISOString().split('T')[0],
+    time: typeof data.time === 'string' ? data.time : '12:00',
+    league: typeof data.league === 'string' ? data.league : '',
+    leagueId: Number.isFinite(Number(data.leagueId)) ? Number(data.leagueId) : undefined,
+    homeTeam: typeof data.homeTeam === 'string' ? data.homeTeam : '',
+    awayTeam: typeof data.awayTeam === 'string' ? data.awayTeam : '',
+    homeScore: Number.isFinite(Number(data.homeScore)) ? Number(data.homeScore) : undefined,
+    awayScore: Number.isFinite(Number(data.awayScore)) ? Number(data.awayScore) : undefined,
+    result: typeof data.result === 'string' ? data.result : undefined,
+    homeLogo: typeof data.homeLogo === 'string' ? data.homeLogo : '',
+    awayLogo: typeof data.awayLogo === 'string' ? data.awayLogo : '',
+    homeFormPercent: Number.isFinite(Number(data.homeFormPercent)) ? Number(data.homeFormPercent) : null,
+    awayFormPercent: Number.isFinite(Number(data.awayFormPercent)) ? Number(data.awayFormPercent) : null,
+    formNote: typeof data.formNote === 'string' ? data.formNote : undefined,
+    prediction: typeof data.prediction === 'string' ? data.prediction : 'Over 1.5',
+    odds: Number.isFinite(Number(data.odds)) ? Number(data.odds) : 1.5,
+    reasoning: typeof data.reasoning === 'string' ? data.reasoning : '',
+    confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : undefined,
+    riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(String(data.riskLevel)) ? String(data.riskLevel) as DailyAnalysisItem['riskLevel'] : undefined,
+    averageTotal: typeof data.averageTotal === 'string' ? data.averageTotal : undefined,
+    h2hNote: typeof data.h2hNote === 'string' ? data.h2hNote : undefined,
+    badges: Array.isArray(data.badges) ? data.badges.filter(Boolean) : undefined,
+    access: data.access === 'VIP' ? 'VIP' : 'FREE',
+    sortOrder: Number.isFinite(Number(data.sortOrder)) ? Number(data.sortOrder) : 0,
+    enabled: data.enabled !== false,
+    hidden: data.hidden === true,
+    createdAt: typeof data.createdAt === 'string' ? data.createdAt : undefined,
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
+  };
+};
+
+const sortDailyAnalyses = (analyses: DailyAnalysisItem[]) =>
+  [...analyses].sort((a, b) => {
+    const dateCompare = b.date.localeCompare(a.date);
+    if (dateCompare !== 0) return dateCompare;
+    return (b.time || '').localeCompare(a.time || '');
+  });
+
+const isFinishedDailyAnalysis = (analysis: DailyAnalysisItem) =>
+  analysis.status !== 'ACTIVE' && analysis.status !== 'HIDDEN';
+
+const mapDailyAnalysisStatus = (status?: DailyAnalysisItem['status']): TicketStatus => {
+  if (status === 'WON') return TicketStatus.WON;
+  if (status === 'LOST') return TicketStatus.LOST;
+  if (status === 'POSTPONED') return TicketStatus.POSTPONED;
+  if (status === 'REFUND') return TicketStatus.REFUND;
+  return TicketStatus.PENDING;
+};
+
+const mapDailyAnalysisToTip = (analysis: DailyAnalysisItem): Tip => {
+  const status = mapDailyAnalysisStatus(analysis.status);
+  const result = analysis.result || (
+    analysis.homeScore !== undefined && analysis.awayScore !== undefined
+      ? `${analysis.homeScore}:${analysis.awayScore}`
+      : undefined
+  );
+
+  return normalizeTip({
+    id: `daily-${analysis.id}`,
+    source: 'admin',
+    publicationStatus: TipPublicationStatus.PUBLISHED,
+    date: analysis.date,
+    publishedDate: analysis.date,
+    publishedTime: analysis.time,
+    ticketType: 'SINGL',
+    matches: [{
+      id: `${analysis.id}-match`,
+      teams: `${analysis.homeTeam} - ${analysis.awayTeam}`,
+      homeTeam: analysis.homeTeam,
+      awayTeam: analysis.awayTeam,
+      league: analysis.league,
+      prediction: analysis.prediction,
+      odds: analysis.odds,
+      time: analysis.time,
+      result,
+      status,
+      analysis: analysis.reasoning,
+    }],
+    totalOdds: analysis.odds,
+    unitsStake: Number.isFinite(Number(analysis.units)) && Number(analysis.units) > 0 ? Number(analysis.units) : 3,
+    status,
+    analysis: analysis.reasoning || '',
+    isVip: analysis.access === 'VIP',
+    result,
+  });
+};
+
+const readFinishedDailyAnalysisTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(getDailyAnalysesCollection()));
+  const analysisTips = snapshot.docs
+    .map(normalizeDailyAnalysisDoc)
+    .filter(isFinishedDailyAnalysis)
+    .map(mapDailyAnalysisToTip);
+
+  return sortTips(analysisTips);
+};
 
 const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
@@ -243,10 +354,12 @@ const readPublishedTips = async (): Promise<Tip[]> => {
     getTicketsCollection(),
     where('publicationStatus', '==', TipPublicationStatus.PUBLISHED),
   ));
-  return sortTips(snapshot.docs.map((ticketDoc) => normalizeTip({
+  const tickets = snapshot.docs.map((ticketDoc) => normalizeTip({
     ...ticketDoc.data(),
     id: ticketDoc.id,
-  } as Tip)));
+  } as Tip));
+  const dailyTips = await readFinishedDailyAnalysisTips();
+  return sortTips(mergeTips(dailyTips, tickets));
 };
 
 const getMonthLabel = (key: string) => {
@@ -352,23 +465,32 @@ const calculateStats = (tips: Tip[]): GlobalStats => {
 
 export const mockTipsService = {
   getAllTips: async (): Promise<Tip[]> => {
-    return readAllTips();
+    const [tickets, dailyTips] = await Promise.all([
+      readAllTips(),
+      readFinishedDailyAnalysisTips(),
+    ]);
+    return sortTips(mergeTips(dailyTips, tickets));
   },
 
   getTips: async (): Promise<Tip[]> => {
-    return readPublishedSafeTips();
+    const [tickets, dailyTips] = await Promise.all([
+      readPublishedSafeTips(),
+      readFinishedDailyAnalysisTips(),
+    ]);
+    return sortTips(mergeTips(dailyTips, tickets));
   },
 
   getVisibleTips: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<Tip[]> => {
     if (access.canAccessVip) return readPublishedTips();
+    const dailyTips = await readFinishedDailyAnalysisTips();
     if (access.canAccessFree) {
       const [freeTips, vipSafeTips] = await Promise.all([
         readPublishedFullFreeTips(),
         readPublishedSafeVipTips(),
       ]);
-      return mergeTips(freeTips, vipSafeTips);
+      return mergeTips(dailyTips, mergeTips(freeTips, vipSafeTips));
     }
-    return readPublishedSafeTips();
+    return mergeTips(dailyTips, await readPublishedSafeTips());
   },
 
   getPublishedTips: async (): Promise<Tip[]> => {
@@ -377,11 +499,15 @@ export const mockTipsService = {
 
   getVipTips: async (): Promise<Tip[]> => {
     const tips = await readPublishedTips();
-    return tips.filter(t => t.isVip);
+    return sortTips(tips.filter((t) => t.isVip));
   },
 
   getFreeTips: async (): Promise<Tip[]> => {
-    return readPublishedFullFreeTips();
+    const [tips, dailyTips] = await Promise.all([
+      readPublishedFullFreeTips(),
+      readFinishedDailyAnalysisTips(),
+    ]);
+    return sortTips(mergeTips(dailyTips, tips).filter((t) => !t.isVip));
   },
 
   getStats: async (): Promise<GlobalStats> => {
@@ -486,6 +612,8 @@ export const mockTipsService = {
   },
 
   subscribe: (callback: () => void, access?: { canAccessFree: boolean; canAccessVip: boolean }): (() => void) => {
+    const dailyAnalysesQuery = query(getDailyAnalysesCollection());
+
     if (access?.canAccessFree && !access.canAccessVip) {
       const unsubscribers = [
         onSnapshot(
@@ -504,6 +632,14 @@ export const mockTipsService = {
             callback();
           }
         ),
+        onSnapshot(
+          dailyAnalysesQuery,
+          () => callback(),
+          (error) => {
+            console.error('Daily analyses subscription failed:', error);
+            callback();
+          }
+        ),
       ];
 
       return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
@@ -515,13 +651,25 @@ export const mockTipsService = {
         : query(getPublicTicketsCollection())
       : query(getTicketsCollection());
 
-    return onSnapshot(
-      ticketsQuery,
-      () => callback(),
-      (error) => {
-        console.error('Tickets shared store subscription failed:', error);
-        callback();
-      }
-    );
+    const unsubscribers = [
+      onSnapshot(
+        ticketsQuery,
+        () => callback(),
+        (error) => {
+          console.error('Tickets shared store subscription failed:', error);
+          callback();
+        }
+      ),
+      onSnapshot(
+        dailyAnalysesQuery,
+        () => callback(),
+        (error) => {
+          console.error('Daily analyses subscription failed:', error);
+          callback();
+        }
+      ),
+    ];
+
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   },
 };

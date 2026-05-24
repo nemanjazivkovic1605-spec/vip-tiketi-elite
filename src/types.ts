@@ -219,7 +219,7 @@ export type DailyAnalysisAccess = 'FREE' | 'VIP';
 export type DailyAnalysisSource = 'api-football' | 'api-basketball' | 'manual';
 export type DailyAnalysisSport = 'football' | 'basketball';
 export type DailyAnalysisRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
-export type DailyAnalysisStatus = 'ACTIVE' | 'WON' | 'LOST' | 'HIDDEN';
+export type DailyAnalysisStatus = 'ACTIVE' | 'WON' | 'LOST' | 'POSTPONED' | 'REFUND' | 'HIDDEN';
 
 export interface DailyAnalysisItem {
   id: string;
