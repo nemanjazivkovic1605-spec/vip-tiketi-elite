@@ -3,9 +3,9 @@ import { DailyAnalysisAccess, DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAn
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const BASKETBALL_API_BASE_URL = 'https://v1.basketball.api-sports.io';
 const TIMEZONE = 'Europe/Belgrade';
-const FOOTBALL_CANDIDATE_LIMIT = 16;
-const BASKETBALL_CANDIDATE_LIMIT = 16;
-const DISPLAY_LIMIT = 5;
+const FOOTBALL_CANDIDATE_LIMIT = 40;
+const BASKETBALL_CANDIDATE_LIMIT = 30;
+const DISPLAY_LIMIT = 10;
 const MIN_QUALITY_SCORE = 58;
 
 type ApiFixture = {
@@ -16,6 +16,7 @@ type ApiFixture = {
   league: {
     id: number;
     name: string;
+    country?: string;
   };
   teams: {
     home: { name: string; logo?: string };
@@ -30,6 +31,7 @@ type BasketballGame = {
   league: {
     id: number;
     name: string;
+    country?: string;
   };
   teams: {
     home: { name: string; logo?: string };
@@ -105,26 +107,50 @@ const pickTemplate = (seed: string, templates: string[]) => templates[stableInde
 
 const normalizeScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
-const leaguePopularity = (leagueName: string, sport: DailyAnalysisSport) => {
-  const name = leagueName.toLowerCase();
+const leagueText = (leagueName: string, country?: string) => `${leagueName} ${country || ''}`.toLowerCase();
+
+const leagueTier = (leagueName: string, sport: DailyAnalysisSport, country?: string) => {
+  const text = leagueText(leagueName, country);
 
   if (sport === 'basketball') {
-    if (name.includes('nba')) return 22;
-    if (name.includes('euroleague') || name.includes('euro league')) return 21;
-    if (name.includes('aba')) return 20;
-    if (name.includes('ncaa')) return 17;
-    if (name.includes('fiba')) return 17;
-    if (name.includes('acb') || name.includes('spain')) return 16;
-    if (name.includes('lega') || name.includes('italy')) return 15;
-    if (name.includes('bsl') || name.includes('turkey')) return 15;
-    return 6;
+    if (text.includes('nba') || text.includes('euroleague') || text.includes('euro league') || text.includes('aba')) return 4;
+    if (text.includes('ncaa') || text.includes('fiba') || text.includes('acb') || text.includes('spain')) return 3;
+    if (text.includes('lega') || text.includes('italy') || text.includes('bsl') || text.includes('turkey')) return 3;
+    if (text.includes('france') || text.includes('germany') || text.includes('greece') || text.includes('israel')) return 2;
+    return 1;
   }
 
-  if (name.includes('champions')) return 22;
-  if (name.includes('premier')) return 21;
-  if (name.includes('liga') || name.includes('serie') || name.includes('bundesliga')) return 18;
-  if (name.includes('euro') || name.includes('conference')) return 17;
-  return 7;
+  if (text.includes('champions') || text.includes('europa league') || text.includes('conference league')) return 4;
+  if (text.includes('premier league') || text.includes('serie a') || text.includes('la liga') || text.includes('primera division')) return 4;
+  if (text.includes('bundesliga') || text.includes('ligue 1')) return 4;
+  if (text.includes('england') || text.includes('italy') || text.includes('spain') || text.includes('germany') || text.includes('france')) return 3;
+  if (text.includes('eredivisie') || text.includes('netherlands') || text.includes('portugal') || text.includes('primeira')) return 3;
+  if (text.includes('turkey') || text.includes('super lig') || text.includes('belgium') || text.includes('scotland') || text.includes('austria')) return 2;
+  if (text.includes('serbia') || text.includes('croatia') || text.includes('switzerland') || text.includes('denmark') || text.includes('norway') || text.includes('sweden')) return 2;
+  return 1;
+};
+
+const leaguePopularity = (leagueName: string, sport: DailyAnalysisSport, country?: string) => {
+  const text = leagueText(leagueName, country);
+  const tier = leagueTier(leagueName, sport, country);
+
+  if (sport === 'basketball') {
+    if (text.includes('nba')) return 32;
+    if (text.includes('euroleague') || text.includes('euro league')) return 30;
+    if (text.includes('aba')) return 27;
+    if (text.includes('ncaa')) return 23;
+    if (text.includes('fiba')) return 22;
+    if (text.includes('acb') || text.includes('spain')) return 21;
+    if (text.includes('lega') || text.includes('italy')) return 20;
+    if (text.includes('bsl') || text.includes('turkey')) return 19;
+    return 6 + tier * 5;
+  }
+
+  if (text.includes('champions')) return 34;
+  if (text.includes('europa league') || text.includes('conference league')) return 30;
+  if (text.includes('premier league')) return 33;
+  if (text.includes('serie a') || text.includes('la liga') || text.includes('bundesliga') || text.includes('ligue 1')) return 31;
+  return 6 + tier * 7;
 };
 
 const makeBadges = (score: number, confidence: number, access: DailyAnalysisAccess) => {
@@ -296,8 +322,8 @@ const generateFootballPick = (
   return buildPick('Over 1.5', 0, 58, 58, pickTemplate(seed, lowDataTemplates), averageTotal, h2hNote, access);
 };
 
-const generateBasketballPick = (seed: string, leagueName: string, access: DailyAnalysisAccess) => {
-  const leagueBoost = leaguePopularity(leagueName, 'basketball');
+const generateBasketballPick = (seed: string, leagueName: string, access: DailyAnalysisAccess, country?: string) => {
+  const leagueBoost = leaguePopularity(leagueName, 'basketball', country);
   const variant = stableIndex(seed, 4);
   const h2hNote = leagueBoost >= 15 ? 'H2H: relevantan nivo takmicenja' : 'H2H: nedovoljno podataka';
   const averageTotal = leagueBoost >= 15 ? 'Poeni: tempo pod monitoringom' : 'Poeni: nedovoljno podataka';
@@ -338,7 +364,7 @@ const mapFootballFixture = async (fixture: ApiFixture, sortOrder: number): Promi
     time: Number.isFinite(date.getTime())
       ? date.toLocaleTimeString('sr-Latn-RS', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE })
       : '',
-    league: fixture.league.name,
+    league: fixture.league.country ? `${fixture.league.name} · ${fixture.league.country}` : fixture.league.name,
     leagueId: fixture.league.id,
     homeTeam: fixture.teams.home.name,
     awayTeam: fixture.teams.away.name,
@@ -359,14 +385,14 @@ const mapFootballFixture = async (fixture: ApiFixture, sortOrder: number): Promi
     sortOrder,
     enabled: true,
     hidden: false,
-    qualityScore: pick.qualityScore + leaguePopularity(fixture.league.name, 'football'),
+    qualityScore: pick.qualityScore + leaguePopularity(fixture.league.name, 'football', fixture.league.country),
   };
 };
 
 const mapBasketballGame = (game: BasketballGame, sortOrder: number): RankedAnalysis => {
   const seed = `basketball-${game.id}-${game.teams.home.name}-${game.teams.away.name}`;
   const provisionalAccess: DailyAnalysisAccess = sortOrder < 2 ? 'FREE' : 'VIP';
-  const pick = generateBasketballPick(seed, game.league.name, provisionalAccess);
+  const pick = generateBasketballPick(seed, game.league.name, provisionalAccess, game.league.country);
   const gameDate = new Date(game.date);
 
   return {
@@ -382,7 +408,7 @@ const mapBasketballGame = (game: BasketballGame, sortOrder: number): RankedAnaly
     time: game.time || (Number.isFinite(gameDate.getTime())
       ? gameDate.toLocaleTimeString('sr-Latn-RS', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE })
       : ''),
-    league: game.league.name,
+    league: game.league.country ? `${game.league.name} · ${game.league.country}` : game.league.name,
     leagueId: game.league.id,
     homeTeam: game.teams.home.name,
     awayTeam: game.teams.away.name,
@@ -411,14 +437,16 @@ const footballCandidateScore = (fixture: ApiFixture) => {
   const hasLogos = fixture.teams.home.logo && fixture.teams.away.logo ? 12 : 0;
   const time = new Date(fixture.fixture.date).getTime();
   const timeScore = Number.isFinite(time) ? 8 : 0;
-  return hasLogos + timeScore + leaguePopularity(fixture.league.name, 'football') + stableNumber(`${fixture.fixture.id}-candidate`, 0, 14);
+  const tierBonus = leagueTier(fixture.league.name, 'football', fixture.league.country) * 100;
+  return tierBonus + hasLogos + timeScore + leaguePopularity(fixture.league.name, 'football', fixture.league.country) + stableNumber(`${fixture.fixture.id}-candidate`, 0, 14);
 };
 
 const basketballCandidateScore = (game: BasketballGame) => {
   const hasLogos = game.teams.home.logo && game.teams.away.logo ? 12 : 0;
   const time = new Date(game.date).getTime();
   const timeScore = Number.isFinite(time) ? 8 : 0;
-  return hasLogos + timeScore + leaguePopularity(game.league.name, 'basketball') + stableNumber(`${game.id}-basket-candidate`, 0, 14);
+  const tierBonus = leagueTier(game.league.name, 'basketball', game.league.country) * 100;
+  return tierBonus + hasLogos + timeScore + leaguePopularity(game.league.name, 'basketball', game.league.country) + stableNumber(`${game.id}-basket-candidate`, 0, 14);
 };
 
 const fetchFootballAnalyses = async (date: string, signal?: AbortSignal): Promise<RankedAnalysis[]> => {
@@ -462,6 +490,8 @@ export const apiFootballService = {
     return [...football, ...basketball]
       .filter((item) => item.qualityScore >= MIN_QUALITY_SCORE)
       .sort((a, b) => {
+        const tierCompare = leagueTier(b.league, b.sport || 'football') - leagueTier(a.league, a.sport || 'football');
+        if (tierCompare !== 0) return tierCompare;
         if (a.qualityScore !== b.qualityScore) return b.qualityScore - a.qualityScore;
         return `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
       })

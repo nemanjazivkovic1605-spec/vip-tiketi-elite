@@ -18,6 +18,7 @@ import TicketEditModal from '../../components/admin/TicketEditModal';
 import { calculateTotalOdds, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
+const dailyPredictionOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5', 'Over poeni', 'Handicap favorit'];
 
 type TicketBuilderItem = {
   match: ImportedMatch;
@@ -2356,9 +2357,16 @@ export default function AdminDashboard() {
                         </label>
                         <label className="block">
                           <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
-                          <select value={dailyAnalysisForm.prediction} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, prediction: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50">
-                            {['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5', 'Over poeni', 'Handicap favorit'].map((option) => <option key={option} value={option}>{option}</option>)}
-                          </select>
+                          <input
+                            list="daily-prediction-options"
+                            value={dailyAnalysisForm.prediction}
+                            onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, prediction: event.target.value })}
+                            className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                            placeholder="Izaberi ili upiši tip, npr. DNB, 1&GG..."
+                          />
+                          <datalist id="daily-prediction-options">
+                            {dailyPredictionOptions.map((option) => <option key={option} value={option} />)}
+                          </datalist>
                         </label>
                         <label className="block">
                           <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Kvota</span>
