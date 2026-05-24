@@ -15,14 +15,16 @@ const fieldClass = 'w-full rounded-xl border border-white/10 bg-black/40 px-4 py
 export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDelete }: DailyAnalysisEditModalProps) {
   const [draft, setDraft] = useState<DailyAnalysisItem>({ ...analysis });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const updateDraft = (patch: Partial<DailyAnalysisItem>) => {
     setDraft((current) => ({ ...current, ...patch, manualOverride: true }));
   };
 
   const save = async (next = draft) => {
+    setError('');
     if (!next.date || !next.league.trim() || !next.homeTeam.trim() || !next.awayTeam.trim() || !next.prediction.trim()) {
-      alert('Popunite datum, ligu, timove i tip.');
+      setError('Popunite datum, ligu, timove i tip.');
       return;
     }
 
@@ -36,6 +38,9 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
         badges: (next.badges || []).filter(Boolean),
       });
       onClose();
+    } catch (saveError) {
+      console.error('Daily analysis save failed:', saveError);
+      setError('Čuvanje nije uspelo. Proverite pristup bazi i pokušajte ponovo.');
     } finally {
       setSaving(false);
     }
@@ -47,10 +52,14 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
 
   const remove = async () => {
     if (!confirm('Da li želite da obrišete ovu dnevnu analizu?')) return;
+    setError('');
     setSaving(true);
     try {
       await onDelete(draft.id);
       onClose();
+    } catch (deleteError) {
+      console.error('Daily analysis delete failed:', deleteError);
+      setError('Brisanje nije uspelo. Pokušajte ponovo.');
     } finally {
       setSaving(false);
     }
@@ -155,6 +164,12 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
             Sakriveno
           </label>
         </div>
+
+        {error && (
+          <p className="mt-5 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300">
+            {error}
+          </p>
+        )}
 
         <div className="mt-6 flex flex-wrap gap-3">
           <button type="button" disabled={saving} onClick={() => save()} className="inline-flex items-center gap-2 rounded-xl bg-gold-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black hover:bg-gold-600 disabled:opacity-50">
