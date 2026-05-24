@@ -15,9 +15,6 @@ import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, MonthlyStats } fr
 import {
   calculateTicketUnitsProfit,
   calculateTotalOdds,
-  formatLocalIsoDate,
-  formatLocalTime,
-  generateTicketCode,
   getTicketPublicationMeta,
   getTicketStake,
   getTicketUnitsStake,
@@ -38,34 +35,7 @@ const cleanAnalysis = (analysis?: string) => {
   return value;
 };
 
-const shouldUseRealPublishTime = (tip: Tip, wasAlreadyPublished: boolean) =>
-  !wasAlreadyPublished
-  && tip.publicationStatus === TipPublicationStatus.PUBLISHED
-  && tip.status === TicketStatus.PENDING;
-
-const buildPublicationAt = (publishedDate: string, publishedTime: string) =>
-  `${publishedDate}T${publishedTime}:00`;
-
-const getRealPublicationMeta = (tip: Pick<Tip, 'isVip'>, now = new Date()) => {
-  const publishedDate = formatLocalIsoDate(now);
-  const publishedTime = formatLocalTime(now);
-
-  return {
-    publishedDate,
-    publishedTime,
-    publishedAt: buildPublicationAt(publishedDate, publishedTime),
-    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime),
-  };
-};
-
-const withRealPublishTimeForNewActiveTicket = (tip: Tip, wasAlreadyPublished: boolean): Tip => {
-  if (!shouldUseRealPublishTime(tip, wasAlreadyPublished)) return tip;
-  const meta = getRealPublicationMeta(tip);
-  return {
-    ...tip,
-    ...meta,
-  };
-};
+const isValidTicketCode = (value?: string) => /^[FV]\d{12}$/.test((value || '').trim());
 
 const normalizeTip = (tip: Tip): Tip => {
   const matches = Array.isArray(tip.matches)
@@ -79,28 +49,16 @@ const normalizeTip = (tip: Tip): Tip => {
   const date = tip.date || new Date().toISOString().split('T')[0];
   const publicationStatus = tip.publicationStatus || TipPublicationStatus.DRAFT;
   const status = tip.status || TicketStatus.PENDING;
-  const explicitPublishedAt = (tip.publishedAt || '').trim();
-  const explicitPublishedDate = normalizePublishedDate(tip.publishedDate || date);
-  const explicitPublishedAtDate = new Date(explicitPublishedAt);
-  const isActivePublished = publicationStatus === TipPublicationStatus.PUBLISHED && status === TicketStatus.PENDING;
-  const publicationMeta = isActivePublished && explicitPublishedAt && Number.isFinite(explicitPublishedAtDate.getTime())
-    ? {
-      publishedDate: formatLocalIsoDate(explicitPublishedAtDate),
-      publishedTime: formatLocalTime(explicitPublishedAtDate),
-      publishedAt: explicitPublishedAt,
-      ticketCode: generateTicketCode(Boolean(tip.isVip), formatLocalIsoDate(explicitPublishedAtDate), formatLocalTime(explicitPublishedAtDate)),
-    }
-    : isActivePublished
-      ? getRealPublicationMeta(tip)
-      : getTicketPublicationMeta({
-        id: tip.id,
-        date,
-        isVip: Boolean(tip.isVip),
-        publishedDate: date,
-        publishedTime: explicitPublishedDate === normalizePublishedDate(date) ? tip.publishedTime : undefined,
-      });
+  const publishedDate = normalizePublishedDate(date);
+  const publicationMeta = getTicketPublicationMeta({
+    id: tip.id,
+    date: publishedDate,
+    isVip: Boolean(tip.isVip),
+    publishedDate,
+    publishedTime: tip.publishedTime,
+  });
   const existingTicketCode = (tip.ticketCode || '').trim();
-  const ticketCode = existingTicketCode && !existingTicketCode.startsWith('T-')
+  const ticketCode = existingTicketCode && isValidTicketCode(existingTicketCode)
     ? existingTicketCode
     : publicationMeta.ticketCode;
 
@@ -116,7 +74,7 @@ const normalizeTip = (tip: Tip): Tip => {
     publicationStatus,
     status,
     isVip: Boolean(tip.isVip),
-    date,
+    date: publishedDate,
     analysis: cleanAnalysis(tip.analysis),
     matches,
     totalOdds: tip.totalOddsOverride && Number.isFinite(tip.totalOdds) && tip.totalOdds > 0
@@ -472,11 +430,11 @@ export const mockTipsService = {
   },
 
   addTip: async (tip: Tip): Promise<void> => {
-    const normalized = normalizeTip(withRealPublishTimeForNewActiveTicket({
+    const normalized = normalizeTip({
       ...tip,
       source: 'admin',
       publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
-    }, false));
+    });
     await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
     await syncPublicTicket(normalized);
   },
@@ -494,10 +452,7 @@ export const mockTipsService = {
   },
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
-    const existingSnapshot = await getDoc(getTicketDoc(updatedTip.id));
-    const wasAlreadyPublished = existingSnapshot.exists()
-      && (existingSnapshot.data() as Tip).publicationStatus === TipPublicationStatus.PUBLISHED;
-    const normalized = normalizeTip(withRealPublishTimeForNewActiveTicket(updatedTip, wasAlreadyPublished));
+    const normalized = normalizeTip(updatedTip);
     await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized), { merge: true });
     await syncPublicTicket(normalized);
   },
@@ -517,10 +472,7 @@ export const mockTipsService = {
         id: snapshot.id,
         publicationStatus: TipPublicationStatus.PUBLISHED,
       } as Tip;
-      const normalized = normalizeTip(withRealPublishTimeForNewActiveTicket(
-        existingTip,
-        (snapshot.data() as Tip).publicationStatus === TipPublicationStatus.PUBLISHED,
-      ));
+      const normalized = normalizeTip(existingTip);
       await setDoc(getTicketDoc(id), removeUndefined(normalized), { merge: true });
       await syncPublicTicket(normalized);
     }

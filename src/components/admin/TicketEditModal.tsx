@@ -69,7 +69,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
       const next = { ...current, ...patch };
       if (!regenerateCode) return next;
 
-      const publishedDate = normalizePublishedDate(next.publishedDate || next.date);
+      const publishedDate = normalizePublishedDate(next.date || next.publishedDate);
       const publishedTime = normalizePublishedTime(next.publishedTime);
       return {
         ...next,
@@ -153,7 +153,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     const invalidMatch = matches.find((match) => !match.homeTeam || !match.awayTeam || !match.prediction);
     const unitsStake = Number(draft.unitsStake);
     const manualTotalOdds = Number(totalOddsInput);
-    const publishedDate = normalizePublishedDate(draft.publishedDate || draft.date);
+    const publishedDate = normalizePublishedDate(draft.date || draft.publishedDate);
     const publishedTime = normalizePublishedTime(draft.publishedTime);
     const publishedAt = `${publishedDate}T${publishedTime}:00`;
 
@@ -170,7 +170,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     return {
       ...draft,
       source: 'admin',
-      date: draft.date || new Date().toISOString().split('T')[0],
+      date: publishedDate,
       publicationStatus,
       publishedDate,
       publishedTime,
@@ -291,7 +291,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   <input
                     type="date"
                     value={draft.publishedDate || draft.date}
-                    onChange={(event) => updateDraft({ publishedDate: event.target.value }, true)}
+                    onChange={(event) => updateDraft({ date: event.target.value, publishedDate: event.target.value }, true)}
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                   />
                 </label>

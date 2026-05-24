@@ -41,9 +41,12 @@ export const generateStablePublishedTime = (seed: string) => `12:${pad2(stableMi
 export const normalizePublishedTime = (value?: string) => {
   const raw = (value || '').trim();
   const match = raw.match(/^(\d{1,2}):(\d{2})/);
-  const minute = match ? Number(match[2]) : Math.floor(Math.random() * 60);
+  if (!match) return '12:00';
 
-  return `12:${pad2(Math.min(59, Math.max(0, Number.isFinite(minute) ? minute : 0)))}`;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  return `${pad2(Math.min(23, Math.max(0, Number.isFinite(hour) ? hour : 12)))}:${pad2(Math.min(59, Math.max(0, Number.isFinite(minute) ? minute : 0)))}`;
 };
 
 export const generatePublishedTime = () => `12:${pad2(Math.floor(Math.random() * 60))}`;
@@ -53,12 +56,12 @@ export const buildPublishedAt = (publishedDate: string, publishedTime: string) =
 
 export const generateTicketCode = (isVip: boolean, publishedDate: string, publishedTime: string) => {
   const [year, month, day] = normalizePublishedDate(publishedDate).split('-');
-  const minute = normalizePublishedTime(publishedTime).slice(3, 5);
-  return `${isVip ? 'V' : 'F'}${day}${month}${year}12${minute}`;
+  const [hour, minute] = normalizePublishedTime(publishedTime).split(':');
+  return `${isVip ? 'V' : 'F'}${day}${month}${year}${hour}${minute}`;
 };
 
 export const getTicketPublicationMeta = (tip: Pick<Tip, 'date' | 'isVip' | 'publishedDate' | 'publishedTime'> & Partial<Pick<Tip, 'id'>>) => {
-  const publishedDate = normalizePublishedDate(tip.publishedDate || tip.date);
+  const publishedDate = normalizePublishedDate(tip.date || tip.publishedDate);
   const stableSeed = `${tip.id || 'ticket'}-${publishedDate}-${tip.isVip ? 'vip' : 'free'}`;
   const publishedTime = normalizePublishedTime(tip.publishedTime || generateStablePublishedTime(stableSeed));
 
