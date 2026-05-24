@@ -97,7 +97,7 @@ const publicIndexForDate = (items: DailyAnalysisItem[], date: string) =>
 
 const removeUndefined = <T>(value: T): T => {
   if (Array.isArray(value)) return value.map((item) => removeUndefined(item)) as T;
-  if (value && typeof value === 'object') {
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
     return Object.entries(value).reduce<Record<string, unknown>>((result, [key, entry]) => {
       if (entry !== undefined) result[key] = removeUndefined(entry);
       return result;
@@ -168,7 +168,7 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
     }
   }
 
-  await setDoc(ref, {
+  await setDoc(ref, removeUndefined({
     ...analysis,
     id,
     source: analysis.source,
@@ -178,7 +178,7 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
     hidden: analysis.hidden === true,
     updatedAt: serverTimestamp(),
     createdAt: existingSnapshot.exists() ? existingSnapshot.data().createdAt : serverTimestamp(),
-  }, { merge: true });
+  }), { merge: true });
   await syncReadIndexFromDoc(id);
 
   return { saved: true, skippedManualOverride: false };
@@ -210,7 +210,7 @@ export const dailyAnalysesService = {
 
   saveManualAnalysis: async (analysis: DailyAnalysisItem): Promise<void> => {
     const id = analysis.id || `manual-daily-${Date.now()}`;
-    await setDoc(doc(db, COLLECTION, id), {
+    await setDoc(doc(db, COLLECTION, id), removeUndefined({
       ...analysis,
       id,
       source: analysis.source || 'manual',
@@ -223,16 +223,16 @@ export const dailyAnalysesService = {
       hidden: analysis.hidden === true,
       updatedAt: serverTimestamp(),
       createdAt: analysis.createdAt || serverTimestamp(),
-    }, { merge: true });
+    }), { merge: true });
     await syncReadIndexFromDoc(id);
   },
 
   updateManualAnalysis: async (id: string, patch: Partial<DailyAnalysisItem>): Promise<void> => {
-    await updateDoc(doc(db, COLLECTION, id), {
+    await updateDoc(doc(db, COLLECTION, id), removeUndefined({
       ...patch,
       manualOverride: true,
       updatedAt: serverTimestamp(),
-    });
+    }));
     await syncReadIndexFromDoc(id);
   },
 
