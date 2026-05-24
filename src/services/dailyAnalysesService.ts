@@ -13,7 +13,7 @@ import {
   type Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { DailyAnalysisItem } from '../types';
+import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
 
 const COLLECTION = 'dailyAnalyses';
 const PUBLIC_COLLECTION = 'publicDailyAnalyses';
@@ -35,6 +35,46 @@ const toIsoString = (value: unknown) => {
   return undefined;
 };
 
+const normalizeNumber = (value: unknown): number | undefined => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const formatScoreResult = (homeScore?: number, awayScore?: number): string | undefined =>
+  homeScore !== undefined && awayScore !== undefined ? `${homeScore}:${awayScore}` : undefined;
+
+const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: number, awayScore?: number): DailyAnalysisStatus | undefined => {
+  if (homeScore === undefined || awayScore === undefined) return undefined;
+  const total = homeScore + awayScore;
+  const normalized = prediction.trim().toUpperCase();
+
+  if (normalized === 'GG') return homeScore > 0 && awayScore > 0 ? 'WON' : 'LOST';
+  if (normalized === 'NG') return homeScore === 0 && awayScore === 0 ? 'WON' : 'LOST';
+  if (normalized === '1') return homeScore > awayScore ? 'WON' : 'LOST';
+  if (normalized === 'X') return homeScore === awayScore ? 'WON' : 'LOST';
+  if (normalized === '2') return awayScore > homeScore ? 'WON' : 'LOST';
+  if (normalized === '1X') return homeScore >= awayScore ? 'WON' : 'LOST';
+  if (normalized === 'X2') return awayScore >= homeScore ? 'WON' : 'LOST';
+  if (normalized === '12') return homeScore !== awayScore ? 'WON' : 'LOST';
+  if (normalized === '3+' || normalized === 'OVER 2.5') return total >= 3 ? 'WON' : 'LOST';
+  if (normalized === '2+' || normalized === 'OVER 1.5') return total >= 2 ? 'WON' : 'LOST';
+  if (normalized === '0-2' || normalized === 'UNDER 2.5') return total <= 2 ? 'WON' : 'LOST';
+
+  const overMatch = normalized.match(/^OVER\s*(\d+(?:\.\d+)?)$/);
+  if (overMatch) {
+    const threshold = Number(overMatch[1]);
+    return total > threshold ? 'WON' : 'LOST';
+  }
+
+  const underMatch = normalized.match(/^UNDER\s*(\d+(?:\.\d+)?)$/);
+  if (underMatch) {
+    const threshold = Number(underMatch[1]);
+    return total < threshold ? 'WON' : 'LOST';
+  }
+
+  return undefined;
+};
+
 const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => ({
   id,
   source: data.source === 'api-basketball' ? 'api-basketball' : data.source === 'api-football' ? 'api-football' : 'manual',
@@ -50,6 +90,9 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => (
   leagueId: Number.isFinite(Number(data.leagueId)) ? Number(data.leagueId) : undefined,
   homeTeam: data.homeTeam || '',
   awayTeam: data.awayTeam || '',
+  homeScore: normalizeNumber(data.homeScore),
+  awayScore: normalizeNumber(data.awayScore),
+  result: data.result || formatScoreResult(normalizeNumber(data.homeScore), normalizeNumber(data.awayScore)),
   homeLogo: data.homeLogo || '',
   awayLogo: data.awayLogo || '',
   homeFormPercent: Number.isFinite(Number(data.homeFormPercent)) ? Number(data.homeFormPercent) : null,
@@ -210,11 +253,20 @@ export const dailyAnalysesService = {
 
   saveManualAnalysis: async (analysis: DailyAnalysisItem): Promise<void> => {
     const id = analysis.id || `manual-daily-${Date.now()}`;
+    const homeScore = normalizeNumber(analysis.homeScore);
+    const awayScore = normalizeNumber(analysis.awayScore);
+    const status = analysis.status && analysis.status !== 'ACTIVE'
+      ? analysis.status
+      : evaluateDailyAnalysisStatus(analysis.prediction, homeScore, awayScore) || 'ACTIVE';
+
     await setDoc(doc(db, COLLECTION, id), removeUndefined({
       ...analysis,
       id,
       source: analysis.source || 'manual',
-      status: analysis.status || 'ACTIVE',
+      status,
+      result: formatScoreResult(homeScore, awayScore) || analysis.result,
+      homeScore,
+      awayScore,
       manualOverride: true,
       odds: Number(analysis.odds) || 1,
       units: Number(analysis.units) || 3,
@@ -228,8 +280,20 @@ export const dailyAnalysesService = {
   },
 
   updateManualAnalysis: async (id: string, patch: Partial<DailyAnalysisItem>): Promise<void> => {
+    const homeScore = normalizeNumber(patch.homeScore);
+    const awayScore = normalizeNumber(patch.awayScore);
+    const status = patch.status && patch.status !== 'ACTIVE'
+      ? patch.status
+      : patch.prediction
+        ? evaluateDailyAnalysisStatus(patch.prediction, homeScore, awayScore)
+        : undefined;
+
     await updateDoc(doc(db, COLLECTION, id), removeUndefined({
       ...patch,
+      ...(homeScore !== undefined ? { homeScore } : {}),
+      ...(awayScore !== undefined ? { awayScore } : {}),
+      ...(status ? { status } : {}),
+      ...(homeScore !== undefined && awayScore !== undefined ? { result: formatScoreResult(homeScore, awayScore) } : {}),
       manualOverride: true,
       updatedAt: serverTimestamp(),
     }));

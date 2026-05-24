@@ -21,9 +21,43 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const resolveResultStatus = (prediction: string, homeScore?: number, awayScore?: number) => {
+    if (homeScore === undefined || awayScore === undefined) return undefined;
+    const totalGoals = homeScore + awayScore;
+    const normalized = prediction.trim().toUpperCase();
+
+    if (normalized === 'GG') return homeScore > 0 && awayScore > 0 ? 'WON' : 'LOST';
+    if (normalized === 'NG') return homeScore === 0 && awayScore === 0 ? 'WON' : 'LOST';
+    if (normalized === '1') return homeScore > awayScore ? 'WON' : 'LOST';
+    if (normalized === 'X') return homeScore === awayScore ? 'WON' : 'LOST';
+    if (normalized === '2') return awayScore > homeScore ? 'WON' : 'LOST';
+    if (normalized === '1X') return homeScore >= awayScore ? 'WON' : 'LOST';
+    if (normalized === 'X2') return awayScore >= homeScore ? 'WON' : 'LOST';
+    if (normalized === '12') return homeScore !== awayScore ? 'WON' : 'LOST';
+    if (normalized === '3+' || normalized === 'OVER 2.5') return totalGoals >= 3 ? 'WON' : 'LOST';
+    if (normalized === '2+' || normalized === 'OVER 1.5') return totalGoals >= 2 ? 'WON' : 'LOST';
+    if (normalized === '0-2' || normalized === 'UNDER 2.5') return totalGoals <= 2 ? 'WON' : 'LOST';
+
+    const overMatch = normalized.match(/^OVER\s*(\d+(?:\.\d+)?)$/);
+    if (overMatch) {
+      const threshold = Number(overMatch[1]);
+      return totalGoals > threshold ? 'WON' : 'LOST';
+    }
+
+    const underMatch = normalized.match(/^UNDER\s*(\d+(?:\.\d+)?)$/);
+    if (underMatch) {
+      const threshold = Number(underMatch[1]);
+      return totalGoals < threshold ? 'WON' : 'LOST';
+    }
+
+    return undefined;
+  };
+
   const updateDraft = (patch: Partial<DailyAnalysisItem>) => {
     setDraft((current) => ({ ...current, ...patch, manualOverride: true }));
   };
+
+  const autoStatus = resolveResultStatus(draft.prediction, draft.homeScore, draft.awayScore);
 
   const save = async (next = draft) => {
     setError('');
@@ -34,12 +68,22 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
 
     setSaving(true);
     try {
+      const homeScore = next.homeScore === undefined ? undefined : Number(next.homeScore);
+      const awayScore = next.awayScore === undefined ? undefined : Number(next.awayScore);
+      const result = homeScore !== undefined && awayScore !== undefined ? `${homeScore}:${awayScore}` : next.result;
+      const autoStatus = resolveResultStatus(next.prediction, homeScore, awayScore);
+      const status = next.status && next.status !== 'ACTIVE' ? next.status : autoStatus || next.status || 'ACTIVE';
+
       await onSave({
         ...next,
         manualOverride: true,
         odds: Number(next.odds) || 1,
         confidence: next.confidence === undefined ? undefined : Number(next.confidence),
         badges: (next.badges || []).filter(Boolean),
+        homeScore,
+        awayScore,
+        result,
+        status,
       });
       onClose();
     } catch (saveError) {
@@ -118,6 +162,39 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
           <label>
             <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Gost</span>
             <input className={fieldClass} value={draft.awayTeam} onChange={(event) => updateDraft({ awayTeam: event.target.value })} />
+          </label>
+          <label>
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Rezultat domaćin</span>
+            <input
+              type="number"
+              min="0"
+              className={fieldClass}
+              value={draft.homeScore ?? ''}
+              onChange={(event) => updateDraft({ homeScore: event.target.value === '' ? undefined : Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Rezultat gost</span>
+            <input
+              type="number"
+              min="0"
+              className={fieldClass}
+              value={draft.awayScore ?? ''}
+              onChange={(event) => updateDraft({ awayScore: event.target.value === '' ? undefined : Number(event.target.value) })}
+            />
+          </label>
+          <label className="md:col-span-2">
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Konačan rezultat</span>
+            <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-neutral-300">
+              {draft.homeScore !== undefined && draft.awayScore !== undefined
+                ? `${draft.homeScore}:${draft.awayScore}`
+                : 'Nije postavljeno'}
+            </div>
+            {draft.homeScore !== undefined && draft.awayScore !== undefined && (
+              <p className="mt-2 text-[10px] uppercase tracking-widest text-neutral-500">
+                {autoStatus ? `Automatski status: ${autoStatus}` : 'Status se ne može izračunati za ovaj tip.'}
+              </p>
+            )}
           </label>
           <label>
             <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Tip</span>

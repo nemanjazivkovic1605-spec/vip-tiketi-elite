@@ -238,6 +238,9 @@ export interface DailyAnalysisItem {
   leagueId?: number;
   homeTeam: string;
   awayTeam: string;
+  homeScore?: number;
+  awayScore?: number;
+  result?: string;
   homeLogo?: string;
   awayLogo?: string;
   homeFormPercent?: number | null;
