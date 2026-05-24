@@ -153,7 +153,49 @@ export default function Stats() {
             )}
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {selectedMonth && ticketRows(selectedMonth.tickets).map((row) => {
+              const meta = statusMeta(row.ticket.status);
+              const locked = isPredictionLockedForUser(row.ticket, user, canAccessFree, canAccessVip);
+              return (
+                <motion.button
+                  key={row.id}
+                  type="button"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => isAdmin && setEditingTip(row.ticket)}
+                  className={`w-full rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left ${isAdmin ? 'cursor-pointer hover:border-gold-500/30' : ''}`}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{row.ticket.date}</div>
+                      <div className="mt-1 font-bold text-neutral-100">{row.match.homeTeam} - {row.match.awayTeam}</div>
+                      <div className="mt-1 text-xs text-neutral-500">{row.match.league || 'Fudbal'}</div>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${meta.className}`}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-xl bg-black/25 p-3">
+                      <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
+                      <span className="font-black text-gold-400">{locked ? 'VIP TIP' : row.match.prediction}</span>
+                    </div>
+                    <div className="rounded-xl bg-black/25 p-3">
+                      <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-500">Kvota</span>
+                      <span className="font-bold text-neutral-200">{row.match.odds.toFixed(2)}</span>
+                    </div>
+                    <div className="rounded-xl bg-black/25 p-3">
+                      <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-500">Units</span>
+                      <span className="font-bold text-neutral-200">{getTicketUnitsStake(row.ticket).toFixed(2)}u</span>
+                    </div>
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="text-left text-[10px] text-neutral-500 uppercase tracking-widest border-b border-white/10">

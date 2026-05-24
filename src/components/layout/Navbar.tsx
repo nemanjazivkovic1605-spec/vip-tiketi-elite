@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, X, Trophy, LogOut } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { LogOut, Menu, Trophy, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -18,38 +18,38 @@ export default function Navbar() {
 
   const navLinks = [
     { label: 'Početna', path: '/' },
-    { label: 'Tabela', path: '/tickets' },
-    { label: 'Dnevni Tipovi', path: '/daily-tips' },
-    { label: 'Uživo', path: '/live-results' },
+    { label: 'Aktivni tipovi', path: '/daily-tips' },
+    { label: 'Istorija', path: '/tickets' },
     { label: 'Statistika', path: '/stats' },
     { label: 'Kontakt', path: '/contact' },
   ];
 
-  if (user) {
-    navLinks.push({ label: 'DASHBOARD', path: '/dashboard' });
-    navLinks.push({ label: 'VIP TIPOVI', path: '/vip-tips' });
-    if (isAdmin) navLinks.push({ label: 'ADMIN', path: '/admin' });
-  }
+  const accountLinks = user
+    ? [
+      { label: 'Dashboard', path: '/dashboard' },
+      ...(isAdmin ? [{ label: 'Admin', path: '/admin' }] : []),
+    ]
+    : [];
 
   const isHome = location.pathname === '/';
+  const vipCtaPath = user ? '/vip-tips' : '/register';
 
   return (
-    <nav className={`fixed top-0 left-0 w-full z-50 transition-all duration-500 ${
-      scrolled || !isHome ? 'bg-neutral-950/90 backdrop-blur-xl border-b border-white/5 py-4' : 'bg-transparent py-6'
+    <nav className={`fixed left-0 top-0 z-50 w-full transition-all duration-300 ${
+      scrolled || !isHome ? 'border-b border-white/5 bg-neutral-950/92 py-3 backdrop-blur-xl' : 'bg-transparent py-5'
     }`}>
-      <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-        <Link to="/" className="text-2xl font-display font-black tracking-tighter flex items-center gap-2">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 md:px-6">
+        <Link to="/" className="flex items-center gap-2 font-display text-2xl font-black tracking-tighter">
           <Trophy className="text-gold-500" size={28} />
           <span className="gold-text">ELITE</span> TIPS
         </Link>
 
-        {/* Desktop Nav */}
-        <div className="hidden md:flex items-center gap-8">
+        <div className="hidden items-center gap-7 lg:flex">
           {navLinks.map((link) => (
             <Link
               key={link.path}
               to={link.path}
-              className={`text-sm font-bold uppercase tracking-widest transition-colors hover:text-gold-500 ${
+              className={`text-[12px] font-black uppercase tracking-widest transition-colors hover:text-gold-500 ${
                 location.pathname === link.path ? 'text-gold-500' : 'text-neutral-400'
               }`}
             >
@@ -58,73 +58,90 @@ export default function Navbar() {
           ))}
         </div>
 
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden items-center gap-3 lg:flex">
+          {accountLinks.map((link) => (
+            <Link
+              key={link.path}
+              to={link.path}
+              className={`text-[11px] font-black uppercase tracking-widest transition-colors hover:text-gold-500 ${
+                location.pathname === link.path ? 'text-gold-500' : 'text-neutral-500'
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+          <Link
+            to={vipCtaPath}
+            className="rounded-2xl bg-gold-500 px-5 py-2.5 text-[12px] font-black uppercase tracking-widest text-black shadow-lg shadow-gold-500/20 transition-all hover:bg-gold-400"
+          >
+            VIP pristup
+          </Link>
           {user ? (
-            <div className="flex items-center gap-4">
-               <span className="text-xs font-bold text-neutral-500">{user.email}</span>
-               <button 
-                onClick={logout}
-                className="p-2 bg-white/5 hover:bg-red-500/10 hover:text-red-500 rounded-xl transition-all"
-               >
-                 <LogOut size={20} />
-               </button>
-            </div>
-          ) : (
             <>
-              <Link to="/login" className="text-sm font-bold uppercase tracking-widest text-neutral-400 hover:text-gold-500">
-                Prijava
-              </Link>
-              <Link to="/register" className="px-6 py-2.5 bg-gold-500 hover:bg-gold-600 text-black text-sm font-bold rounded-xl transition-all shadow-lg shadow-gold-500/20">
-                Registracija
-              </Link>
+              <span className="max-w-[180px] truncate text-xs font-bold text-neutral-500">{user.email}</span>
+              <button
+                onClick={logout}
+                className="rounded-xl bg-white/5 p-2 text-neutral-400 transition-all hover:bg-red-500/10 hover:text-red-400"
+                aria-label="Odjavi se"
+              >
+                <LogOut size={19} />
+              </button>
             </>
+          ) : (
+            <Link to="/login" className="text-[12px] font-black uppercase tracking-widest text-neutral-400 transition-colors hover:text-gold-500">
+              Prijava
+            </Link>
           )}
         </div>
 
-        {/* Mobile Menu Button */}
-        <button className="md:hidden text-neutral-100" onClick={() => setIsOpen(!isOpen)}>
+        <button className="text-neutral-100 lg:hidden" onClick={() => setIsOpen(!isOpen)} aria-label="Otvori meni">
           {isOpen ? <X size={28} /> : <Menu size={28} />}
         </button>
       </div>
 
-      {/* Mobile Nav */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-neutral-950 border-b border-white/5 overflow-hidden"
+            className="overflow-hidden border-b border-white/5 bg-neutral-950 lg:hidden"
           >
-            <div className="px-6 py-8 flex flex-col gap-6">
-              {navLinks.map((link) => (
+            <div className="flex flex-col gap-3 px-6 py-7">
+              {[...navLinks, ...accountLinks].map((link) => (
                 <Link
                   key={link.path}
                   to={link.path}
                   onClick={() => setIsOpen(false)}
-                  className={`text-lg font-bold uppercase tracking-widest ${
-                    location.pathname === link.path ? 'text-gold-500' : 'text-neutral-400'
+                  className={`rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-widest ${
+                    location.pathname === link.path ? 'bg-gold-500/10 text-gold-500' : 'text-neutral-400'
                   }`}
                 >
                   {link.label}
                 </Link>
               ))}
-              <div className="h-px bg-white/5 my-2"></div>
+              <Link
+                to={vipCtaPath}
+                onClick={() => setIsOpen(false)}
+                className="rounded-2xl bg-gold-500 px-4 py-4 text-center text-sm font-black uppercase tracking-widest text-black"
+              >
+                VIP pristup
+              </Link>
+              <div className="my-2 h-px bg-white/5" />
               {user ? (
                 <div className="flex flex-col gap-4">
-                  <div className="text-xs font-bold text-neutral-500 break-all">{user.email}</div>
+                  <div className="break-all text-xs font-bold text-neutral-500">{user.email}</div>
                   <button
                     onClick={() => { logout(); setIsOpen(false); }}
-                    className="flex items-center gap-2 text-red-500 font-bold"
+                    className="flex items-center gap-2 font-bold text-red-400"
                   >
-                    <LogOut size={20} /> ODJAVI SE
+                    <LogOut size={20} /> Odjavi se
                   </button>
                 </div>
               ) : (
-                <div className="flex flex-col gap-4">
-                  <Link to="/login" onClick={() => setIsOpen(false)} className="py-4 text-center font-bold border border-white/10 rounded-2xl">PRIJAVA</Link>
-                  <Link to="/register" onClick={() => setIsOpen(false)} className="py-4 text-center font-bold bg-gold-500 text-black rounded-2xl">REGISTRACIJA</Link>
-                </div>
+                <Link to="/login" onClick={() => setIsOpen(false)} className="rounded-2xl border border-white/10 py-4 text-center font-bold">
+                  Prijava
+                </Link>
               )}
             </div>
           </motion.div>

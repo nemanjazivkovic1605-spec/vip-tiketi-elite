@@ -1284,10 +1284,10 @@ export default function AdminDashboard() {
   const unreadNotifications = notifications.filter((notification) => !notification.read);
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.06),transparent_34%),#0a0a0a] flex flex-col md:flex-row">
       {/* Sidebar */}
       <aside className={`
-        fixed md:relative z-50 w-64 h-screen bg-black border-r border-white/5 transition-transform duration-300
+        fixed md:relative z-50 w-64 h-screen bg-black/90 backdrop-blur-xl border-r border-white/10 transition-transform duration-300
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         <div className="p-8 pb-4">
@@ -1305,10 +1305,10 @@ export default function AdminDashboard() {
                 setIsMobileMenuOpen(false);
               }}
               className={`
-                w-full flex items-center gap-4 px-4 py-3 rounded-xl text-sm font-bold transition-all
+                w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-sm font-bold transition-all
                 ${activeTab === item.id 
-                  ? 'bg-gold-500 text-black shadow-lg shadow-gold-500/20' 
-                  : 'text-neutral-500 hover:bg-white/5 hover:text-neutral-200'}
+                  ? 'bg-gold-500 text-black shadow-lg shadow-gold-500/15'
+                  : 'text-neutral-500 hover:bg-white/5 hover:text-neutral-200 hover:translate-x-0.5'}
               `}
             >
               {item.icon}
@@ -1332,7 +1332,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto max-h-screen">
         {/* Top Header */}
-        <header className="sticky top-0 z-40 bg-neutral-950/80 backdrop-blur-md border-b border-white/5 px-8 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-40 bg-neutral-950/85 backdrop-blur-xl border-b border-white/10 px-5 py-4 md:px-8 flex items-center justify-between">
             <button 
               className="md:hidden p-2 text-neutral-400"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}

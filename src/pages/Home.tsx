@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Trophy, ShieldCheck, Zap, TrendingUp, Users, Star, ArrowRight, Play } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Lock, ShieldCheck, Star, TrendingUp, Trophy, Users, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { VIP_PACKAGES } from '../lib/demoData';
 import { mockTipsService } from '../services/mockTips';
@@ -18,230 +18,189 @@ export default function Home() {
     return mockTipsService.subscribe(fetchStats);
   }, []);
 
+  const statsCards = [
+    { label: 'Hit rate', value: `${stats?.hitRate ?? 0}%`, icon: <Trophy className="text-gold-500" /> },
+    { label: 'ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
+    { label: 'Units profit', value: `${(stats?.unitsProfit ?? 0) >= 0 ? '+' : ''}${stats?.unitsProfit ?? 0}u`, icon: <Zap className="text-gold-500" /> },
+    { label: 'Završeni tiketi', value: stats?.completedCount ?? 0, icon: <Users className="text-gold-500" /> },
+  ];
+
   return (
     <div className="overflow-hidden">
-      {/* Hero Section */}
-      <section className="relative pt-20 pb-32 px-6">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full -z-10 overflow-hidden">
-           <div className="absolute top-0 left-[10%] w-[40%] h-[40%] bg-gold-500/10 blur-[120px] rounded-full"></div>
-           <div className="absolute bottom-[20%] right-[10%] w-[30%] h-[30%] bg-gold-500/5 blur-[100px] rounded-full"></div>
-        </div>
+      <section className="relative px-6 pb-24 pt-24 md:pb-28 md:pt-28">
+        <div className="absolute inset-x-0 top-0 -z-10 mx-auto h-[520px] max-w-6xl bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.13),transparent_58%)]" />
 
-        <div className="max-w-7xl mx-auto text-center">
+        <div className="mx-auto max-w-7xl text-center">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm font-medium mb-8"
+            className="mb-7 inline-flex items-center gap-2 rounded-full border border-gold-500/20 bg-gold-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-gold-300"
           >
-            <span className="flex h-2 w-2 rounded-full bg-gold-500 animate-pulse"></span>
-            <span className="gold-text font-bold">ELITE VIP TIPS</span>
-            <span className="text-neutral-500">|</span>
-            <span className="text-neutral-400">Preko 85% uspešnosti</span>
+            <span className="h-2 w-2 rounded-full bg-gold-500" />
+            Elite VIP Tips
           </motion.div>
 
           <motion.h1
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-5xl md:text-7xl lg:text-8xl font-display font-black tracking-tighter mb-8 leading-[0.9]"
+            transition={{ delay: 0.05 }}
+            className="mx-auto max-w-4xl font-display text-5xl font-black leading-[0.95] tracking-tight md:text-7xl"
           >
-            DOMINIRAJ <br />
-            <span className="gold-text">SPORTSKIM</span> <br />
-            KLADIONICAMA
+            Pametniji pristup <span className="gold-text">sportskim tipovima</span>
           </motion.h1>
 
           <motion.p
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="max-w-2xl mx-auto text-lg text-neutral-400 mb-12"
+            transition={{ delay: 0.1 }}
+            className="mx-auto mt-6 max-w-2xl text-base leading-8 text-neutral-400 md:text-lg"
           >
-            Pridruži se najelitnijoj grupi sportskih analitičara. Koristimo napredne algoritme i rane informacije za maksimalan profit.
+            Free tipovi za verifikovane korisnike, VIP analize za aktivne članove i javna istorija završenih tiketa.
           </motion.p>
 
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="flex flex-wrap items-center justify-center gap-4"
+            transition={{ delay: 0.15 }}
+            className="mt-10 flex flex-wrap items-center justify-center gap-4"
           >
             <Link
               to="/register"
-              className="px-8 py-4 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-2xl transition-all shadow-lg shadow-gold-500/20 flex items-center gap-2 group"
+              className="inline-flex items-center gap-2 rounded-2xl bg-gold-500 px-8 py-4 font-black text-black shadow-xl shadow-gold-500/25 transition-all hover:bg-gold-400"
             >
-              Započni besplatno <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+              Otključaj tipove <ArrowRight size={20} />
             </Link>
             <Link
-              to="/stats"
-              className="px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/10 font-bold rounded-2xl transition-all flex items-center gap-2"
+              to="/tickets"
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-8 py-4 font-bold text-neutral-200 transition-all hover:border-gold-500/35 hover:text-gold-300"
             >
-              Vidi statistiku <TrendingUp size={20} className="text-gold-500" />
+              Pogledaj istoriju <TrendingUp size={20} />
             </Link>
           </motion.div>
         </div>
       </section>
 
-      {/* Stats Quick View */}
-      <section className="py-20 px-6 border-y border-white/5 bg-white/[0.01]">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+      <section className="border-y border-white/5 bg-white/[0.015] px-6 py-14">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-5 md:grid-cols-4">
+          {statsCards.map((stat) => (
+            <div key={stat.label} className="rounded-3xl border border-white/5 bg-black/20 p-5 text-center">
+              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5">{stat.icon}</div>
+              <div className="font-display text-2xl font-black md:text-3xl">{stat.value}</div>
+              <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="px-6 py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12 text-center">
+            <h2 className="font-display text-3xl font-black md:text-5xl">Kako funkcioniše</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-neutral-400">Jednostavan pristup sadržaju, bez konfuzije oko toga šta je javno, free ili VIP.</p>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-3">
             {[
-              { label: 'Uspešnost', value: `${stats?.successRate ?? 0}%`, icon: <Trophy className="text-gold-500" /> },
-              { label: 'Dnevnih Tipova', value: '3-5', icon: <Zap className="text-gold-500" /> },
-              { label: 'Članova', value: '1.2k+', icon: <Users className="text-gold-500" /> },
-              { label: 'Mesečni ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
-            ].map((stat, i) => (
-              <div key={i} className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-white/5 rounded-2xl mb-4">
-                  {stat.icon}
-                </div>
-                <div className="text-3xl font-display font-bold mb-1">{stat.value}</div>
-                <div className="text-sm text-neutral-500 font-medium uppercase tracking-wider">{stat.label}</div>
+              { step: '01', title: 'Registrujete nalog', text: 'Kreirate nalog i potvrđujete email adresu.' },
+              { step: '02', title: 'Dobijate FREE tipove', text: 'Verifikovani korisnici vide aktivne FREE tipove.' },
+              { step: '03', title: 'VIP otključava premium', text: 'Aktivni VIP članovi vide VIP tipove, prognoze i analize.' },
+            ].map((item) => (
+              <div key={item.step} className="glass rounded-[2rem] border-white/5 p-7">
+                <div className="mb-5 inline-flex rounded-2xl border border-gold-500/20 bg-gold-500/10 px-4 py-2 font-display text-xl font-black text-gold-300">{item.step}</div>
+                <h3 className="mb-3 text-xl font-black">{item.title}</h3>
+                <p className="leading-7 text-neutral-400">{item.text}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="py-32 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-20">
-            <h2 className="text-4xl md:text-5xl font-display font-bold mb-4">ZAŠTO IZABRATI <br /> <span className="gold-text">ELITE TIPS?</span></h2>
-            <p className="text-neutral-400">Naša strategija nije sreća, već čista analiza i disciplina.</p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              {
-                title: 'Rane Informacije',
-                desc: 'Prvi saznajemo o povredama, promenama u sastavima i sumnjivim kretanjima kvota.',
-                icon: <ShieldCheck size={32} />,
-                path: '/early-information',
-                badges: ['Opening Line Edge', 'Smart Money Tracking', 'Early Value Detection']
-              },
-              {
-                title: 'Dnevna Analiza',
-                desc: 'Svaki VIP tip dolazi sa detaljnim objašnjenjem zašto verujemo u taj ishod.',
-                icon: <Star size={32} />,
-                path: '/daily-analysis',
-                eyebrow: 'Premium Sports Analytics',
-                pulse: 'Value Based Analysis'
-              },
-              {
-                title: 'Bankroll Management',
-                desc: 'Učimo vas kako da pametno ulažete i sačuvate profit na duge staze.',
-                icon: <Zap size={32} />,
-                path: '/bankroll-management'
-              }
-            ].map((f, i) => {
-              const card = (
-                <motion.div
-                  whileHover={{ y: -10 }}
-                  className="glass h-full p-8 rounded-[2.5rem] border-white/5 hover:border-gold-500/30 transition-all duration-500"
-                >
-                  <div className="w-16 h-16 bg-gold-500/10 rounded-2xl flex items-center justify-center mb-6 text-gold-500">
-                    {f.icon}
-                  </div>
-                  <h3 className="text-2xl font-bold mb-4">{f.title}</h3>
-                  {'eyebrow' in f && f.eyebrow && (
-                    <div className="mb-3 text-[10px] font-black uppercase tracking-widest text-gold-400">
-                      {f.eyebrow}
-                    </div>
-                  )}
-                  <p className="text-neutral-400 leading-relaxed">{f.desc}</p>
-                  {'badges' in f && f.badges && (
-                    <div className="mt-6 flex flex-wrap gap-2">
-                      {f.badges.map((badge) => (
-                        <span key={badge} className="rounded-full border border-gold-500/20 bg-gold-500/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gold-300">
-                          {badge}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {'pulse' in f && f.pulse && (
-                    <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-gold-500/25 bg-gold-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gold-300">
-                      <span className="h-2 w-2 rounded-full bg-gold-500 animate-pulse" />
-                      {f.pulse}
-                    </div>
-                  )}
-                </motion.div>
-              );
-
-              return f.path ? (
-                <Link key={i} to={f.path} className="block h-full">
-                  {card}
-                </Link>
-              ) : (
-                <React.Fragment key={i}>{card}</React.Fragment>
-              );
-            })}
+      <section className="px-6 pb-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-7">
+              <CheckCircle2 className="mb-5 text-green-400" size={30} />
+              <h3 className="mb-3 text-2xl font-black">FREE tipovi</h3>
+              <p className="text-sm leading-7 text-neutral-400">Dostupni registrovanim i email-verifikovanim korisnicima. Neregistrovani posetioci vide zaključane kartice.</p>
+            </div>
+            <div className="rounded-[2rem] border border-gold-500/25 bg-gold-500/[0.06] p-7">
+              <Star className="mb-5 text-gold-400" size={30} />
+              <h3 className="mb-3 text-2xl font-black">VIP tipovi</h3>
+              <p className="text-sm leading-7 text-neutral-400">Dostupni samo odobrenim VIP članovima sa aktivnom članarinom. VIP analiza ostaje zaključana za non-VIP korisnike.</p>
+            </div>
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-7">
+              <Lock className="mb-5 text-blue-300" size={30} />
+              <h3 className="mb-3 text-2xl font-black">Završeni tiketi</h3>
+              <p className="text-sm leading-7 text-neutral-400">Istorija i rezultati su javni. Ako je tiket VIP, tačan VIP tip i analiza ostaju zaključani za korisnike bez VIP pristupa.</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="py-32 px-6 bg-white/[0.01]">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-20">
-            <h2 className="text-4xl md:text-5xl font-display font-bold mb-4">POSTANI <span className="gold-text">VIP ČLAN</span></h2>
-            <p className="text-neutral-400">Izaberi paket koji najbolje odgovara tvojoj igri.</p>
+      <section className="px-6 pb-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12 text-center">
+            <h2 className="font-display text-3xl font-black md:text-5xl">Zašto Elite Tips?</h2>
+            <p className="mt-3 text-neutral-400">Analitika, disciplina i upravljanje rizikom umesto nasumičnih tiketa.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {VIP_PACKAGES.map((pkg, i) => (
+          <div className="grid gap-6 md:grid-cols-3">
+            {[
+              { title: 'Rane Informacije', desc: 'Praćenje povreda, rotacija, tržišta kvota i smart money signala.', icon: <ShieldCheck size={30} />, path: '/early-information' },
+              { title: 'Dnevna Analiza', desc: 'Profesionalan proces selekcije tipova kroz statistiku, value i rizik.', icon: <Star size={30} />, path: '/daily-analysis' },
+              { title: 'Bankroll Management', desc: 'Unit sistem i kontrola uloga za dugoročniji pristup igri.', icon: <Zap size={30} />, path: '/bankroll-management' },
+            ].map((feature) => (
+              <Link key={feature.title} to={feature.path} className="group block h-full">
+                <div className="glass h-full rounded-[2rem] border-white/5 p-7 transition-all group-hover:-translate-y-1 group-hover:border-gold-500/25">
+                  <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gold-500/10 text-gold-500">{feature.icon}</div>
+                  <h3 className="mb-3 text-2xl font-black">{feature.title}</h3>
+                  <p className="text-sm leading-7 text-neutral-400">{feature.desc}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" className="bg-white/[0.015] px-6 py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12 text-center">
+            <h2 className="font-display text-3xl font-black md:text-5xl">VIP pristup</h2>
+            <p className="mt-3 text-neutral-400">Izaberite period pristupa. VIP se aktivira nakon admin potvrde uplate.</p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            {VIP_PACKAGES.map((pkg) => (
               <div
-                key={i}
-                className={`flex flex-col glass p-8 rounded-[2.5rem] relative ${pkg.isPopular ? 'border-gold-500/50 gold-glow' : 'border-white/5'}`}
+                key={pkg.id}
+                className={`glass relative flex flex-col rounded-[2rem] p-7 ${pkg.isPopular ? 'border-gold-500/45 shadow-[0_0_36px_rgba(245,158,11,0.14)]' : 'border-white/5'}`}
               >
                 {pkg.isPopular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gold-500 text-black text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-tighter">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-gold-500 px-4 py-1.5 text-xs font-black uppercase tracking-widest text-black">
                     Najpopularnije
                   </div>
                 )}
-                <div className="mb-8">
-                  <h3 className="text-xl font-bold text-neutral-400 mb-2">{pkg.name}</h3>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-display font-black">€{pkg.price}</span>
-                    <span className="text-neutral-500 text-sm">/ {pkg.durationDays} dana</span>
-                  </div>
+                <h3 className="mb-2 text-xl font-black text-neutral-300">{pkg.name}</h3>
+                <div className="mb-7 flex items-baseline gap-1">
+                  <span className="font-display text-4xl font-black">€{pkg.price}</span>
+                  <span className="text-sm text-neutral-500">/ {pkg.durationDays} dana</span>
                 </div>
-
-                <div className="flex-1 space-y-4 mb-10">
-                  {pkg.features.map((f, j) => (
-                    <div key={j} className="flex items-center gap-3 text-neutral-300">
-                      <div className="w-5 h-5 bg-gold-500/10 rounded-full flex items-center justify-center">
-                         <div className="w-1.5 h-1.5 bg-gold-500 rounded-full"></div>
-                      </div>
-                      <span className="text-sm font-medium">{f}</span>
+                <div className="mb-8 flex-1 space-y-3">
+                  {pkg.features.map((feature) => (
+                    <div key={feature} className="flex items-center gap-3 text-sm text-neutral-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gold-500" />
+                      {feature}
                     </div>
                   ))}
                 </div>
-
                 <Link
                   to={`/register?plan=${pkg.id}`}
-                  className={`w-full py-4 rounded-2xl font-bold transition-all text-center ${pkg.isPopular ? 'bg-gold-500 hover:bg-gold-600 text-black ring-4 ring-gold-500/20' : 'bg-white/5 hover:bg-white/10'}`}
+                  className={`rounded-2xl py-4 text-center font-black transition-all ${pkg.isPopular ? 'bg-gold-500 text-black hover:bg-gold-400' : 'bg-white/5 hover:bg-white/10'}`}
                 >
                   Izaberi paket
                 </Link>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-32 px-6">
-        <div className="max-w-5xl mx-auto">
-          <div className="relative glass p-12 md:p-20 rounded-[3rem] text-center overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-gold-500/5 -z-10 blur-[80px]"></div>
-            <h2 className="text-4xl md:text-6xl font-display font-bold mb-8">SPREMAN ZA <br /> <span className="gold-text">VELIKE DOBITKE?</span></h2>
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-3 px-12 py-5 bg-gold-500 hover:bg-gold-600 text-black font-black rounded-2xl transition-all shadow-xl shadow-gold-500/30 text-lg uppercase tracking-tight"
-            >
-              PRIDRUŽI SE ELITI <ArrowRight />
-            </Link>
           </div>
         </div>
       </section>

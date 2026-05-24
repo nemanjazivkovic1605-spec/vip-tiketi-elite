@@ -66,9 +66,9 @@ const getTicketVisuals = (status: TicketStatus) => {
   }
 
   return {
-    card: 'border-orange-400/45 bg-[radial-gradient(circle_at_top_right,rgba(245,124,0,0.16),transparent_38%),linear-gradient(180deg,rgba(18,13,7,0.92),rgba(8,8,8,0.94))] shadow-[0_0_38px_rgba(245,124,0,0.20),0_16px_70px_rgba(0,0,0,0.42)] hover:shadow-[0_0_55px_rgba(245,124,0,0.28),0_20px_80px_rgba(0,0,0,0.48)]',
-    glow: 'bg-orange-400/18 blur-3xl opacity-70',
-    badge: 'bg-orange-400/12 text-orange-300 border-orange-400/35 shadow-[0_0_18px_rgba(245,124,0,0.25)]',
+    card: 'border-orange-400/35 bg-[radial-gradient(circle_at_top_right,rgba(245,124,0,0.10),transparent_38%),linear-gradient(180deg,rgba(18,13,7,0.90),rgba(8,8,8,0.94))] shadow-[0_16px_58px_rgba(0,0,0,0.40)] hover:border-orange-400/45',
+    glow: 'bg-orange-400/10 blur-3xl opacity-45',
+    badge: 'bg-orange-400/12 text-orange-300 border-orange-400/30',
     label: '⏳ AKTIVAN',
     icon: <Clock size={16} />,
     odds: 'text-gold-300 drop-shadow-[0_0_12px_rgba(255,188,71,0.45)]',
@@ -260,7 +260,7 @@ export default function Tickets() {
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="text-center mb-16">
-        <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">TABELA <span className="gold-text">TIKETA</span></h1>
+        <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">ISTORIJA <span className="gold-text">TIKETA</span></h1>
         <p className="text-neutral-400">Pregled svih aktivnih i završenih tiketa iz naše baze.</p>
       </div>
 
