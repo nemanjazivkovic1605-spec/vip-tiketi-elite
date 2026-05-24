@@ -223,6 +223,8 @@ export type DailyAnalysisStatus = 'ACTIVE' | 'WON' | 'LOST' | 'HIDDEN';
 
 export interface DailyAnalysisItem {
   id: string;
+  type?: DailyAnalysisAccess;
+  locked?: boolean;
   source: DailyAnalysisSource;
   sport?: DailyAnalysisSport;
   status?: DailyAnalysisStatus;

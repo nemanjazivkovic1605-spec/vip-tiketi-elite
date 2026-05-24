@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, ShieldCheck, Sparkles, Star, TrendingUp } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, Pencil, ShieldCheck, Sparkles, Star, TrendingUp } from 'lucide-react';
 import { DailyAnalysisItem } from '../types';
 import { getDailyAnalysisDates } from '../utils/dailyDates';
 import { dailyAnalysesService } from '../services/dailyAnalysesService';
 import { useAuth } from '../hooks/useAuth';
+import DailyAnalysisEditModal from '../components/admin/DailyAnalysisEditModal';
 
 const formatDate = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString('sr-Latn-RS', {
@@ -73,12 +74,15 @@ const LockedPanel = () => (
   </button>
 );
 
-const AnalysisCard = ({ item, canAccessVip }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean }) => {
-  const isVipLocked = item.access === 'VIP' && !canAccessVip;
+const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void }) => {
+  const access = item.type || item.access;
+  const isVipLocked = item.locked === true || (access === 'VIP' && !canAccessVip);
   const hasOdds = Number.isFinite(Number(item.odds)) && Number(item.odds) > 1;
   const confidence = item.confidence || 0;
   const isElite = (item.badges || []).some((badge) => badge === 'ELITE PICK' || badge === 'HIGH VALUE');
   const risk = item.riskLevel || 'MEDIUM';
+  const homeTeam = item.homeTeam || 'Meč';
+  const awayTeam = item.awayTeam || 'zaključan';
 
   return (
     <motion.article
@@ -86,11 +90,20 @@ const AnalysisCard = ({ item, canAccessVip }: { key?: React.Key; item: DailyAnal
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 10 }}
+      onClick={isAdmin ? () => onEdit(item) : undefined}
+      onKeyDown={isAdmin ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onEdit(item);
+        }
+      } : undefined}
+      role={isAdmin ? 'button' : undefined}
+      tabIndex={isAdmin ? 0 : undefined}
       className={`group relative overflow-hidden rounded-[1.45rem] border bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(4,4,4,0.98))] p-3.5 shadow-[0_14px_45px_rgba(0,0,0,0.34)] transition-all hover:-translate-y-0.5 md:p-4 ${
         isElite
           ? 'border-gold-500/35 shadow-[0_0_44px_rgba(245,124,0,0.14)]'
           : 'border-white/10 hover:border-gold-500/30 hover:shadow-[0_0_32px_rgba(245,124,0,0.1)]'
-      }`}
+      } ${isAdmin ? 'cursor-pointer' : ''}`}
     >
       <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gold-500/10 blur-3xl" />
 
@@ -104,31 +117,43 @@ const AnalysisCard = ({ item, canAccessVip }: { key?: React.Key; item: DailyAnal
             {item.league}
           </span>
           <span className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${
-            item.access === 'VIP'
+            access === 'VIP'
               ? 'border-gold-500/45 bg-gold-500 text-black'
               : 'border-white/10 bg-white/5 text-neutral-300'
           }`}>
-            {item.access}
+            {access}
           </span>
         </div>
         <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
           <CalendarDays size={12} /> {formatDate(item.date)} · {item.time || '--:--'}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit(item);
+              }}
+              className="ml-2 inline-flex items-center gap-1 rounded-lg border border-gold-500/25 bg-gold-500/10 px-2 py-1 text-gold-300 hover:bg-gold-500/20"
+            >
+              <Pencil size={11} /> Izmeni
+            </button>
+          )}
         </div>
       </div>
 
       <div className="relative mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-2xl border border-white/10 bg-black/25 p-3">
         <div className="flex min-w-0 items-center gap-2">
-          <TeamLogo src={item.homeLogo} name={item.homeTeam} />
-          <div className="min-w-0 truncate font-display text-sm font-black text-white md:text-base">{item.homeTeam}</div>
+          {!isVipLocked && <TeamLogo src={item.homeLogo} name={homeTeam} />}
+          <div className="min-w-0 truncate font-display text-sm font-black text-white md:text-base">{homeTeam}</div>
         </div>
         <div className="rounded-full border border-gold-500/25 bg-gold-500/10 px-2.5 py-1 text-[9px] font-black text-gold-300">VS</div>
         <div className="flex min-w-0 items-center justify-end gap-2 text-right">
-          <div className="min-w-0 truncate font-display text-sm font-black text-white md:text-base">{item.awayTeam}</div>
-          <TeamLogo src={item.awayLogo} name={item.awayTeam} />
+          <div className="min-w-0 truncate font-display text-sm font-black text-white md:text-base">{awayTeam}</div>
+          {!isVipLocked && <TeamLogo src={item.awayLogo} name={awayTeam} />}
         </div>
       </div>
 
-      <div className="relative mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_120px]">
+      {!isVipLocked && <div className="relative mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_120px]">
         <FormLine label="Forma domaćina" value={item.homeFormPercent} />
         <FormLine label="Forma gosta" value={item.awayFormPercent} />
         <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2">
@@ -140,9 +165,9 @@ const AnalysisCard = ({ item, canAccessVip }: { key?: React.Key; item: DailyAnal
             <div className="h-full rounded-full bg-gradient-to-r from-gold-500 to-orange-500" style={{ width: `${confidence || 35}%` }} />
           </div>
         </div>
-      </div>
+      </div>}
 
-      <div className="relative mt-3 flex flex-wrap gap-2">
+      {!isVipLocked && <div className="relative mt-3 flex flex-wrap gap-2">
         {(item.badges || []).map((badge) => (
           <span key={badge} className="inline-flex items-center gap-1 rounded-full border border-gold-500/25 bg-gold-500/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-gold-300">
             {badge === 'ELITE PICK' ? <Star size={11} /> : badge === 'HIGH VALUE' ? <Flame size={11} /> : <ShieldCheck size={11} />}
@@ -152,7 +177,7 @@ const AnalysisCard = ({ item, canAccessVip }: { key?: React.Key; item: DailyAnal
         <span className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${riskStyle[risk]}`}>
           Rizik: {risk === 'LOW' ? 'Nizak' : risk === 'MEDIUM' ? 'Srednji' : 'Visok'}
         </span>
-      </div>
+      </div>}
 
       <div className="relative mt-3 grid gap-2 md:grid-cols-[150px_1fr]">
         <div className="rounded-2xl border border-gold-500/20 bg-gold-500/[0.08] p-3">
@@ -184,20 +209,25 @@ const AnalysisCard = ({ item, canAccessVip }: { key?: React.Key; item: DailyAnal
         </div>
       </div>
 
-      <div className="relative mt-3 grid gap-2 sm:grid-cols-2">
+      {!isVipLocked && <div className="relative mt-3 grid gap-2 sm:grid-cols-2">
         <Metric label={item.sport === 'basketball' ? 'Prosek poena' : 'Prosek golova'} value={item.averageTotal} />
         <Metric label="H2H" value={item.h2hNote} />
-      </div>
+      </div>}
     </motion.article>
   );
 };
 
 export default function DailyTips() {
-  const { canAccessVip } = useAuth();
+  const { canAccessFree, canAccessVip, isAdmin } = useAuth();
   const tabs = useMemo(() => getDailyAnalysisDates(), []);
   const [activeTab, setActiveTab] = useState(tabs[0].key);
   const [itemsByDate, setItemsByDate] = useState<Record<string, DailyAnalysisItem[]>>({});
   const [loading, setLoading] = useState(true);
+  const [editingAnalysis, setEditingAnalysis] = useState<DailyAnalysisItem | null>(null);
+
+  const getAnalyses = useCallback(async () => Promise.all(
+    tabs.map(async (tab) => [tab.date, await dailyAnalysesService.getForDate(tab.date, { canAccessFree, canAccessVip, isAdmin })] as const),
+  ), [tabs, canAccessFree, canAccessVip, isAdmin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,9 +235,7 @@ export default function DailyTips() {
     const loadAnalyses = async () => {
       setLoading(true);
       try {
-        const entries = await Promise.all(
-          tabs.map(async (tab) => [tab.date, await dailyAnalysesService.getForDate(tab.date)] as const),
-        );
+        const entries = await getAnalyses();
         if (!cancelled) setItemsByDate(Object.fromEntries(entries));
       } finally {
         if (!cancelled) setLoading(false);
@@ -218,7 +246,21 @@ export default function DailyTips() {
     return () => {
       cancelled = true;
     };
-  }, [tabs]);
+  }, [getAnalyses]);
+
+  const refreshAnalyses = async () => {
+    setItemsByDate(Object.fromEntries(await getAnalyses()));
+  };
+
+  const saveAnalysis = async (analysis: DailyAnalysisItem) => {
+    await dailyAnalysesService.saveManualAnalysis(analysis);
+    await refreshAnalyses();
+  };
+
+  const deleteAnalysis = async (id: string) => {
+    await dailyAnalysesService.deleteManualAnalysis(id);
+    await refreshAnalyses();
+  };
 
   const activeDate = tabs.find((tab) => tab.key === activeTab)?.date || tabs[0].date;
   const activeItems = itemsByDate[activeDate] || [];
@@ -265,7 +307,7 @@ export default function DailyTips() {
           <div className="grid gap-4 lg:grid-cols-2">
             <AnimatePresence mode="popLayout">
               {activeItems.map((item) => (
-                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} />
+                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} isAdmin={isAdmin} onEdit={setEditingAnalysis} />
               ))}
             </AnimatePresence>
           </div>
@@ -276,6 +318,14 @@ export default function DailyTips() {
           </div>
         )}
       </section>
+      {isAdmin && editingAnalysis && (
+        <DailyAnalysisEditModal
+          analysis={editingAnalysis}
+          onClose={() => setEditingAnalysis(null)}
+          onSave={saveAnalysis}
+          onDelete={deleteAnalysis}
+        />
+      )}
     </div>
   );
 }

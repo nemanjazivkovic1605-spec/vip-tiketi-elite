@@ -69,11 +69,10 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
       const next = { ...current, ...patch };
       if (!regenerateCode) return next;
 
-      const publishedDate = normalizePublishedDate(next.date || next.publishedDate);
+      const publishedDate = normalizePublishedDate(next.publishedDate || next.date);
       const publishedTime = normalizePublishedTime(next.publishedTime);
       return {
         ...next,
-        publishedDate,
         publishedTime,
         publishedAt: `${publishedDate}T${publishedTime}:00`,
         ticketCode: generateTicketCode(Boolean(next.isVip), publishedDate, publishedTime),
@@ -153,7 +152,8 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     const invalidMatch = matches.find((match) => !match.homeTeam || !match.awayTeam || !match.prediction);
     const unitsStake = Number(draft.unitsStake);
     const manualTotalOdds = Number(totalOddsInput);
-    const publishedDate = normalizePublishedDate(draft.date || draft.publishedDate);
+    const date = normalizePublishedDate(draft.date);
+    const publishedDate = normalizePublishedDate(draft.publishedDate || date);
     const publishedTime = normalizePublishedTime(draft.publishedTime);
     const publishedAt = `${publishedDate}T${publishedTime}:00`;
 
@@ -170,7 +170,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     return {
       ...draft,
       source: 'admin',
-      date: publishedDate,
+      date,
       publicationStatus,
       publishedDate,
       publishedTime,
@@ -281,8 +281,8 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
               </div>
 
               <label className="block mb-4">
-                <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Datum</span>
-                <input type="date" value={draft.date} onChange={(event) => updateDraft({ date: event.target.value, publishedDate: event.target.value }, true)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Datum tiketa</span>
+                <input type="date" value={draft.date} onChange={(event) => updateDraft({ date: event.target.value }, true)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
               </label>
 
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -290,8 +290,8 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Datum objave</span>
                   <input
                     type="date"
-                    value={draft.publishedDate || draft.date}
-                    onChange={(event) => updateDraft({ date: event.target.value, publishedDate: event.target.value }, true)}
+                    value={draft.publishedDate || ''}
+                    onChange={(event) => updateDraft({ publishedDate: event.target.value }, true)}
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                   />
                 </label>
@@ -299,8 +299,6 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   <span className="block text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-2">Vreme objave</span>
                   <input
                     type="time"
-                    min="12:00"
-                    max="12:59"
                     value={draft.publishedTime || '12:00'}
                     onChange={(event) => updateDraft({ publishedTime: event.target.value }, true)}
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"

@@ -16,7 +16,15 @@ import { db } from '../lib/firebase';
 import { DailyAnalysisItem } from '../types';
 
 const COLLECTION = 'dailyAnalyses';
+const PUBLIC_COLLECTION = 'publicDailyAnalyses';
+const FREE_COLLECTION = 'freeDailyAnalyses';
 const inFlightPulls = new Map<string, AbortController>();
+
+type DailyAnalysesAccess = {
+  canAccessFree: boolean;
+  canAccessVip: boolean;
+  isAdmin: boolean;
+};
 
 const toIsoString = (value: unknown) => {
   if (!value) return undefined;
@@ -65,7 +73,9 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => (
 
 const sortAnalyses = (items: DailyAnalysisItem[]) =>
   [...items].sort((a, b) => {
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    const sortOrderA = Number(a.sortOrder) || 0;
+    const sortOrderB = Number(b.sortOrder) || 0;
+    if (sortOrderA !== sortOrderB) return sortOrderA - sortOrderB;
     return `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`);
   });
 
@@ -76,6 +86,69 @@ const readManual = async () => {
 
 const publicManualForDate = (items: DailyAnalysisItem[], date: string) =>
   sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && item.status === 'ACTIVE')).slice(0, 5);
+
+const readIndex = async (collectionName: string) => {
+  const snapshot = await getDocs(query(collection(db, collectionName)));
+  return snapshot.docs.map((analysisDoc) => analysisDoc.data() as DailyAnalysisItem);
+};
+
+const publicIndexForDate = (items: DailyAnalysisItem[], date: string) =>
+  sortAnalyses(items.filter((item) => item.date === date && item.status === 'ACTIVE')).slice(0, 5);
+
+const removeUndefined = <T>(value: T): T => {
+  if (Array.isArray(value)) return value.map((item) => removeUndefined(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce<Record<string, unknown>>((result, [key, entry]) => {
+      if (entry !== undefined) result[key] = removeUndefined(entry);
+      return result;
+    }, {}) as T;
+  }
+  return value;
+};
+
+const sanitizeLockedVipAnalysis = (analysis: DailyAnalysisItem): DailyAnalysisItem => ({
+  id: analysis.id,
+  sport: analysis.sport,
+  league: analysis.league,
+  date: analysis.date,
+  time: analysis.time,
+  type: 'VIP',
+  status: analysis.status,
+  locked: true,
+} as DailyAnalysisItem);
+
+const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
+  const publicRef = doc(db, PUBLIC_COLLECTION, analysis.id);
+  const freeRef = doc(db, FREE_COLLECTION, analysis.id);
+  const visible = analysis.enabled && !analysis.hidden && analysis.status === 'ACTIVE';
+
+  if (!visible) {
+    await Promise.all([
+      deleteDoc(publicRef).catch(() => undefined),
+      deleteDoc(freeRef).catch(() => undefined),
+    ]);
+    return;
+  }
+
+  if (analysis.access === 'VIP') {
+    await Promise.all([
+      setDoc(publicRef, removeUndefined(sanitizeLockedVipAnalysis(analysis))),
+      deleteDoc(freeRef).catch(() => undefined),
+    ]);
+    return;
+  }
+
+  await Promise.all([
+    setDoc(freeRef, removeUndefined(analysis)),
+    deleteDoc(publicRef).catch(() => undefined),
+  ]);
+};
+
+const syncReadIndexFromDoc = async (analysisId: string) => {
+  const snapshot = await getDoc(doc(db, COLLECTION, analysisId));
+  if (!snapshot.exists()) return;
+  await syncReadIndexes(normalizeManual(snapshot.data(), snapshot.id));
+};
 
 const getStableAnalysisId = (analysis: DailyAnalysisItem) => {
   if (analysis.id && !analysis.id.startsWith('manual-daily-')) return analysis.id;
@@ -106,17 +179,33 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
     updatedAt: serverTimestamp(),
     createdAt: existingSnapshot.exists() ? existingSnapshot.data().createdAt : serverTimestamp(),
   }, { merge: true });
+  await syncReadIndexFromDoc(id);
 
   return { saved: true, skippedManualOverride: false };
 };
 
 export const dailyAnalysesService = {
-  getForDate: async (date: string): Promise<DailyAnalysisItem[]> => {
-    return readManual().then((items) => publicManualForDate(items, date)).catch(() => []);
+  getForDate: async (date: string, access: DailyAnalysesAccess): Promise<DailyAnalysisItem[]> => {
+    try {
+      if (access.isAdmin || access.canAccessVip) {
+        return publicManualForDate(await readManual(), date);
+      }
+
+      const lockedVip = publicIndexForDate(await readIndex(PUBLIC_COLLECTION), date);
+      if (!access.canAccessFree) return lockedVip;
+
+      const freeItems = publicIndexForDate(await readIndex(FREE_COLLECTION), date);
+      return sortAnalyses([...freeItems, ...lockedVip]).slice(0, 5);
+    } catch (error) {
+      console.error('Daily analyses public read failed:', error);
+      return [];
+    }
   },
 
   getAdminAnalyses: async (): Promise<DailyAnalysisItem[]> => {
-    return sortAnalyses(await readManual());
+    const analyses = sortAnalyses(await readManual());
+    await Promise.all(analyses.map((analysis) => syncReadIndexes(analysis)));
+    return analyses;
   },
 
   saveManualAnalysis: async (analysis: DailyAnalysisItem): Promise<void> => {
@@ -135,6 +224,7 @@ export const dailyAnalysesService = {
       updatedAt: serverTimestamp(),
       createdAt: analysis.createdAt || serverTimestamp(),
     }, { merge: true });
+    await syncReadIndexFromDoc(id);
   },
 
   updateManualAnalysis: async (id: string, patch: Partial<DailyAnalysisItem>): Promise<void> => {
@@ -143,6 +233,7 @@ export const dailyAnalysesService = {
       manualOverride: true,
       updatedAt: serverTimestamp(),
     });
+    await syncReadIndexFromDoc(id);
   },
 
   pullFromApiForDate: async (date: string): Promise<{ saved: number; skippedManualOverride: number; fetched: number }> => {
@@ -173,7 +264,11 @@ export const dailyAnalysesService = {
   },
 
   deleteManualAnalysis: async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, COLLECTION, id));
+    await Promise.all([
+      deleteDoc(doc(db, COLLECTION, id)),
+      deleteDoc(doc(db, PUBLIC_COLLECTION, id)).catch(() => undefined),
+      deleteDoc(doc(db, FREE_COLLECTION, id)).catch(() => undefined),
+    ]);
   },
 
   subscribeAdmin: (callback: () => void) =>

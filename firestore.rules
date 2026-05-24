@@ -93,9 +93,26 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Daily analyses. Public reads are allowed; admin controls manual entries.
+    // Full daily analysis data is limited to VIP/admin clients.
     match /dailyAnalyses/{analysisId} {
+      allow read: if isAdmin() || hasVipAccess();
+      allow write: if isAdmin();
+    }
+
+    // Locked VIP summaries contain no prediction, odds or analysis.
+    match /publicDailyAnalyses/{analysisId} {
       allow read: if true;
+      allow create, update: if isAdmin() &&
+        incoming().keys().hasOnly(['id', 'sport', 'league', 'date', 'time', 'type', 'status', 'locked']) &&
+        incoming().id == analysisId &&
+        incoming().type == 'VIP' &&
+        incoming().locked == true;
+      allow delete: if isAdmin();
+    }
+
+    // Full FREE daily analyses are available after email verification.
+    match /freeDailyAnalyses/{analysisId} {
+      allow read: if hasVerifiedEmail();
       allow write: if isAdmin();
     }
 

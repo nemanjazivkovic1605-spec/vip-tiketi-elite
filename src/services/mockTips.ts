@@ -46,15 +46,14 @@ const normalizeTip = (tip: Tip): Tip => {
     }))
     : [];
   const totalOdds = calculateTotalOdds(matches);
-  const date = tip.date || new Date().toISOString().split('T')[0];
+  const date = normalizePublishedDate(tip.date || new Date().toISOString().split('T')[0]);
   const publicationStatus = tip.publicationStatus || TipPublicationStatus.DRAFT;
   const status = tip.status || TicketStatus.PENDING;
-  const publishedDate = normalizePublishedDate(date);
   const publicationMeta = getTicketPublicationMeta({
     id: tip.id,
-    date: publishedDate,
+    date,
     isVip: Boolean(tip.isVip),
-    publishedDate,
+    publishedDate: tip.publishedDate,
     publishedTime: tip.publishedTime,
   });
   const existingTicketCode = (tip.ticketCode || '').trim();
@@ -74,7 +73,7 @@ const normalizeTip = (tip: Tip): Tip => {
     publicationStatus,
     status,
     isVip: Boolean(tip.isVip),
-    date: publishedDate,
+    date,
     analysis: cleanAnalysis(tip.analysis),
     matches,
     totalOdds: tip.totalOddsOverride && Number.isFinite(tip.totalOdds) && tip.totalOdds > 0

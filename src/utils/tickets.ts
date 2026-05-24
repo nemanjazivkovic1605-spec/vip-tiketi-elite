@@ -61,7 +61,7 @@ export const generateTicketCode = (isVip: boolean, publishedDate: string, publis
 };
 
 export const getTicketPublicationMeta = (tip: Pick<Tip, 'date' | 'isVip' | 'publishedDate' | 'publishedTime'> & Partial<Pick<Tip, 'id'>>) => {
-  const publishedDate = normalizePublishedDate(tip.date || tip.publishedDate);
+  const publishedDate = normalizePublishedDate(tip.publishedDate || tip.date);
   const stableSeed = `${tip.id || 'ticket'}-${publishedDate}-${tip.isVip ? 'vip' : 'free'}`;
   const publishedTime = normalizePublishedTime(tip.publishedTime || generateStablePublishedTime(stableSeed));
 
