@@ -37,13 +37,12 @@ The app now sends verification, password reset, welcome, and contact emails thro
 
 1. Create a Resend account at https://resend.com/.
 2. Add `RESEND_API_KEY` in your `.env.local` for local development and in Vercel Project Settings for production.
-3. Set `RESEND_FROM_EMAIL` and `RESEND_CONTACT_TO_EMAIL` to the sender and internal recipient addresses.
-4. Optionally configure Resend templates and set:
-   - `RESEND_TEMPLATE_EMAIL_VERIFICATION_ID`
-   - `RESEND_TEMPLATE_PASSWORD_RESET_ID`
+3. Verify `eliteviptips.com` in Resend. Authentication emails always send as `Elite VIP Tips <support@eliteviptips.com>`.
+4. Set `RESEND_CONTACT_TO_EMAIL` for the internal contact-form recipient.
+5. Optionally configure templates only for welcome/contact emails and set:
    - `RESEND_TEMPLATE_WELCOME_ID`
    - `RESEND_TEMPLATE_CONTACT_ID`
-5. For verification and password reset links, add `FIREBASE_SERVICE_ACCOUNT_KEY` to your backend environment. This is used by the server to generate secure Firebase auth action links.
-6. If you prefer not to use templates, the backend will send styled HTML emails automatically.
+6. For verification and password reset links, add `FIREBASE_SERVICE_ACCOUNT_KEY` to your backend environment. The server generates secure Firebase action codes, then Resend sends source-controlled branded HTML.
+7. Production authentication action buttons always open `https://eliteviptips.com/auth-action`; Firebase default email templates are not used.
 
 Do not commit `.env`; it is ignored by git. Keep `RESEND_API_KEY` and `FIREBASE_SERVICE_ACCOUNT_KEY` secret.

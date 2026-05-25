@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Resend } from 'resend';
-import { initializeApp, cert, getApp, type App } from 'firebase-admin/app';
+import { initializeApp, cert, type App } from 'firebase-admin/app';
 import { getAuth as getAdminAuth, type Auth as AdminAuth } from 'firebase-admin/auth';
 
 const getEnvValue = (key: string, fallback = '') =>
@@ -8,13 +8,16 @@ const getEnvValue = (key: string, fallback = '') =>
     ? process.env[key]!.trim()
     : fallback;
 
-const APP_URL = getEnvValue('APP_URL', 'https://eliteviptips.com');
-const AUTH_ACTION_URL = getEnvValue('AUTH_ACTION_URL', `${APP_URL.replace(/\/+$/, '')}/auth-action`);
+const PRODUCTION_APP_URL = 'https://eliteviptips.com';
+const IS_PRODUCTION = getEnvValue('VERCEL_ENV') === 'production';
+const APP_URL = (IS_PRODUCTION ? PRODUCTION_APP_URL : getEnvValue('APP_URL', PRODUCTION_APP_URL)).replace(/\/+$/, '');
+const AUTH_ACTION_URL = IS_PRODUCTION
+  ? `${PRODUCTION_APP_URL}/auth-action`
+  : getEnvValue('AUTH_ACTION_URL', `${APP_URL}/auth-action`);
+const LOGIN_URL = `${APP_URL}/login`;
 const RESEND_API_KEY = getEnvValue('RESEND_API_KEY');
-const RESEND_FROM_EMAIL = getEnvValue('RESEND_FROM_EMAIL', 'Elite VIP Tips <support@eliteviptips.com>');
+const RESEND_FROM_EMAIL = 'Elite VIP Tips <support@eliteviptips.com>';
 const RESEND_CONTACT_TO_EMAIL = getEnvValue('RESEND_CONTACT_TO_EMAIL', 'nemanjazivkovic1605@gmail.com');
-const RESEND_TEMPLATE_EMAIL_VERIFICATION_ID = getEnvValue('RESEND_TEMPLATE_EMAIL_VERIFICATION_ID');
-const RESEND_TEMPLATE_PASSWORD_RESET_ID = getEnvValue('RESEND_TEMPLATE_PASSWORD_RESET_ID');
 const RESEND_TEMPLATE_WELCOME_ID = getEnvValue('RESEND_TEMPLATE_WELCOME_ID');
 const RESEND_TEMPLATE_CONTACT_ID = getEnvValue('RESEND_TEMPLATE_CONTACT_ID');
 const FIREBASE_SERVICE_ACCOUNT_KEY = getEnvValue('FIREBASE_SERVICE_ACCOUNT_KEY');
@@ -82,11 +85,31 @@ const verifyIdToken = async (authorization?: string) => {
 };
 
 const buildActionCodeSettings = () => ({
-  url: AUTH_ACTION_URL,
+  url: LOGIN_URL,
   handleCodeInApp: false,
 });
 
-const buildVerificationHtml = (displayName: string, link: string) => `<!DOCTYPE html>
+const buildAppActionLink = (firebaseActionLink: string) => {
+  const firebaseUrl = new URL(firebaseActionLink);
+  const appUrl = new URL(AUTH_ACTION_URL);
+  firebaseUrl.searchParams.forEach((value, key) => appUrl.searchParams.set(key, value));
+  if (!appUrl.searchParams.has('continueUrl')) {
+    appUrl.searchParams.set('continueUrl', LOGIN_URL);
+  }
+  return appUrl.toString();
+};
+
+const escapeHtml = (value: string) => value
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
+
+const buildVerificationHtml = (displayName: string, link: string) => {
+  const safeName = escapeHtml(displayName);
+  const safeLink = escapeHtml(link);
+  return `<!DOCTYPE html>
 <html lang="sr">
   <body style="font-family: Inter, Helvetica, Arial, sans-serif; margin:0; padding:0; background:#0a0a0a; color:#f8f4f0;">
     <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
@@ -95,15 +118,16 @@ const buildVerificationHtml = (displayName: string, link: string) => `<!DOCTYPE 
           <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px; background:#111827; border-radius:24px; overflow:hidden;">
             <tr>
               <td style="padding:32px; text-align:center; background:#111827;">
+                <p style="margin:0 0 20px; color:#facc15; font-size:13px; font-weight:700; letter-spacing:3px;">ELITE VIP TIPS</p>
                 <h1 style="margin:0; font-size:28px; line-height:1.1; color:#facc15;">Potvrdite email adresu</h1>
                 <p style="margin:16px 0 0; color:#d1d5db;">Završite registraciju Elite VIP Tips naloga koristeći donji link.</p>
               </td>
             </tr>
             <tr>
               <td style="padding:32px; color:#e5e7eb;">
-                <p>Zdravo ${displayName},</p>
+                <p>Zdravo ${safeName},</p>
                 <p>Hvala što ste se registrovali. Kliknite na dugme ispod da potvrdite svoju email adresu i aktivirate pristup.</p>
-                <p style="text-align:center; margin:32px 0;"><a href="${link}" style="display:inline-block; padding:16px 28px; background:#facc15; color:#111827; text-decoration:none; font-weight:700; border-radius:9999px;">Potvrdite email</a></p>
+                <p style="text-align:center; margin:32px 0;"><a href="${safeLink}" style="display:inline-block; padding:16px 28px; background:#facc15; color:#111827; text-decoration:none; font-weight:700; border-radius:9999px;">Potvrdite email adresu</a></p>
                 <p>Ako niste tražili ovaj email, slobodno ga ignorišite.</p>
                 <p style="margin:0; color:#9ca3af;">Elite VIP Tips</p>
               </td>
@@ -114,8 +138,11 @@ const buildVerificationHtml = (displayName: string, link: string) => `<!DOCTYPE 
     </table>
   </body>
 </html>`;
+};
 
-const buildResetHtml = (link: string) => `<!DOCTYPE html>
+const buildResetHtml = (link: string) => {
+  const safeLink = escapeHtml(link);
+  return `<!DOCTYPE html>
 <html lang="sr">
   <body style="font-family: Inter, Helvetica, Arial, sans-serif; margin:0; padding:0; background:#0a0a0a; color:#f8f4f0;">
     <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
@@ -124,6 +151,7 @@ const buildResetHtml = (link: string) => `<!DOCTYPE html>
           <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px; background:#111827; border-radius:24px; overflow:hidden;">
             <tr>
               <td style="padding:32px; text-align:center; background:#111827;">
+                <p style="margin:0 0 20px; color:#facc15; font-size:13px; font-weight:700; letter-spacing:3px;">ELITE VIP TIPS</p>
                 <h1 style="margin:0; font-size:28px; line-height:1.1; color:#facc15;">Reset lozinke</h1>
                 <p style="margin:16px 0 0; color:#d1d5db;">Podesite novu lozinku putem sledećeg linka.</p>
               </td>
@@ -131,7 +159,7 @@ const buildResetHtml = (link: string) => `<!DOCTYPE html>
             <tr>
               <td style="padding:32px; color:#e5e7eb;">
                 <p>Zatražena je promena lozinke za vaš Elite VIP Tips nalog.</p>
-                <p style="text-align:center; margin:32px 0;"><a href="${link}" style="display:inline-block; padding:16px 28px; background:#facc15; color:#111827; text-decoration:none; font-weight:700; border-radius:9999px;">Resetuj lozinku</a></p>
+                <p style="text-align:center; margin:32px 0;"><a href="${safeLink}" style="display:inline-block; padding:16px 28px; background:#facc15; color:#111827; text-decoration:none; font-weight:700; border-radius:9999px;">Resetuj lozinku</a></p>
                 <p>Ako niste tražili reset lozinke, možete bezbedno ignorisati ovaj email.</p>
                 <p style="margin:0; color:#9ca3af;">Elite VIP Tips</p>
               </td>
@@ -142,6 +170,7 @@ const buildResetHtml = (link: string) => `<!DOCTYPE html>
     </table>
   </body>
 </html>`;
+};
 
 const buildWelcomeHtml = (name: string, planName?: string) => `<!DOCTYPE html>
 <html lang="sr">
@@ -235,25 +264,15 @@ export default async function handler(request: IncomingMessage, response: Server
       }
 
       const { adminAuth } = initAdminSdk();
-      const verificationLink = await adminAuth.generateEmailVerificationLink(email, buildActionCodeSettings());
+      const generatedLink = await adminAuth.generateEmailVerificationLink(email, buildActionCodeSettings());
+      const verificationLink = buildAppActionLink(generatedLink);
       const displayName = tokenData.name || email.split('@')[0];
-      const templateId = RESEND_TEMPLATE_EMAIL_VERIFICATION_ID;
       const payload: Record<string, unknown> = {
         from: RESEND_FROM_EMAIL,
         to: email,
+        subject: 'Potvrdite email adresu - Elite VIP Tips',
+        html: buildVerificationHtml(displayName, verificationLink),
       };
-
-      if (templateId) {
-        payload.template = templateId;
-        payload.template_data = {
-          name: displayName,
-          verify_url: verificationLink,
-          email,
-        };
-      } else {
-        payload.subject = 'Potvrdite email adresu – Elite VIP Tips';
-        payload.html = buildVerificationHtml(displayName, verificationLink);
-      }
 
       await sendEmail(payload);
       sendJson(response, 200, { success: true });
@@ -268,23 +287,14 @@ export default async function handler(request: IncomingMessage, response: Server
       }
 
       const { adminAuth } = initAdminSdk();
-      const resetLink = await adminAuth.generatePasswordResetLink(email, buildActionCodeSettings());
-      const templateId = RESEND_TEMPLATE_PASSWORD_RESET_ID;
+      const generatedLink = await adminAuth.generatePasswordResetLink(email, buildActionCodeSettings());
+      const resetLink = buildAppActionLink(generatedLink);
       const payload: Record<string, unknown> = {
         from: RESEND_FROM_EMAIL,
         to: email,
+        subject: 'Reset lozinke - Elite VIP Tips',
+        html: buildResetHtml(resetLink),
       };
-
-      if (templateId) {
-        payload.template = templateId;
-        payload.template_data = {
-          reset_url: resetLink,
-          email,
-        };
-      } else {
-        payload.subject = 'Reset lozinke – Elite VIP Tips';
-        payload.html = buildResetHtml(resetLink);
-      }
 
       await sendEmail(payload);
       sendJson(response, 200, { success: true });
