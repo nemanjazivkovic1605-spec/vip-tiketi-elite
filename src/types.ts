@@ -251,6 +251,9 @@ export interface DailyAnalysisItem {
   prediction: string;
   odds: number;
   reasoning: string;
+  analysis?: string;
+  vipAnalysis?: string;
+  aiSource?: 'gemini' | 'fallback';
   confidence?: number;
   riskLevel?: DailyAnalysisRiskLevel;
   averageTotal?: string;

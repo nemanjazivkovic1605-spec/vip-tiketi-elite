@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
+import { dailyAnalysisAiService } from './dailyAnalysisAiService';
 
 const COLLECTION = 'dailyAnalyses';
 const PUBLIC_COLLECTION = 'publicDailyAnalyses';
@@ -103,7 +104,10 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => (
   formNote: data.formNote || undefined,
   prediction: data.prediction || 'Over 1.5',
   odds: Number.isFinite(Number(data.odds)) ? Number(data.odds) : 1.5,
-  reasoning: data.reasoning || '',
+  reasoning: data.reasoning || data.vipAnalysis || data.analysis || '',
+  analysis: data.analysis || data.reasoning || '',
+  vipAnalysis: data.vipAnalysis || undefined,
+  aiSource: data.aiSource === 'gemini' ? 'gemini' : data.aiSource === 'fallback' ? 'fallback' : undefined,
   confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : undefined,
   riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(data.riskLevel) ? data.riskLevel : undefined,
   averageTotal: data.averageTotal || undefined,
@@ -202,7 +206,18 @@ const getStableAnalysisId = (analysis: DailyAnalysisItem) => {
   return `manual-daily-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 };
 
-const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
+const withCompleteAnalysis = (analysis: DailyAnalysisItem, analysisText?: string, aiSource?: 'gemini' | 'fallback') => {
+  const text = analysisText?.trim() || analysis.reasoning?.trim() || dailyAnalysisAiService.fallbackAnalysis(analysis);
+  return {
+    ...analysis,
+    reasoning: text,
+    analysis: text,
+    vipAnalysis: analysis.access === 'VIP' ? text : '',
+    ...(aiSource ? { aiSource } : {}),
+  };
+};
+
+const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem, generateAi = false) => {
   const id = getStableAnalysisId(analysis);
   const ref = doc(db, COLLECTION, id);
   const existingSnapshot = await getDoc(ref);
@@ -214,10 +229,18 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
     }
   }
 
+  let completedAnalysis = withCompleteAnalysis(analysis);
+  let aiSource: 'gemini' | 'fallback' | undefined;
+  if (generateAi) {
+    const generated = await dailyAnalysisAiService.generateDailyAnalysisText(analysis);
+    aiSource = generated.source;
+    completedAnalysis = withCompleteAnalysis(analysis, generated.analysis, generated.source);
+  }
+
   await setDoc(ref, removeUndefined({
-    ...analysis,
+    ...completedAnalysis,
     id,
-    source: analysis.source,
+    source: completedAnalysis.source,
     manualOverride: false,
     status: analysis.status || 'ACTIVE',
     enabled: analysis.enabled !== false,
@@ -227,7 +250,7 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
   }), { merge: true });
   await syncReadIndexFromDoc(id);
 
-  return { saved: true, skippedManualOverride: false };
+  return { saved: true, skippedManualOverride: false, aiSource };
 };
 
 export const dailyAnalysesService = {
@@ -262,10 +285,12 @@ export const dailyAnalysesService = {
       ? analysis.status
       : evaluateDailyAnalysisStatus(analysis.prediction, homeScore, awayScore) || 'ACTIVE';
 
+    const completedAnalysis = withCompleteAnalysis(analysis);
+
     await setDoc(doc(db, COLLECTION, id), removeUndefined({
-      ...analysis,
+      ...completedAnalysis,
       id,
-      source: analysis.source || 'manual',
+      source: completedAnalysis.source || 'manual',
       status,
       result: formatScoreResult(homeScore, awayScore) || analysis.result,
       homeScore,
@@ -303,7 +328,13 @@ export const dailyAnalysesService = {
     await syncReadIndexFromDoc(id);
   },
 
-  pullFromApiForDate: async (date: string): Promise<{ saved: number; skippedManualOverride: number; fetched: number }> => {
+  generateAiAnalysis: async (analysis: DailyAnalysisItem): Promise<'gemini' | 'fallback'> => {
+    const generated = await dailyAnalysisAiService.generateDailyAnalysisText(analysis);
+    await dailyAnalysesService.saveManualAnalysis(withCompleteAnalysis(analysis, generated.analysis, generated.source));
+    return generated.source;
+  },
+
+  pullFromApiForDate: async (date: string, options?: { generateAi?: boolean }): Promise<{ saved: number; skippedManualOverride: number; fetched: number; aiGenerated: number; fallbackGenerated: number }> => {
     const previous = inFlightPulls.get(date);
     if (previous) previous.abort();
 
@@ -315,14 +346,18 @@ export const dailyAnalysesService = {
       const analyses = await apiFootballService.fetchDailyAnalysesForDate(date, controller.signal);
       let saved = 0;
       let skippedManualOverride = 0;
+      let aiGenerated = 0;
+      let fallbackGenerated = 0;
 
       for (const analysis of analyses) {
-        const result = await saveApiAnalysisIfAllowed(analysis);
+        const result = await saveApiAnalysisIfAllowed(analysis, options?.generateAi === true);
         if (result.saved) saved += 1;
         if (result.skippedManualOverride) skippedManualOverride += 1;
+        if (result.aiSource === 'gemini') aiGenerated += 1;
+        if (result.aiSource === 'fallback') fallbackGenerated += 1;
       }
 
-      return { saved, skippedManualOverride, fetched: analyses.length };
+      return { saved, skippedManualOverride, fetched: analyses.length, aiGenerated, fallbackGenerated };
     } finally {
       if (inFlightPulls.get(date) === controller) {
         inFlightPulls.delete(date);

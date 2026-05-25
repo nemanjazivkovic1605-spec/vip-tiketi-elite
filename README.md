@@ -15,9 +15,20 @@ View your app in AI Studio: https://ai.studio/apps/baeb5e75-e490-4d35-a2a6-10aba
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. For local AI analysis testing through `vercel dev`, set server-only `GEMINI_API_KEY` in an ignored `.env.local` file. Never use a `VITE_` prefix for this key.
 3. Run the app:
    `npm run dev`
+
+## Gemini DailyTips analysis setup
+
+DailyTips AI analysis is generated through the server function at `/api/generate-daily-analysis`; the browser never receives the Gemini API key.
+
+1. In Vercel, open Project Settings -> Environment Variables.
+2. Add `GEMINI_API_KEY` for Production (and Preview only when needed).
+3. Redeploy after adding or changing the environment variable.
+4. In Admin -> Dnevni Tipovi, use `Generisi AI analizu` for a selected match or enable AI generation during manual API import.
+
+If Gemini is unavailable or rate limited, the app stores a non-empty analysis fallback based on the selected match and pick.
 
 ## Contact form EmailJS setup
 

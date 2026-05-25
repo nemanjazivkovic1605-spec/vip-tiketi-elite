@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { 
   BarChart3, Users, FileText, Settings, LogOut, ChevronRight, 
-  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle, Bell
+  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle, Bell, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { mockTipsService } from '../../services/mockTips';
@@ -84,6 +84,8 @@ export default function AdminDashboard() {
   const [dailyAnalyses, setDailyAnalyses] = useState<DailyAnalysisItem[]>([]);
   const [dailyPullMessage, setDailyPullMessage] = useState('');
   const [dailyPullLoadingDate, setDailyPullLoadingDate] = useState('');
+  const [dailyAiLoadingId, setDailyAiLoadingId] = useState('');
+  const [generateAiOnPull, setGenerateAiOnPull] = useState(true);
   const [dailyAnalysisForm, setDailyAnalysisForm] = useState<DailyAnalysisItem>({
     id: '',
     source: 'manual',
@@ -677,14 +679,34 @@ export default function AdminDashboard() {
     setDailyPullMessage('');
     setDailyPullLoadingDate(date);
     try {
-      const result = await dailyAnalysesService.pullFromApiForDate(date);
-      setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}.`);
+      const result = await dailyAnalysesService.pullFromApiForDate(date, { generateAi: generateAiOnPull });
+      const aiSummary = generateAiOnPull
+        ? ` AI analize: ${result.aiGenerated} Gemini${result.fallbackGenerated ? `, ${result.fallbackGenerated} fallback` : ''}.`
+        : '';
+      setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}.${aiSummary}`);
       await refreshData();
     } catch (error) {
       console.error('Daily tips API pull failed:', error);
       setDailyPullMessage(`${label}: povlačenje nije uspelo. Proverite API limit ili ključ.`);
     } finally {
       setDailyPullLoadingDate('');
+    }
+  };
+
+  const handleGenerateDailyAiAnalysis = async (analysis: DailyAnalysisItem) => {
+    setDailyAiLoadingId(analysis.id);
+    setDailyPullMessage('');
+    try {
+      const source = await dailyAnalysesService.generateAiAnalysis(analysis);
+      setDailyPullMessage(source === 'gemini'
+        ? `AI analiza je generisana za ${analysis.homeTeam} - ${analysis.awayTeam}.`
+        : `Gemini trenutno nije odgovorio; sačuvana je fallback analiza za ${analysis.homeTeam} - ${analysis.awayTeam}.`);
+      await refreshData();
+    } catch (error) {
+      console.error('AI daily analysis generation failed:', error);
+      setDailyPullMessage('Generisanje AI analize nije uspelo.');
+    } finally {
+      setDailyAiLoadingId('');
     }
   };
 
@@ -2285,6 +2307,15 @@ export default function AdminDashboard() {
                       {dailyPullMessage && <p className="mt-3 rounded-xl border border-gold-500/20 bg-gold-500/10 px-4 py-3 text-xs font-bold text-gold-300">{dailyPullMessage}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      <label className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300">
+                        <input
+                          type="checkbox"
+                          checked={generateAiOnPull}
+                          onChange={(event) => setGenerateAiOnPull(event.target.checked)}
+                          className="accent-orange-500"
+                        />
+                        AI analiza pri povlačenju
+                      </label>
                       {dailyPullDates.map((tab) => (
                         <button
                           key={tab.key}
@@ -2458,6 +2489,14 @@ export default function AdminDashboard() {
                               {analysis.reasoning && <p className="mt-3 max-w-3xl text-xs leading-6 text-neutral-500">{analysis.reasoning}</p>}
                             </div>
                             <div className="flex flex-wrap gap-2">
+                              <button
+                                disabled={dailyAiLoadingId === analysis.id}
+                                onClick={() => handleGenerateDailyAiAnalysis(analysis)}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-gold-500/25 bg-gold-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gold-300 hover:bg-gold-500/20 disabled:opacity-50"
+                              >
+                                <Sparkles size={13} />
+                                {dailyAiLoadingId === analysis.id ? 'Generišem...' : 'Generiši AI analizu'}
+                              </button>
                               <button onClick={() => handleEditDailyAnalysis(analysis)} className="rounded-xl bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:text-gold-400">Izmeni</button>
                               <button onClick={() => handleDailyQuickPatch(analysis, { hidden: !analysis.hidden, status: !analysis.hidden ? 'HIDDEN' : 'ACTIVE' })} className="rounded-xl bg-orange-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 hover:bg-orange-500/20">
                                 {analysis.hidden ? 'Prikaži' : 'Sakrij'}
