@@ -47,7 +47,7 @@ export default function Home() {
             transition={{ delay: 0.05 }}
             className="mx-auto max-w-4xl font-display text-5xl font-black leading-[0.95] tracking-tight md:text-7xl"
           >
-            Pametniji pristup <span className="gold-text">sportskim tipovima</span>
+            Dominiraj <span className="gold-text">sportskim kladionicama</span>
           </motion.h1>
 
           <motion.p
