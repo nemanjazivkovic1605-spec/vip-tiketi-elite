@@ -28,29 +28,34 @@ type ApiRequest = IncomingMessage & { body?: unknown };
 const MODEL = 'gemini-2.5-flash';
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 12;
-const MIN_ANALYSIS_LENGTH = 250;
+const MIN_ANALYSIS_LENGTH = 400;
 const TRUSTED_ADMIN_EMAILS = new Set(['nemanjazivkovic1605@gmail.com']);
 const requestCounts = new Map<string, RateEntry>();
 
-const MASTER_PROMPT = `Ti si elitni evropski sportski analiticar i profesionalni VIP tipster koji pise premium analize za ozbiljnu betting platformu.
+const MASTER_PROMPT = `Ti si elitni evropski sportski tipster sa iskustvom u premium fudbalskim analizama.
 
-Tvoj zadatak je da napises profesionalnu sportsku analizu na SRPSKOM jeziku za predlozeni tip.
+Napiši analizu u srpskom jeziku koja zvuči kao da ju je napisao iskusan tipster, ne AI asistent. Ton treba da bude moderan, agresivan, prirodan i direktan. Analiza treba da bude fokusirana na konkretan matchup i da koristi fudbalski rečnik, bez opštih fraza i bez AI safe disklamera.
 
-Analiza mora zvucati prirodno i ljudski, biti ubedljiva ali profesionalna, izgledati kao premium VIP sadrzaj, direktno pomenuti timove i objasniti zasto tip ima vrednost. Fokusiraj se na stil utakmice i logiku tipa, uz profesionalni sportski recnik.
+Ne koristi:
+- nijedan ishod nije garantovan
+- odgovorno upravljanje ulogom
+- razuman izbor
+- u okviru dostupnih informacija
+- sportski događaji su nepredvidljivi
+- predstavlja value
+- profil meča
+- disciplinovana procena
 
-Analiza ne sme obecavati sigurnu zaradu niti koristiti izraze: "zicer", "100% prolaz", "siguran tip", "nemoguce da padne", "garantovan dobitak".
+Nema markdowna, nema bullet lista, nema navodnika. Napiši 3 do 5 punih rečenica sa 400 do 900 karaktera. Direktno pominjaj timove više puta i koristi sportsku logiku za tempo, stil igre, matchup, prostor za golove, tranziciju, ranjive odbrane, momentum, intenzitet i način otvaranja tipa.
 
-Stil mora biti ozbiljan, samouveren i moderan evropski betting stil, bez emojija, bez bullet lista i bez preteranog statistickog nabrajanja. Napisati 3 do 5 kvalitetnih recenica.
+Za GG / BTTS fokusiraj na otvoren meč, obe ekipe napadački opasne su, prostor iza odbrane, ritam, tranziciju i zašto rani gol otvara utakmicu.
+Za OVER fokusiraj na tempo, efikasnost, agresivan ritam, matchup koji vodi ka šansama i potencijal otvorenog meča posle prvog gola.
+Za UNDER fokusiraj na disciplinu, sporiji ritam, tvrđi matchup i manje prostora.
+Za 1 ili 2 fokusiraj na kvalitet, momentum, domaći teren, formu i matchup prednost.
+Za 1X / X2 fokusiraj na stabilnost, kontrolu i zašto je favorit još uvek pod pritiskom.
+Za NG fokusiraj na slab napad jednog tima, defanzivnu stabilnost drugog i kontrolu ritma.
 
-Posebna pravila:
-- Za GG / BTTS fokusiraj otvorenu utakmicu, stil igre oba tima, ranjive odbrane, efikasnost, prostor u tranziciji i tempo.
-- Za OVER fokusiraj ritam, napadacki potencijal, nacin na koji matchup otvara golove/poene i efekat ranog pogotka.
-- Za UNDER fokusiraj disciplinu, zatvoren pristup, oprez i tvrd mec.
-- Za 1 ili 2 fokusiraj kvalitet, momentum, domaci teren/formu i matchup prednost.
-- Za 1X / X2 fokusiraj stabilnost, kontrolu i tezinu da favorit izgubi.
-- Za NG fokusiraj slab napad jednog tima, defanzivnu stabilnost i kontrolu ritma.
-
-Obavezno direktno koristi imena timova i naziv lige ako prirodno zvuci. Analiza treba da zvuci kao da ju je napisao iskusan sportski analiticar.`;
+Obavezno koristi imena timova i naziv lige prirodno i više puta. Tekst treba da zvuči kao pravi evropski VIP tipster.`;
 
 const normalizeText = (value: unknown, fallback = '') =>
   typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -110,7 +115,7 @@ Confidence: ${formatOptional(matchData.confidence)}
 Rizik: ${formatOptional(matchData.risk)}
 Statistika: ${formatOptional(matchData.stats)}
 
-Sada napisi premium VIP analizu.${retry ? '\n\nPrethodni odgovor je bio prekratak. Obavezno napisi najmanje 250 karaktera, 3 do 5 zavrsenih i sadrzajnih recenica, bez prekidanja misli.' : ''}`;
+Sada napisi premium VIP analizu.${retry ? '\n\nPrethodni odgovor je bio previše generički i slabog tipsterskog tona. Napiši ponovo snažno i direktno, sa najmanje 400 karaktera i 3 do 5 punih, prirodnih rečenica koje zvuče kao pravi evropski VIP tipster.' : ''}`;
 
 const requestGeminiAnalysis = async (apiKey: string, matchData: MatchData, retry = false) => {
   const response = await fetch(
@@ -146,16 +151,36 @@ const requestGeminiAnalysis = async (apiKey: string, matchData: MatchData, retry
     .sort((a, b) => b.length - a.length)[0] || '';
 };
 
+const isAnalysisTooGeneric = (value: string) => {
+  const genericPhrases = [
+    /nijedan ishod nije garantovan/i,
+    /odgovorno upravljanje ulogom/i,
+    /razuman izbor/i,
+    /u okviru dostupnih informacija/i,
+    /sportski događaji su nepredvidivi/i,
+    /predstavlja value/i,
+    /profil meča/i,
+    /disciplinovana procena/i,
+    /value/i,
+  ];
+
+  if (value.length < MIN_ANALYSIS_LENGTH) return true;
+  return genericPhrases.some((phrase) => phrase.test(value));
+};
+
 export async function generateDailyAnalysisText(matchData: MatchData): Promise<string> {
   const fallback = buildFallbackAnalysis(matchData);
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return fallback;
 
   const firstResult = await requestGeminiAnalysis(apiKey, matchData);
-  if (firstResult.length >= MIN_ANALYSIS_LENGTH) return firstResult;
+  if (!isAnalysisTooGeneric(firstResult)) return firstResult;
 
   const secondResult = await requestGeminiAnalysis(apiKey, matchData, true);
-  return secondResult.length >= MIN_ANALYSIS_LENGTH ? secondResult : fallback;
+  if (!isAnalysisTooGeneric(secondResult)) return secondResult;
+
+  const thirdResult = await requestGeminiAnalysis(apiKey, matchData, true);
+  return !isAnalysisTooGeneric(thirdResult) ? thirdResult : fallback;
 }
 
 const readBody = async (request: ApiRequest) => {
