@@ -11,11 +11,11 @@ export default function Home() {
 
   useEffect(() => {
     const fetchStats = async () => {
-      setStats(await mockTipsService.getStats());
+      setStats(await mockTipsService.getPublicStats());
     };
 
     fetchStats();
-    return mockTipsService.subscribe(fetchStats);
+    return mockTipsService.subscribePublicStats(fetchStats);
   }, []);
 
   const statsCards = [

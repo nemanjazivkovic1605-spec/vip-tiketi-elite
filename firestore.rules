@@ -93,6 +93,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Public statistics source contains only settled published tickets.
+    match /publicStatsTickets/{ticketId} {
+      allow read: if true;
+      allow create, update: if isAdmin() &&
+        incoming().publicationStatus == 'PUBLISHED' &&
+        incoming().status in ['WON', 'LOST', 'REFUND'] &&
+        incoming().locked == false &&
+        incoming().analysis == '';
+      allow delete: if isAdmin();
+    }
+
     // Full daily analysis data is limited to VIP/admin clients.
     match /dailyAnalyses/{analysisId} {
       allow read: if isAdmin() || hasVipAccess();

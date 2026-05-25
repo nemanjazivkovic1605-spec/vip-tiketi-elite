@@ -27,6 +27,7 @@ import {
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
+const PUBLIC_STATS_TICKETS_COLLECTION = 'publicStatsTickets';
 
 const cleanAnalysis = (analysis?: string) => {
   const value = (analysis || '').trim();
@@ -208,9 +209,11 @@ const readFinishedDailyAnalysisTips = async (): Promise<Tip[]> => {
 
 const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
+const getPublicStatsTicketsCollection = () => collection(db, PUBLIC_STATS_TICKETS_COLLECTION);
 
 const getTicketDoc = (id: string) => doc(db, TICKETS_COLLECTION, id);
 const getPublicTicketDoc = (id: string) => doc(db, PUBLIC_TICKETS_COLLECTION, id);
+const getPublicStatsTicketDoc = (id: string) => doc(db, PUBLIC_STATS_TICKETS_COLLECTION, id);
 
 const removeUndefined = <T>(value: T): T => {
   if (Array.isArray(value)) {
@@ -286,11 +289,20 @@ const syncPublicTicket = async (tip: Tip) => {
   const normalized = normalizeTip(tip);
 
   if (normalized.publicationStatus !== TipPublicationStatus.PUBLISHED) {
-    await deleteDoc(getPublicTicketDoc(normalized.id)).catch(() => undefined);
+    await Promise.all([
+      deleteDoc(getPublicTicketDoc(normalized.id)).catch(() => undefined),
+      deleteDoc(getPublicStatsTicketDoc(normalized.id)).catch(() => undefined),
+    ]);
     return;
   }
 
   await setDoc(getPublicTicketDoc(normalized.id), removeUndefined(sanitizePublicTip(normalized)));
+
+  if (isFinishedForStats(normalized.status)) {
+    await setDoc(getPublicStatsTicketDoc(normalized.id), removeUndefined(sanitizePublicTip(normalized)));
+  } else {
+    await deleteDoc(getPublicStatsTicketDoc(normalized.id)).catch(() => undefined);
+  }
 };
 
 const needsTicketMetadataRepair = (original: Tip, normalized: Tip) =>
@@ -341,6 +353,24 @@ const readPublishedSafeTips = async (): Promise<Tip[]> => {
     ...ticketDoc.data(),
     id: ticketDoc.id,
   } as Tip)));
+};
+
+const readPublicStatsTips = async (): Promise<Tip[]> => {
+  try {
+    const snapshot = await getDocs(query(getPublicStatsTicketsCollection()));
+    if (!snapshot.empty) {
+      return sortTips(snapshot.docs
+        .map((ticketDoc) => normalizeTip({
+          ...ticketDoc.data(),
+          id: ticketDoc.id,
+        } as Tip))
+        .filter((tip) => isFinishedForStats(tip.status)));
+    }
+  } catch {
+    // Compatibility while newly added public stats rules/index are being deployed.
+  }
+
+  return (await readPublishedSafeTips()).filter((tip) => isFinishedForStats(tip.status));
 };
 
 const mergeTips = (...groups: Tip[][]) => {
@@ -518,16 +548,24 @@ export const mockTipsService = {
     return calculateStats(await mockTipsService.getVisibleTips(access));
   },
 
+  getPublicStats: async (): Promise<GlobalStats> => {
+    return calculateStats(await readPublicStatsTips());
+  },
+
   syncPublicTickets: async (tips?: Tip[]): Promise<void> => {
     const sourceTips = tips || await readAllTips();
     const publishedIds = new Set(publicOnly(sourceTips).map((tip) => tip.id));
     const publicSnapshot = await getDocs(query(getPublicTicketsCollection()));
+    const publicStatsSnapshot = await getDocs(query(getPublicStatsTicketsCollection()));
 
     await Promise.all([
       ...sourceTips.map((tip) => syncPublicTicket(tip)),
       ...publicSnapshot.docs
         .filter((ticketDoc) => !publishedIds.has(ticketDoc.id))
         .map((ticketDoc) => deleteDoc(getPublicTicketDoc(ticketDoc.id))),
+      ...publicStatsSnapshot.docs
+        .filter((ticketDoc) => !publishedIds.has(ticketDoc.id))
+        .map((ticketDoc) => deleteDoc(getPublicStatsTicketDoc(ticketDoc.id))),
     ]);
   },
 
@@ -548,9 +586,11 @@ export const mockTipsService = {
   resetTips: async (): Promise<void> => {
     const tips = await readAllTips();
     const publicTips = await getDocs(query(getPublicTicketsCollection()));
+    const publicStatsTips = await getDocs(query(getPublicStatsTicketsCollection()));
     await Promise.all([
       ...tips.map((tip) => deleteDoc(getTicketDoc(tip.id))),
       ...publicTips.docs.map((ticketDoc) => deleteDoc(getPublicTicketDoc(ticketDoc.id))),
+      ...publicStatsTips.docs.map((ticketDoc) => deleteDoc(getPublicStatsTicketDoc(ticketDoc.id))),
     ]);
   },
 
@@ -586,6 +626,7 @@ export const mockTipsService = {
     await Promise.all([
       deleteDoc(getTicketDoc(id)),
       deleteDoc(getPublicTicketDoc(id)).catch(() => undefined),
+      deleteDoc(getPublicStatsTicketDoc(id)).catch(() => undefined),
     ]);
   },
 
@@ -608,7 +649,18 @@ export const mockTipsService = {
       publicationStatus: TipPublicationStatus.DRAFT,
       publishedAt: '',
     });
-    await deleteDoc(getPublicTicketDoc(id)).catch(() => undefined);
+    await Promise.all([
+      deleteDoc(getPublicTicketDoc(id)).catch(() => undefined),
+      deleteDoc(getPublicStatsTicketDoc(id)).catch(() => undefined),
+    ]);
+  },
+
+  subscribePublicStats: (callback: () => void): (() => void) => {
+    return onSnapshot(
+      query(getPublicStatsTicketsCollection()),
+      () => callback(),
+      () => undefined,
+    );
   },
 
   subscribe: (callback: () => void, access?: { canAccessFree: boolean; canAccessVip: boolean }): (() => void) => {

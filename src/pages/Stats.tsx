@@ -37,7 +37,9 @@ export default function Stats() {
 
   const fetchData = async () => {
     try {
-      const nextStats = await mockTipsService.getVisibleStats({ canAccessFree, canAccessVip });
+      const nextStats = isAdmin || canAccessVip
+        ? await mockTipsService.getStats()
+        : await mockTipsService.getPublicStats();
       setStats(nextStats);
       setSelectedMonth((current) => {
         if (!current) return nextStats.monthlyBreakdown[0] || null;
@@ -50,8 +52,10 @@ export default function Stats() {
 
   useEffect(() => {
     fetchData();
-    return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
-  }, [canAccessFree, canAccessVip]);
+    return isAdmin || canAccessVip
+      ? mockTipsService.subscribe(fetchData)
+      : mockTipsService.subscribePublicStats(fetchData);
+  }, [isAdmin, canAccessVip]);
 
   if (loading) {
     return (

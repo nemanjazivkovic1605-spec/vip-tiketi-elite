@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, Pencil, ShieldCheck, Sparkles, Star, TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
 import { getDailyAnalysisDates } from '../utils/dailyDates';
 import { dailyAnalysesService, isQuickResultPredictionSupported } from '../services/dailyAnalysesService';
@@ -56,6 +57,35 @@ const Metric = ({ label, value }: { label: string; value?: string | number }) =>
   <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2">
     <div className="text-[8px] font-black uppercase tracking-widest text-neutral-500">{label}</div>
     <div className="mt-1 text-xs font-black text-neutral-200">{value || 'Nedovoljno podataka'}</div>
+  </div>
+);
+
+const AccessWall = () => (
+  <div className="relative overflow-hidden rounded-[2rem] border border-gold-500/20 bg-black/45 px-5 py-12 text-center shadow-[0_18px_50px_rgba(0,0,0,0.38)] backdrop-blur-sm sm:px-8 sm:py-16">
+    <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-36 max-w-lg bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.16),transparent_68%)]" />
+    <div className="relative mx-auto flex max-w-xl flex-col items-center">
+      <span className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-gold-500/35 bg-gold-500/10 text-gold-300 shadow-[0_0_30px_rgba(245,158,11,0.15)]">
+        <Lock size={25} />
+      </span>
+      <h2 className="font-display text-2xl font-black text-white sm:text-3xl">Tipovi su zaključani</h2>
+      <p className="mt-3 max-w-md text-sm leading-7 text-neutral-400 sm:text-base">
+        Registruj se ili se prijavi da otključaš današnje prognoze.
+      </p>
+      <div className="mt-8 flex w-full max-w-sm flex-col justify-center gap-3 sm:flex-row">
+        <Link
+          to="/login"
+          className="inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-gold-500 px-6 py-3 text-[11px] font-black uppercase tracking-widest text-black shadow-[0_10px_28px_rgba(245,158,11,0.18)] transition hover:bg-gold-400"
+        >
+          Prijavi se
+        </Link>
+        <Link
+          to="/register"
+          className="inline-flex min-h-12 flex-1 items-center justify-center rounded-xl border border-gold-500/30 bg-white/[0.04] px-6 py-3 text-[11px] font-black uppercase tracking-widest text-gold-300 transition hover:border-gold-500/55 hover:bg-gold-500/10"
+        >
+          Kreiraj nalog
+        </Link>
+      </div>
+    </div>
   </div>
 );
 
@@ -367,6 +397,7 @@ export default function DailyTips() {
 
   const activeDate = tabs.find((tab) => tab.key === activeTab)?.date || tabs[0].date;
   const activeItems = itemsByDate[activeDate] || [];
+  const hasDailyAccess = isAdmin || canAccessFree || canAccessVip;
 
   return (
     <div className="min-h-screen bg-neutral-950 px-4 py-8 text-neutral-100 md:px-6 md:py-10">
@@ -406,6 +437,8 @@ export default function DailyTips() {
               <div key={item} className="h-72 animate-pulse rounded-[1.45rem] border border-white/10 bg-white/[0.03]" />
             ))}
           </div>
+        ) : !hasDailyAccess ? (
+          <AccessWall />
         ) : activeItems.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <AnimatePresence mode="popLayout">
@@ -417,7 +450,7 @@ export default function DailyTips() {
         ) : (
           <div className="rounded-[2rem] border border-white/10 bg-black/35 px-6 py-16 text-center">
             <TrendingUp className="mx-auto mb-4 text-gold-500" size={38} />
-            <h2 className="font-display text-xl font-black text-white md:text-2xl">Trenutno nema dostupnih tipova za izabrani dan.</h2>
+            <h2 className="font-display text-xl font-black text-white md:text-2xl">Današnje analize se trenutno pripremaju.</h2>
           </div>
         )}
       </section>
