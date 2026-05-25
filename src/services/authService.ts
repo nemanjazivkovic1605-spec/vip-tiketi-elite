@@ -30,10 +30,11 @@ import { MembershipStatus, type AdminNotification, type User, type VipPackage } 
 import { sendWelcomeEmail } from './welcomeEmailService';
 
 const TRUSTED_ADMIN_EMAILS = ['nemanjazivkovic1605@gmail.com'];
-const APP_BASE_URL = (import.meta.env.VITE_APP_URL || 'https://eliteviptips.com').replace(/\/+$/, '');
+const PRODUCTION_EMAIL_ACTION_URL = 'https://eliteviptips.com/auth-action';
+const DEVELOPMENT_EMAIL_ACTION_URL = 'http://localhost:3000/auth-action';
 
-const getEmailActionSettings = (continuePath: string) => ({
-  url: `${APP_BASE_URL}${continuePath}`,
+const getEmailActionSettings = () => ({
+  url: import.meta.env.DEV ? DEVELOPMENT_EMAIL_ACTION_URL : PRODUCTION_EMAIL_ACTION_URL,
   handleCodeInApp: false,
 });
 
@@ -59,7 +60,8 @@ export const getFirebaseErrorDetails = (error: unknown) => {
       'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'Firebase API key nije validan.',
       'auth/invalid-api-key': 'Firebase API key nije validan.',
       'auth/network-request-failed': 'Mrežna greška pri povezivanju sa Firebase Auth.',
-      'auth/unauthorized-domain': 'Domen nije dodat u Firebase Auth Authorized domains.',
+      'auth/unauthorized-domain': 'Domen za email verifikaciju nije dodat u Firebase Authorized domains.',
+      'auth/unauthorized-continue-uri': 'Domen za email verifikaciju nije dodat u Firebase Authorized domains.',
       'permission-denied': 'Firestore pravila su odbila upis korisničkog profila.',
     };
 
@@ -461,7 +463,7 @@ export const authService = {
 
     try {
       if (!isAdmin && !credential.user.emailVerified) {
-        await sendEmailVerification(credential.user, getEmailActionSettings('/login?verified=1'));
+        await sendEmailVerification(credential.user, getEmailActionSettings());
       }
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
@@ -489,7 +491,7 @@ export const authService = {
       await reload(auth.currentUser);
       await auth.currentUser.getIdToken(true);
       if (!auth.currentUser.emailVerified) {
-        await sendEmailVerification(auth.currentUser, getEmailActionSettings('/login?verified=1'));
+        await sendEmailVerification(auth.currentUser, getEmailActionSettings());
       }
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
@@ -503,7 +505,7 @@ export const authService = {
 
   resetPassword: async (email: string) => {
     try {
-      await sendPasswordResetEmail(auth, email.trim(), getEmailActionSettings('/login?passwordReset=1'));
+      await sendPasswordResetEmail(auth, email.trim(), getEmailActionSettings());
     } catch (error) {
       throw createDetailedError('Reset lozinke nije uspeo', error);
     }
