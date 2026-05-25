@@ -24,7 +24,8 @@ type AuthenticatedUser = {
 type RateEntry = { count: number; resetAt: number };
 type ApiRequest = IncomingMessage & { body?: unknown };
 
-const MODEL = 'gemini-1.5-flash';
+// gemini-1.5-flash is no longer exposed by the current Gemini API (404).
+const MODEL = 'gemini-2.5-flash';
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 12;
 const TRUSTED_ADMIN_EMAILS = new Set(['nemanjazivkovic1605@gmail.com']);
