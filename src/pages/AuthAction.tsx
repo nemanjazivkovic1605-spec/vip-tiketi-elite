@@ -60,42 +60,48 @@ export default function AuthAction() {
         if (mode === 'verifyEmail') {
           await applyActionCode(auth, oobCode);
 
-          if (auth.currentUser) {
-            await reload(auth.currentUser);
-            await auth.currentUser.getIdToken(true);
-            const userRef = doc(db, 'users', auth.currentUser.uid);
-            const userSnapshot = await getDoc(userRef);
-            const data = userSnapshot.data() || {};
-            const vipExpiresAt = data.vipExpiresAt?.toDate ? data.vipExpiresAt.toDate().toISOString() : data.vipExpiresAt;
-            const hasActiveVip = data.membershipStatus === MembershipStatus.APPROVED
-              && (data.vipAccess === true || data.vipApproved === true)
-              && vipExpiresAt
-              && new Date(vipExpiresAt).getTime() > Date.now();
-
-            await setDoc(userRef, {
-              emailVerified: true,
-              verified: true,
-              status: 'active',
-              accountStatus: 'active',
-              ...(hasActiveVip ? {} : {
-                membershipStatus: MembershipStatus.FREE,
-                plan: 'free',
-                planName: 'FREE',
-                planDurationDays: 0,
-                vipAccess: false,
-                vipApproved: false,
-                vipStatus: 'inactive',
-                approved: false,
-                vipExpiresAt: null,
-                vip_expires_at: null,
-              }),
-              updatedAt: serverTimestamp(),
-            }, { merge: true });
-          }
-
           setMessage('Email adresa je uspešno potvrđena. Preusmeravamo vas na prijavu.');
           setState('success');
           redirectTimer = window.setTimeout(() => navigate('/login?verified=1', { replace: true }), 1800);
+
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            void (async () => {
+              await reload(currentUser);
+              await currentUser.getIdToken(true);
+              const userRef = doc(db, 'users', currentUser.uid);
+              const userSnapshot = await getDoc(userRef);
+              const data = userSnapshot.data() || {};
+              const vipExpiresAt = data.vipExpiresAt?.toDate ? data.vipExpiresAt.toDate().toISOString() : data.vipExpiresAt;
+              const hasActiveVip = data.membershipStatus === MembershipStatus.APPROVED
+                && (data.vipAccess === true || data.vipApproved === true)
+                && vipExpiresAt
+                && new Date(vipExpiresAt).getTime() > Date.now();
+
+              await setDoc(userRef, {
+                emailVerified: true,
+                verified: true,
+                status: 'active',
+                accountStatus: 'active',
+                ...(hasActiveVip ? {} : {
+                  membershipStatus: MembershipStatus.FREE,
+                  plan: 'free',
+                  planName: 'FREE',
+                  planDurationDays: 0,
+                  vipAccess: false,
+                  vipApproved: false,
+                  vipStatus: 'inactive',
+                  approved: false,
+                  vipExpiresAt: null,
+                  vip_expires_at: null,
+                }),
+                updatedAt: serverTimestamp(),
+              }, { merge: true });
+            })().catch((syncError) => {
+              console.error('Verified user profile sync failed:', getFirebaseErrorDetails(syncError));
+            });
+          }
+
           return;
         }
 
