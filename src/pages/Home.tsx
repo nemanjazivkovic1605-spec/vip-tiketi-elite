@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, CheckCircle2, Lock, ShieldCheck, Star, TrendingUp, Trophy, Users, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { VIP_PACKAGES } from '../lib/demoData';
+import { useAuth } from '../hooks/useAuth';
 import { mockTipsService } from '../services/mockTips';
 import { GlobalStats } from '../types';
 
 export default function Home() {
   const [stats, setStats] = useState<GlobalStats | null>(null);
+  const { user, isVerified } = useAuth();
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -65,7 +66,7 @@ export default function Home() {
             className="mt-10 flex flex-wrap items-center justify-center gap-4"
           >
             <Link
-              to="/register"
+              to={user && isVerified ? '/pricing' : '/register'}
               className="inline-flex items-center gap-2 rounded-2xl bg-gold-500 px-8 py-4 font-black text-black shadow-xl shadow-gold-500/25 transition-all hover:bg-gold-400"
             >
               Otključaj tipove <ArrowRight size={20} />
@@ -163,45 +164,19 @@ export default function Home() {
       </section>
 
       <section id="pricing" className="bg-white/[0.015] px-6 py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="mb-9">
             <h2 className="font-display text-3xl font-black md:text-5xl">VIP pristup</h2>
-            <p className="mt-3 text-neutral-400">Izaberite period pristupa. VIP se aktivira nakon admin potvrde uplate.</p>
+            <p className="mx-auto mt-4 max-w-xl leading-7 text-neutral-400">
+              Registracija je besplatna. Kada potvrdite email i ulogujete se, možete izabrati VIP paket i poslati zahtev za aktivaciju.
+            </p>
           </div>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            {VIP_PACKAGES.map((pkg) => (
-              <div
-                key={pkg.id}
-                className={`glass relative flex flex-col rounded-[2rem] p-7 ${pkg.isPopular ? 'border-gold-500/45 shadow-[0_0_36px_rgba(245,158,11,0.14)]' : 'border-white/5'}`}
-              >
-                {pkg.isPopular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-gold-500 px-4 py-1.5 text-xs font-black uppercase tracking-widest text-black">
-                    Najpopularnije
-                  </div>
-                )}
-                <h3 className="mb-2 text-xl font-black text-neutral-300">{pkg.name}</h3>
-                <div className="mb-7 flex items-baseline gap-1">
-                  <span className="font-display text-4xl font-black">€{pkg.price}</span>
-                  <span className="text-sm text-neutral-500">/ {pkg.durationDays} dana</span>
-                </div>
-                <div className="mb-8 flex-1 space-y-3">
-                  {pkg.features.map((feature) => (
-                    <div key={feature} className="flex items-center gap-3 text-sm text-neutral-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-gold-500" />
-                      {feature}
-                    </div>
-                  ))}
-                </div>
-                <Link
-                  to={`/register?plan=${pkg.id}`}
-                  className={`rounded-2xl py-4 text-center font-black transition-all ${pkg.isPopular ? 'bg-gold-500 text-black hover:bg-gold-400' : 'bg-white/5 hover:bg-white/10'}`}
-                >
-                  Izaberi paket
-                </Link>
-              </div>
-            ))}
-          </div>
+          <Link
+            to={user && isVerified ? '/pricing' : '/register'}
+            className="inline-flex items-center gap-2 rounded-2xl bg-gold-500 px-8 py-4 font-black text-black shadow-xl shadow-gold-500/20 transition-all hover:bg-gold-400"
+          >
+            {user && isVerified ? 'Pogledaj VIP pakete' : 'Kreiraj FREE nalog'} <ArrowRight size={20} />
+          </Link>
         </div>
       </section>
     </div>

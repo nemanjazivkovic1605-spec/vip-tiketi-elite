@@ -25,6 +25,7 @@ const DailyTips = lazy(() => import('./pages/DailyTips'));
 const EarlyInformation = lazy(() => import('./pages/EarlyInformation'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const Pricing = lazy(() => import('./pages/Pricing'));
 const AuthAction = lazy(() => import('./pages/AuthAction'));
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
 
@@ -56,7 +57,7 @@ export default function App() {
 
   return (
     <HelmetProvider>
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 selection:bg-gold-500/30">
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 selection:bg-gold-500/30" style={{ backgroundColor: '#050505', color: '#f8f8f2' }}>
         <ScrollToTop />
         {!isAdminPath && <Navbar />}
         <main className={!isAdminPath ? "pt-20" : ""}>
@@ -92,6 +93,17 @@ export default function App() {
                 <Route path="/dashboard" element={
                   <ProtectedRoute>
                     <Dashboard />
+                  </ProtectedRoute>
+                } />
+
+                <Route path="/pricing" element={
+                  <ProtectedRoute>
+                    <Pricing />
+                  </ProtectedRoute>
+                } />
+                <Route path="/vip" element={
+                  <ProtectedRoute>
+                    <Pricing />
                   </ProtectedRoute>
                 } />
 

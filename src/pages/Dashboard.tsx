@@ -60,7 +60,7 @@ export default function Dashboard() {
           <div>
             <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest">Status članarine</div>
             <div className={`text-sm font-bold ${isApproved ? 'text-gold-500' : 'text-neutral-400'}`}>
-              {isApproved ? 'AKTIVAN VIP' : user?.membershipStatus === MembershipStatus.PENDING ? 'NA ČEKANJU' : 'ISTEKAO'}
+              {isApproved ? 'AKTIVAN VIP' : user?.membershipStatus === MembershipStatus.PENDING ? 'VIP NA ČEKANJU' : 'FREE NALOG'}
             </div>
           </div>
         </div>
@@ -179,11 +179,11 @@ export default function Dashboard() {
               <h3 className="text-2xl font-bold mb-4">Postani VIP član</h3>
               <p className="text-neutral-400 text-sm leading-relaxed mb-8">
                 {user?.membershipStatus === MembershipStatus.PENDING
-                  ? 'Vaš nalog čeka odobrenje administratora.'
-                  : 'Vaša VIP pretplata je istekla. Izaberite paket za obnovu.'}
+                  ? 'Vaš VIP zahtev čeka potvrdu administratora.'
+                  : 'Vaš FREE nalog je aktivan. Izaberite VIP paket za pristup premium analizama.'}
               </p>
               <Link
-                to="/#pricing"
+                to="/pricing"
                 className="block w-full py-4 bg-gold-500 hover:bg-gold-600 text-black font-black rounded-2xl transition-all shadow-lg shadow-gold-500/20 text-center"
               >
                 NADOGRADI NALOG

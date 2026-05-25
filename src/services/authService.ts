@@ -29,7 +29,6 @@ import { VIP_PACKAGES } from '../lib/demoData';
 import { MembershipStatus, type AdminNotification, type User, type VipPackage } from '../types';
 import { sendWelcomeEmail } from './welcomeEmailService';
 
-export const SELECTED_PLAN_STORAGE_KEY = 'elite_selected_vip_plan';
 const TRUSTED_ADMIN_EMAILS = ['nemanjazivkovic1605@gmail.com'];
 const APP_BASE_URL = (import.meta.env.VITE_APP_URL || 'https://eliteviptips.com').replace(/\/+$/, '');
 
@@ -42,7 +41,6 @@ export type RegisterPayload = {
   email: string;
   password: string;
   displayName?: string;
-  selectedPlan: string;
 };
 
 export type PlanId = 'free' | 'silver_7' | 'gold_30' | 'elite_90';
@@ -100,17 +98,9 @@ export const isTrustedAdminEmail = (email?: string | null) =>
   TRUSTED_ADMIN_EMAILS.includes(normalizeEmail(email));
 
 export const getPlanById = (planId?: string | null): VipPackage =>
-  VIP_PACKAGES.find((plan) => plan.id === planId) || VIP_PACKAGES[1];
+  VIP_PACKAGES.find((plan) => plan.id === planId) || VIP_PACKAGES.find((plan) => plan.id === 'free') || VIP_PACKAGES[0];
 
 const ADMIN_PLAN_ID: PlanId = 'elite_90';
-
-export const saveSelectedPlan = (planId: string) => {
-  sessionStorage.setItem(SELECTED_PLAN_STORAGE_KEY, planId);
-};
-
-export const getSavedSelectedPlan = () => {
-  return sessionStorage.getItem(SELECTED_PLAN_STORAGE_KEY) || VIP_PACKAGES[1].id;
-};
 
 const toIsoString = (value: unknown): string | undefined => {
   if (!value) return undefined;
@@ -168,6 +158,8 @@ const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: 
     ? MembershipStatus.BLOCKED
     : isAdmin || hasActiveVip
       ? MembershipStatus.APPROVED
+      : rawMembership === MembershipStatus.PENDING
+        ? MembershipStatus.PENDING
       : emailVerified
         ? MembershipStatus.FREE
         : rawMembership;
@@ -194,6 +186,8 @@ const mapUserDoc = (firebaseUser: FirebaseUser | null, data: DocumentData, uid: 
     membershipExpDate: vipExpiresAt?.split('T')[0],
     vipAccess,
     vipApproved,
+    vipStatus: data.vipStatus || (isAdmin || hasActiveVip ? 'approved' : accountStatus === 'blocked' ? 'blocked' : 'inactive'),
+    approved: isAdmin || data.approved === true || hasActiveVip,
     vipExpiresAt: vipExpiresAt || null,
     vip_expires_at: vipExpiresAt || null,
     approvedAt: toIsoString(data.approvedAt) || null,
@@ -211,6 +205,8 @@ const getFreePlanPayload = () => {
     planDurationDays: freePlan.durationDays,
     vipAccess: false,
     vipApproved: false,
+    vipStatus: 'inactive',
+    approved: false,
     vipExpiresAt: null,
     vip_expires_at: null,
   };
@@ -228,6 +224,10 @@ const getAccessNormalizationPayload = (firebaseUser: FirebaseUser, data: Documen
     && data.membershipStatus === MembershipStatus.APPROVED
     && (data.vipApproved === true || data.vipAccess === true)
     && isFutureDate(vipExpiresAt);
+  const hasPendingVipRequest = emailVerified
+    && data.membershipStatus === MembershipStatus.PENDING
+    && data.selectedPlan
+    && data.selectedPlan !== 'free';
 
   if (accountStatus === 'blocked') {
     return {
@@ -250,6 +250,23 @@ const getAccessNormalizationPayload = (firebaseUser: FirebaseUser, data: Documen
     };
   }
 
+  if (hasPendingVipRequest) {
+    return {
+      emailVerified: true,
+      verified: true,
+      status: 'active',
+      accountStatus: 'active',
+      membershipStatus: MembershipStatus.PENDING,
+      vipAccess: false,
+      vipApproved: false,
+      vipStatus: 'pending',
+      approved: false,
+      vipExpiresAt: null,
+      vip_expires_at: null,
+      updatedAt: serverTimestamp(),
+    };
+  }
+
   if (emailVerified) {
     return {
       emailVerified: true,
@@ -268,11 +285,10 @@ const getAccessNormalizationPayload = (firebaseUser: FirebaseUser, data: Documen
   };
 };
 
-const createInitialUserDocument = async (firebaseUser: FirebaseUser, selectedPlanId?: string) => {
+const createInitialUserDocument = async (firebaseUser: FirebaseUser) => {
   const email = normalizeEmail(firebaseUser.email);
   const isAdmin = isTrustedAdminEmail(email);
-  const requestedPlan = getPlanById(selectedPlanId || 'free');
-  const activePlan = isAdmin ? getPlanById(ADMIN_PLAN_ID) : requestedPlan;
+  const activePlan = isAdmin ? getPlanById(ADMIN_PLAN_ID) : getPlanById('free');
 
   const payload = {
     uid: firebaseUser.uid,
@@ -288,6 +304,8 @@ const createInitialUserDocument = async (firebaseUser: FirebaseUser, selectedPla
     membershipStatus: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.FREE,
     vipAccess: isAdmin,
     vipApproved: isAdmin,
+    vipStatus: isAdmin ? 'approved' : 'inactive',
+    approved: isAdmin,
     emailVerified: isAdmin || firebaseUser.emailVerified,
     vipExpiresAt: isAdmin ? getExpiryDate(3650) : null,
     vip_expires_at: isAdmin ? getExpiryDate(3650) : null,
@@ -321,6 +339,8 @@ const bootstrapAdminUserDocument = async (firebaseUser: FirebaseUser) => {
     membershipStatus: MembershipStatus.APPROVED,
     vipAccess: true,
     vipApproved: true,
+    vipStatus: 'approved',
+    approved: true,
     emailVerified: true,
     vipExpiresAt: getExpiryDate(3650),
     vip_expires_at: getExpiryDate(3650),
@@ -330,14 +350,14 @@ const bootstrapAdminUserDocument = async (firebaseUser: FirebaseUser) => {
   }, { merge: true });
 };
 
-const ensureUserDocument = async (firebaseUser: FirebaseUser, selectedPlanId?: string): Promise<User> => {
+const ensureUserDocument = async (firebaseUser: FirebaseUser): Promise<User> => {
   await reload(firebaseUser);
   await firebaseUser.getIdToken(true);
   const userRef = doc(db, 'users', firebaseUser.uid);
   const snapshot = await getDoc(userRef);
 
   if (!snapshot.exists()) {
-    await createInitialUserDocument(firebaseUser, selectedPlanId);
+    await createInitialUserDocument(firebaseUser);
   }
 
   await bootstrapAdminUserDocument(firebaseUser);
@@ -377,8 +397,7 @@ export const authService = {
     return ensureUserDocument(credential.user);
   },
 
-  register: async ({ email, password, displayName, selectedPlan }: RegisterPayload): Promise<User> => {
-    const requestedPlan = getPlanById(selectedPlan);
+  register: async ({ email, password, displayName }: RegisterPayload): Promise<User> => {
     let credential;
 
     try {
@@ -397,7 +416,7 @@ export const authService = {
 
     const normalizedEmail = normalizeEmail(credential.user.email);
     const isAdmin = isTrustedAdminEmail(normalizedEmail);
-    const activePlan = isAdmin ? getPlanById(ADMIN_PLAN_ID) : requestedPlan;
+    const activePlan = isAdmin ? getPlanById(ADMIN_PLAN_ID) : getPlanById('free');
     const payload = {
       uid: credential.user.uid,
       email: normalizedEmail,
@@ -408,10 +427,12 @@ export const authService = {
       role: isAdmin ? 'admin' : 'user',
       isAdmin,
       status: 'active',
-      membershipStatus: isAdmin ? MembershipStatus.APPROVED : (activePlan.id === 'free' ? MembershipStatus.FREE : MembershipStatus.PENDING),
+      membershipStatus: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.FREE,
       plan: isAdmin ? ADMIN_PLAN_ID : 'free',
       vipAccess: isAdmin,
       vipApproved: isAdmin,
+      vipStatus: isAdmin ? 'approved' : 'inactive',
+      approved: isAdmin,
       emailVerified: isAdmin || credential.user.emailVerified,
       vipExpiresAt: isAdmin ? getExpiryDate(3650) : null,
       vip_expires_at: isAdmin ? getExpiryDate(3650) : null,
@@ -454,8 +475,6 @@ export const authService = {
       console.error('Welcome email failed:', getFirebaseErrorDetails(error));
     });
 
-    sessionStorage.removeItem(SELECTED_PLAN_STORAGE_KEY);
-
     return mapUserDoc(credential.user, payload, credential.user.uid);
   },
 
@@ -497,6 +516,38 @@ export const authService = {
       .sort((a, b) => (b.registeredAt || '').localeCompare(a.registeredAt || ''));
   },
 
+  requestVipPlan: async (user: User, planId: Exclude<PlanId, 'free'>) => {
+    const plan = getPlanById(planId);
+    if (plan.id === 'free') {
+      throw new Error('Izaberite VIP paket.');
+    }
+
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'users', user.id), {
+      selectedPlan: plan.id,
+      planName: plan.name,
+      planDurationDays: plan.durationDays,
+      membershipStatus: MembershipStatus.PENDING,
+      plan: 'free',
+      vipAccess: false,
+      vipApproved: false,
+      vipStatus: 'pending',
+      approved: false,
+      vipExpiresAt: null,
+      vip_expires_at: null,
+      updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(collection(db, 'adminNotifications')), {
+      type: 'vip_plan_request',
+      userEmail: user.email,
+      username: user.displayName || user.email,
+      selectedPlan: plan.id,
+      createdAt: serverTimestamp(),
+      read: false,
+    });
+    await batch.commit();
+  },
+
   activatePlan: async (user: User, planId: PlanId, adminEmail?: string | null) => {
     const plan = getPlanById(planId);
     await updateDoc(doc(db, 'users', user.id), {
@@ -508,6 +559,8 @@ export const authService = {
       status: 'active',
       vipAccess: true,
       vipApproved: true,
+      vipStatus: 'approved',
+      approved: true,
       vipExpiresAt: getExpiryDate(plan.durationDays),
       vip_expires_at: getExpiryDate(plan.durationDays),
       approvedAt: serverTimestamp(),
@@ -549,6 +602,8 @@ export const authService = {
       selectedPlan: 'free',
       vipAccess: false,
       vipApproved: false,
+      vipStatus: 'removed',
+      approved: false,
       vipExpiresAt: null,
       vip_expires_at: null,
       updatedAt: serverTimestamp(),
@@ -566,6 +621,8 @@ export const authService = {
       status: 'active',
       vipAccess: true,
       vipApproved: true,
+      vipStatus: 'approved',
+      approved: true,
       vipExpiresAt: getExpiryDate(duration, base),
       vip_expires_at: getExpiryDate(duration, base),
       updatedAt: serverTimestamp(),
@@ -581,6 +638,8 @@ export const authService = {
       selectedPlan: 'free',
       vipAccess: false,
       vipApproved: false,
+      vipStatus: 'removed',
+      approved: false,
       vipExpiresAt: null,
       vip_expires_at: null,
       updatedAt: serverTimestamp(),
@@ -594,6 +653,8 @@ export const authService = {
       membershipStatus: MembershipStatus.BLOCKED,
       vipAccess: false,
       vipApproved: false,
+      vipStatus: 'blocked',
+      approved: false,
       updatedAt: serverTimestamp(),
     });
   },
@@ -607,6 +668,8 @@ export const authService = {
       selectedPlan: 'free',
       vipAccess: false,
       vipApproved: false,
+      vipStatus: 'inactive',
+      approved: false,
       vipExpiresAt: null,
       vip_expires_at: null,
       updatedAt: serverTimestamp(),

@@ -3,13 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#050505" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <title>VIP TIKETI ELITE | Premium Sports Analytics</title>
     <meta name="description" content="Najbolje sportske analize, VIP tiketi i premium sportska zajednica. Pridruži se eliti i pobeđuj." />
+    <style>
+      html, body, #root {
+        min-height: 100%;
+        background-color: #050505 !important;
+        color: #f5f5f5 !important;
+      }
+      body {
+        background-image: none !important;
+        margin: 0;
+      }
+    </style>
+    <script>
+      try {
+        const themeKeys = ['theme', 'colorMode', 'color-scheme', 'themeMode'];
+        themeKeys.forEach((key) => {
+          const value = localStorage.getItem(key);
+          if (value && value.toLowerCase().includes('light')) {
+            localStorage.setItem(key, 'dark');
+          }
+        });
+        document.documentElement.classList.remove('light');
+        document.documentElement.classList.add('dark');
+      } catch (error) {
+        // ignore localStorage access errors on older browsers
+      }
+    </script>
     <!-- Lucide is used via npm/vite, no need for CDN here -->
   </head>
   <body>

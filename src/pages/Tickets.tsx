@@ -417,7 +417,7 @@ export default function Tickets() {
             {tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
           </p>
           {!user && (
-            <Link to="/register?plan=free" className="mt-6 inline-flex rounded-2xl bg-gold-500 px-6 py-3 text-sm font-black text-black">
+            <Link to="/register" className="mt-6 inline-flex rounded-2xl bg-gold-500 px-6 py-3 text-sm font-black text-black">
               Registruj se
             </Link>
           )}

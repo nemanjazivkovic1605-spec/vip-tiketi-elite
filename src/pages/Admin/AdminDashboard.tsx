@@ -1378,7 +1378,9 @@ export default function AdminDashboard() {
                              }}
                              className="block w-full text-left"
                            >
-                             <div className="text-[10px] font-black uppercase tracking-widest text-gold-500">Nova registracija</div>
+                             <div className="text-[10px] font-black uppercase tracking-widest text-gold-500">
+                               {notification.type === 'vip_plan_request' ? 'VIP zahtev' : 'Nova registracija'}
+                             </div>
                              <div className="mt-1 text-sm font-bold">{notification.username || notification.userEmail}</div>
                              <div className="text-xs text-neutral-500">{notification.userEmail}</div>
                            </button>

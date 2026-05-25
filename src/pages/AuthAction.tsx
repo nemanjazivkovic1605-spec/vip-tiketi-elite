@@ -84,6 +84,8 @@ export default function AuthAction() {
                 planDurationDays: 0,
                 vipAccess: false,
                 vipApproved: false,
+                vipStatus: 'inactive',
+                approved: false,
                 vipExpiresAt: null,
                 vip_expires_at: null,
               }),

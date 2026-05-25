@@ -28,6 +28,7 @@ export default function MembershipGuard({ children }: MembershipGuardProps) {
 
   const isPending = user.membershipStatus === MembershipStatus.PENDING;
   const isBlocked = user.membershipStatus === MembershipStatus.BLOCKED;
+  const isExpired = user.membershipStatus === MembershipStatus.EXPIRED;
 
   return (
     <div className="max-w-md mx-auto py-20 px-6 text-center">
@@ -40,18 +41,20 @@ export default function MembershipGuard({ children }: MembershipGuardProps) {
           {isPending ? <Clock className="text-gold-500" size={32} /> : <ShieldAlert className="text-red-500" size={32} />}
         </div>
         <h2 className="text-2xl font-bold mb-4">
-          {isPending ? 'Članarina na čekanju' : isBlocked ? 'Nalog blokiran' : 'Članarina istekla'}
+          {isPending ? 'Članarina na čekanju' : isBlocked ? 'Nalog blokiran' : isExpired ? 'Članarina istekla' : 'VIP pristup nije aktivan'}
         </h2>
         <p className="text-neutral-400 mb-8">
           {isPending
             ? 'Vaš nalog čeka odobrenje administratora.'
             : isBlocked
               ? 'Vaš nalog je suspendovan zbog kršenja pravila korišćenja.'
-              : 'Vaša VIP pretplata je istekla. Izaberite paket za obnovu.'}
+              : isExpired
+                ? 'Vaša VIP pretplata je istekla. Izaberite paket za obnovu.'
+                : 'Vaš FREE nalog je aktivan. Izaberite paket za VIP pristup.'}
         </p>
         {!isBlocked && (
           <Link
-            to="/#pricing"
+            to="/pricing"
             className="block w-full py-4 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-2xl transition-all shadow-lg shadow-gold-500/20"
           >
             Vidi cenovnik

@@ -137,12 +137,16 @@ service cloud.firestore {
           incoming().role == 'user' &&
           incoming().isAdmin == false &&
           incoming().emailVerified == false &&
-          incoming().status == 'active' &&
-          incoming().vipAccess == false &&
-          incoming().vipApproved == false &&
-          incoming().vipExpiresAt == null &&
-          incoming().vip_expires_at == null &&
-          incoming().membershipStatus in ['free', 'pending']
+            incoming().status == 'active' &&
+            incoming().vipAccess == false &&
+            incoming().vipApproved == false &&
+            incoming().vipStatus == 'inactive' &&
+            incoming().approved == false &&
+            incoming().vipExpiresAt == null &&
+            incoming().vip_expires_at == null &&
+            incoming().membershipStatus == 'free' &&
+            incoming().plan == 'free' &&
+            incoming().selectedPlan == 'free'
         )
       );
       allow update: if isAdmin() || (
@@ -164,6 +168,8 @@ service cloud.firestore {
           'planDurationDays',
           'vipAccess',
           'vipApproved',
+          'vipStatus',
+          'approved',
           'vipExpiresAt',
           'vip_expires_at',
           'updatedAt'
@@ -176,6 +182,37 @@ service cloud.firestore {
         incoming().plan == 'free' &&
         incoming().vipAccess == false &&
         incoming().vipApproved == false &&
+        incoming().vipStatus == 'inactive' &&
+        incoming().approved == false &&
+        incoming().vipExpiresAt == null &&
+        incoming().vip_expires_at == null
+      ) || (
+        isOwner(userId) &&
+        hasVerifiedEmail() &&
+        existing().role == 'user' &&
+        existing().status == 'active' &&
+        existing().vipAccess == false &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'selectedPlan',
+          'planName',
+          'planDurationDays',
+          'membershipStatus',
+          'plan',
+          'vipAccess',
+          'vipApproved',
+          'vipStatus',
+          'approved',
+          'vipExpiresAt',
+          'vip_expires_at',
+          'updatedAt'
+        ]) &&
+        incoming().selectedPlan in ['silver_7', 'gold_30', 'elite_90'] &&
+        incoming().membershipStatus == 'pending' &&
+        incoming().plan == 'free' &&
+        incoming().vipAccess == false &&
+        incoming().vipApproved == false &&
+        incoming().vipStatus == 'pending' &&
+        incoming().approved == false &&
         incoming().vipExpiresAt == null &&
         incoming().vip_expires_at == null
       ) || (
@@ -191,6 +228,8 @@ service cloud.firestore {
           'membershipStatus',
           'vipAccess',
           'vipApproved',
+          'vipStatus',
+          'approved',
           'vipExpiresAt',
           'vip_expires_at',
           'selectedPlan',
@@ -209,9 +248,16 @@ service cloud.firestore {
     match /adminNotifications/{notificationId} {
       allow read, update, delete: if isAdmin();
       allow create: if isSignedIn() &&
-        incoming().type == 'new_user_registration' &&
         incoming().userEmail == request.auth.token.email &&
-        incoming().read == false;
+        incoming().read == false &&
+        (
+          incoming().type == 'new_user_registration' ||
+          (
+            incoming().type == 'vip_plan_request' &&
+            hasVerifiedEmail() &&
+            incoming().selectedPlan in ['silver_7', 'gold_30', 'elite_90']
+          )
+        );
     }
 
     // Packages

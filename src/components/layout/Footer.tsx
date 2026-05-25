@@ -31,7 +31,7 @@ export default function Footer() {
               <li><Link to="/daily-tips" className="transition-colors hover:text-gold-500">Aktivni tipovi</Link></li>
               <li><Link to="/tickets" className="transition-colors hover:text-gold-500">Istorija</Link></li>
               <li><Link to="/stats" className="transition-colors hover:text-gold-500">Statistika</Link></li>
-              <li><Link to="/register" className="transition-colors hover:text-gold-500">VIP pristup</Link></li>
+              <li><Link to="/pricing" className="transition-colors hover:text-gold-500">VIP pristup</Link></li>
               <li><Link to="/login" className="transition-colors hover:text-gold-500">Prijava</Link></li>
             </ul>
           </div>

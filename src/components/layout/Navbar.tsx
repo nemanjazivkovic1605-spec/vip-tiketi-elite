@@ -32,7 +32,7 @@ export default function Navbar() {
     : [];
 
   const isHome = location.pathname === '/';
-  const vipCtaPath = user ? '/vip-tips' : '/register';
+  const vipCtaPath = user ? '/pricing' : '/register';
 
   return (
     <nav className={`fixed left-0 top-0 z-50 w-full transition-all duration-300 ${

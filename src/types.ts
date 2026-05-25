@@ -138,6 +138,8 @@ export interface User {
   accountStatus?: AccountStatus;
   vipAccess?: boolean;
   vipApproved?: boolean;
+  vipStatus?: 'inactive' | 'pending' | 'approved' | 'removed' | 'blocked' | 'expired';
+  approved?: boolean;
   vipExpiresAt?: string | null;
   vip_expires_at?: string | null;
   approvedAt?: string | null;
@@ -147,7 +149,7 @@ export interface User {
 
 export interface AdminNotification {
   id: string;
-  type: 'new_user_registration';
+  type: 'new_user_registration' | 'vip_plan_request';
   userEmail: string;
   username: string;
   selectedPlan: string;

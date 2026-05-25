@@ -1,14 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { UserPlus, Mail, Lock, User, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
-import { getFirebaseErrorDetails, getPlanById, getSavedSelectedPlan, saveSelectedPlan } from '../services/authService';
+import { getFirebaseErrorDetails } from '../services/authService';
 
 export default function Register() {
-  const [searchParams] = useSearchParams();
   const { register } = useAuth();
-  const selectedPlan = getPlanById(searchParams.get('plan') || getSavedSelectedPlan());
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,10 +14,6 @@ export default function Register() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    saveSelectedPlan(selectedPlan.id);
-  }, [selectedPlan.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +31,6 @@ export default function Register() {
         email,
         password,
         displayName,
-        selectedPlan: selectedPlan.id,
       });
       setSuccess(true);
       setEmail('');
@@ -65,18 +58,7 @@ export default function Register() {
             <UserPlus className="text-gold-500" size={32} />
           </div>
           <h2 className="text-3xl font-display font-bold mb-2">Napravi nalog</h2>
-          <p className="text-neutral-500">Pridruži se eliti, potvrdi email i sačekaj odobrenje administratora.</p>
-        </div>
-
-        <div className="mb-6 rounded-2xl border border-gold-500/25 bg-gold-500/10 p-4">
-          <div className="text-[10px] font-black uppercase tracking-widest text-gold-500">Izabrani paket</div>
-          <div className="mt-1 flex items-center justify-between gap-3">
-            <div className="font-display text-xl font-bold">{selectedPlan.name}</div>
-            <div className="text-sm font-black text-gold-500">€{selectedPlan.price}</div>
-          </div>
-          <div className="mt-1 text-xs text-neutral-400">
-            {selectedPlan.durationDays} dana VIP pristupa nakon odobrenja uplate.
-          </div>
+          <p className="text-neutral-500">Kreiraj besplatan nalog i potvrdi email za pristup FREE tipovima.</p>
         </div>
 
         {error && (
@@ -89,7 +71,7 @@ export default function Register() {
         {success && (
           <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 text-green-400 text-sm rounded-xl flex items-start gap-3">
             <CheckCircle size={18} className="mt-0.5 shrink-0" />
-            <span>Registracija je uspešna. Poslali smo verifikacioni email. Potvrdite email adresu da biste nastavili.</span>
+            <span>Registracija je uspešna. Poslali smo verifikacioni email. Potvrdite email adresu za pristup FREE tipovima.</span>
           </div>
         )}
 
