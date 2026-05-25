@@ -15,8 +15,9 @@ View your app in AI Studio: https://ai.studio/apps/baeb5e75-e490-4d35-a2a6-10aba
 
 1. Install dependencies:
    `npm install`
-2. For local AI analysis testing through `vercel dev`, set server-only `GEMINI_API_KEY` in an ignored `.env.local` file. Never use a `VITE_` prefix for this key.
-3. Run the app:
+2. For local AI analysis testing through `vercel dev`, set server-only `GEMINI_API_KEY` and `RESEND_API_KEY` in an ignored `.env.local` file. Never use a `VITE_` prefix for these keys.
+3. Add `FIREBASE_SERVICE_ACCOUNT_KEY` to `.env.local` when using backend-generated auth links.
+4. Run the app:
    `npm run dev`
 
 ## Gemini DailyTips analysis setup
@@ -30,34 +31,19 @@ DailyTips AI analysis is generated through the server function at `/api/generate
 
 If Gemini is unavailable or rate limited, the app stores a non-empty analysis fallback based on the selected match and pick.
 
-## Contact form EmailJS setup
+## Resend email setup
 
-The public footer/contact email is `support@eliteviptips.com`, but contact form messages should be delivered to `nemanjazivkovic1605@gmail.com`.
+The app now sends verification, password reset, welcome, and contact emails through a secure backend endpoint using Resend.
 
-1. Create an EmailJS account at https://www.emailjs.com/.
-2. Add an email service connected to `nemanjazivkovic1605@gmail.com`.
-3. Create an EmailJS template with these variables:
-   - `from_name`
-   - `reply_to`
-   - `subject`
-   - `message`
-   - `to_email`
-   - `site_name`
-4. Use this template body:
-   ```
-   Ime: {{from_name}}
-   Email korisnika: {{reply_to}}
-   Naslov: {{subject}}
-   Poruka: {{message}}
-   ```
-5. Set the EmailJS template recipient to `{{to_email}}` or directly to `nemanjazivkovic1605@gmail.com`.
-6. Set the EmailJS template reply-to field to `{{reply_to}}`.
-7. Copy `.env.example` to `.env` locally and set:
-   - `VITE_EMAILJS_SERVICE_ID`
-   - `VITE_EMAILJS_TEMPLATE_ID`
-   - `VITE_EMAILJS_PUBLIC_KEY`
-   - `VITE_CONTACT_DISPLAY_EMAIL=support@eliteviptips.com`
-   - `VITE_CONTACT_TO_EMAIL=nemanjazivkovic1605@gmail.com`
-8. Add the same `VITE_...` variables in Vercel Project Settings -> Environment Variables.
+1. Create a Resend account at https://resend.com/.
+2. Add `RESEND_API_KEY` in your `.env.local` for local development and in Vercel Project Settings for production.
+3. Set `RESEND_FROM_EMAIL` and `RESEND_CONTACT_TO_EMAIL` to the sender and internal recipient addresses.
+4. Optionally configure Resend templates and set:
+   - `RESEND_TEMPLATE_EMAIL_VERIFICATION_ID`
+   - `RESEND_TEMPLATE_PASSWORD_RESET_ID`
+   - `RESEND_TEMPLATE_WELCOME_ID`
+   - `RESEND_TEMPLATE_CONTACT_ID`
+5. For verification and password reset links, add `FIREBASE_SERVICE_ACCOUNT_KEY` to your backend environment. This is used by the server to generate secure Firebase auth action links.
+6. If you prefer not to use templates, the backend will send styled HTML emails automatically.
 
-Do not commit `.env`; it is ignored by git. EmailJS public key is safe for browser use, but private EmailJS keys must never be placed in Vite frontend env variables.
+Do not commit `.env`; it is ignored by git. Keep `RESEND_API_KEY` and `FIREBASE_SERVICE_ACCOUNT_KEY` secret.

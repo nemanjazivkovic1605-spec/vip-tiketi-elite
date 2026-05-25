@@ -2,8 +2,6 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   reload,
-  sendEmailVerification,
-  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -28,15 +26,9 @@ import { auth, db } from '../lib/firebase';
 import { VIP_PACKAGES } from '../lib/demoData';
 import { MembershipStatus, type AdminNotification, type User, type VipPackage } from '../types';
 import { sendWelcomeEmail } from './welcomeEmailService';
+import { resendEmailService } from './resendEmailService';
 
 const TRUSTED_ADMIN_EMAILS = ['nemanjazivkovic1605@gmail.com'];
-const PRODUCTION_EMAIL_ACTION_URL = 'https://eliteviptips.com/auth-action';
-const DEVELOPMENT_EMAIL_ACTION_URL = 'http://localhost:3000/auth-action';
-
-const getEmailActionSettings = () => ({
-  url: import.meta.env.DEV ? DEVELOPMENT_EMAIL_ACTION_URL : PRODUCTION_EMAIL_ACTION_URL,
-  handleCodeInApp: false,
-});
 
 export type RegisterPayload = {
   email: string;
@@ -462,8 +454,9 @@ export const authService = {
     }
 
     try {
-      if (!isAdmin && !credential.user.emailVerified) {
-        await sendEmailVerification(credential.user, getEmailActionSettings());
+      if (!isAdmin && !credential.user.emailVerified && credential.user.email) {
+        const token = await credential.user.getIdToken();
+        await resendEmailService.sendVerificationEmail(credential.user.email, token);
       }
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
@@ -483,15 +476,15 @@ export const authService = {
   logout: () => signOut(auth),
 
   resendVerificationEmail: async () => {
-    if (!auth.currentUser) {
+    if (!auth.currentUser?.email) {
       throw new Error('Morate biti prijavljeni da biste poslali verifikacioni email.');
     }
 
     try {
       await reload(auth.currentUser);
-      await auth.currentUser.getIdToken(true);
+      const token = await auth.currentUser.getIdToken(true);
       if (!auth.currentUser.emailVerified) {
-        await sendEmailVerification(auth.currentUser, getEmailActionSettings());
+        await resendEmailService.sendVerificationEmail(auth.currentUser.email, token);
       }
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
@@ -505,7 +498,7 @@ export const authService = {
 
   resetPassword: async (email: string) => {
     try {
-      await sendPasswordResetEmail(auth, email.trim(), getEmailActionSettings());
+      await resendEmailService.sendPasswordResetEmail(email.trim());
     } catch (error) {
       throw createDetailedError('Reset lozinke nije uspeo', error);
     }

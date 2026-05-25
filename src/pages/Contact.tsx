@@ -54,7 +54,7 @@ export default function Contact() {
       setShowSuccess(true);
       window.setTimeout(() => setShowSuccess(false), 3500);
     } catch (sendError) {
-      console.error('EmailJS contact form failed:', sendError);
+      console.error('Contact form request failed:', sendError);
       setError('Došlo je do greške. Pokušajte ponovo.');
     } finally {
       setLoading(false);
