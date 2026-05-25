@@ -28,6 +28,7 @@ type ApiRequest = IncomingMessage & { body?: unknown };
 const MODEL = 'gemini-2.5-flash';
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 12;
+const MIN_ANALYSIS_LENGTH = 250;
 const TRUSTED_ADMIN_EMAILS = new Set(['nemanjazivkovic1605@gmail.com']);
 const requestCounts = new Map<string, RateEntry>();
 
@@ -57,6 +58,13 @@ const normalizeText = (value: unknown, fallback = '') =>
 const formatOptional = (value: unknown) =>
   value === null || value === undefined || value === '' ? 'Nedovoljno podataka' : String(value);
 
+const cleanGeneratedText = (value: string) =>
+  value
+    .replace(/\*\*/g, '')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 const getSafeMatchData = (body: unknown): MatchData => {
   const value = body && typeof body === 'object' && 'matchData' in body
     ? (body as { matchData: Record<string, unknown> }).matchData
@@ -84,10 +92,10 @@ export const buildFallbackAnalysis = (matchData: MatchData) => {
   const league = normalizeText(matchData.league, 'ovom takmicenju');
   const oddsText = matchData.odds && matchData.odds > 1 ? ` po kvoti ${matchData.odds.toFixed(2)}` : '';
 
-  return `${homeTeam} i ${awayTeam} ulaze u duel u okviru ${league}, gde predlog ${prediction}${oddsText} predstavlja razuman izbor u odnosu na profil meca. Matchup zahteva disciplinovan pristup, uz fokus na ritam, stabilnost igre i situacije koje podrzavaju izabrani market. Dostupne informacije ukazuju na vrednost ovog tipa, uz obavezno odgovorno upravljanje ulogom.`;
+  return `${homeTeam} i ${awayTeam} ulaze u duel u okviru ${league}, gde predlog ${prediction}${oddsText} predstavlja razuman izbor u odnosu na profil ovog meca. Kod ovog marketa presudni su ritam igre, sposobnost ekipa da nametnu svoj plan i situacije u kojima izabrani tip dobija konkretnu vrednost. ${homeTeam} i ${awayTeam} zato zahtevaju disciplinovanu procenu, bez oslanjanja na reputaciju ili kratkorocni utisak. Predlog ${prediction} ima smisla u okviru dostupnih informacija, uz odgovorno upravljanje ulogom i svest da nijedan sportski ishod nije garantovan.`;
 };
 
-const buildPrompt = (matchData: MatchData) => `${MASTER_PROMPT}
+const buildPrompt = (matchData: MatchData, retry = false) => `${MASTER_PROMPT}
 
 Ulazni podaci:
 Liga: ${formatOptional(matchData.league)}
@@ -102,13 +110,9 @@ Confidence: ${formatOptional(matchData.confidence)}
 Rizik: ${formatOptional(matchData.risk)}
 Statistika: ${formatOptional(matchData.stats)}
 
-Sada napisi premium VIP analizu.`;
+Sada napisi premium VIP analizu.${retry ? '\n\nPrethodni odgovor je bio prekratak. Obavezno napisi najmanje 250 karaktera, 3 do 5 zavrsenih i sadrzajnih recenica, bez prekidanja misli.' : ''}`;
 
-export async function generateDailyAnalysisText(matchData: MatchData): Promise<string> {
-  const fallback = buildFallbackAnalysis(matchData);
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return fallback;
-
+const requestGeminiAnalysis = async (apiKey: string, matchData: MatchData, retry = false) => {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
     {
@@ -118,10 +122,10 @@ export async function generateDailyAnalysisText(matchData: MatchData): Promise<s
         'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: buildPrompt(matchData) }] }],
+        contents: [{ role: 'user', parts: [{ text: buildPrompt(matchData, retry) }] }],
         generationConfig: {
-          temperature: 0.72,
-          maxOutputTokens: 380,
+          temperature: retry ? 0.62 : 0.72,
+          maxOutputTokens: 700,
         },
       }),
     },
@@ -134,16 +138,24 @@ export async function generateDailyAnalysisText(matchData: MatchData): Promise<s
   const result = await response.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
-  const generated = result.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text || '')
-    .join(' ')
-    .trim();
 
-  if (!generated) {
-    throw new Error('Gemini returned empty content.');
-  }
+  return (result.candidates || [])
+    .map((candidate) => cleanGeneratedText(candidate.content?.parts
+      ?.map((part) => part.text || '')
+      .join(' ') || ''))
+    .sort((a, b) => b.length - a.length)[0] || '';
+};
 
-  return generated;
+export async function generateDailyAnalysisText(matchData: MatchData): Promise<string> {
+  const fallback = buildFallbackAnalysis(matchData);
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return fallback;
+
+  const firstResult = await requestGeminiAnalysis(apiKey, matchData);
+  if (firstResult.length >= MIN_ANALYSIS_LENGTH) return firstResult;
+
+  const secondResult = await requestGeminiAnalysis(apiKey, matchData, true);
+  return secondResult.length >= MIN_ANALYSIS_LENGTH ? secondResult : fallback;
 }
 
 const readBody = async (request: ApiRequest) => {
@@ -232,7 +244,8 @@ export default async function handler(request: ApiRequest, response: ServerRespo
 
     try {
       const analysis = await generateDailyAnalysisText(matchData);
-      sendJson(response, 200, { analysis, source: process.env.GEMINI_API_KEY ? 'gemini' : 'fallback' });
+      const source = process.env.GEMINI_API_KEY && analysis !== fallback ? 'gemini' : 'fallback';
+      sendJson(response, 200, { analysis, source });
     } catch (generationError) {
       console.error('Gemini daily analysis generation failed:', generationError instanceof Error ? generationError.message : 'Unknown error');
       sendJson(response, 200, { analysis: fallback, source: 'fallback', reason: 'generation_failed' });

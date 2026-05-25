@@ -85,7 +85,6 @@ export default function AdminDashboard() {
   const [dailyPullMessage, setDailyPullMessage] = useState('');
   const [dailyPullLoadingDate, setDailyPullLoadingDate] = useState('');
   const [dailyAiLoadingId, setDailyAiLoadingId] = useState('');
-  const [generateAiOnPull, setGenerateAiOnPull] = useState(true);
   const [dailyAnalysisForm, setDailyAnalysisForm] = useState<DailyAnalysisItem>({
     id: '',
     source: 'manual',
@@ -679,10 +678,8 @@ export default function AdminDashboard() {
     setDailyPullMessage('');
     setDailyPullLoadingDate(date);
     try {
-      const result = await dailyAnalysesService.pullFromApiForDate(date, { generateAi: generateAiOnPull });
-      const aiSummary = generateAiOnPull
-        ? ` AI analize: ${result.aiGenerated} Gemini${result.fallbackGenerated ? `, ${result.fallbackGenerated} fallback` : ''}.`
-        : '';
+      const result = await dailyAnalysesService.pullFromApiForDate(date, { generateAi: true });
+      const aiSummary = ` AI analize: ${result.aiGenerated} Gemini${result.fallbackGenerated ? `, ${result.fallbackGenerated} fallback` : ''}.`;
       setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}.${aiSummary}`);
       await refreshData();
     } catch (error) {
@@ -2307,15 +2304,6 @@ export default function AdminDashboard() {
                       {dailyPullMessage && <p className="mt-3 rounded-xl border border-gold-500/20 bg-gold-500/10 px-4 py-3 text-xs font-bold text-gold-300">{dailyPullMessage}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <label className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300">
-                        <input
-                          type="checkbox"
-                          checked={generateAiOnPull}
-                          onChange={(event) => setGenerateAiOnPull(event.target.checked)}
-                          className="accent-orange-500"
-                        />
-                        AI analiza pri povlačenju
-                      </label>
                       {dailyPullDates.map((tab) => (
                         <button
                           key={tab.key}
@@ -2486,7 +2474,7 @@ export default function AdminDashboard() {
                               <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{analysis.date} · {analysis.time} · {analysis.league}</div>
                               <div className="mt-2 font-display text-xl font-black text-white">{analysis.homeTeam} - {analysis.awayTeam}</div>
                               <div className="mt-2 text-sm text-neutral-400">Tip: <span className="font-black text-gold-400">{analysis.prediction}</span> · Kvota {Number(analysis.odds) > 1 ? analysis.odds.toFixed(2) : 'uskoro'} · Confidence {analysis.confidence || '-'}%</div>
-                              {analysis.reasoning && <p className="mt-3 max-w-3xl text-xs leading-6 text-neutral-500">{analysis.reasoning}</p>}
+                              {analysis.reasoning && <p className="mt-3 max-w-3xl whitespace-pre-wrap break-words text-xs leading-6 text-neutral-500">{analysis.reasoning}</p>}
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <button

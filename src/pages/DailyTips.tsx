@@ -104,7 +104,7 @@ const LockedPanel = () => (
   </button>
 );
 
-const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onResultSaved }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void; onResultSaved: () => Promise<void> }) => {
+const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGeneratingAi, onResultSaved }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void; onGenerateAi: (analysis: DailyAnalysisItem) => Promise<void>; isGeneratingAi: boolean; onResultSaved: () => Promise<void> }) => {
   const access = item.type || item.access;
   const isVipLocked = item.locked === true || (access === 'VIP' && !canAccessVip);
   const hasOdds = Number.isFinite(Number(item.odds)) && Number(item.odds) > 1;
@@ -120,6 +120,7 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onResultSaved }: { 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const supportedPrediction = isQuickResultPredictionSupported(item.prediction || '');
   const showManualStatus = !supportedPrediction && homeScore !== '' && awayScore !== '';
+  const analysisText = item.vipAnalysis || item.analysis || item.reasoning;
 
   useEffect(() => {
     setHomeScore(item.homeScore ?? '');
@@ -195,16 +196,29 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onResultSaved }: { 
         <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
           <CalendarDays size={12} /> {formatDate(item.date)} · {item.time || '--:--'}
           {isAdmin && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onEdit(item);
-              }}
-              className="ml-2 inline-flex items-center gap-1 rounded-lg border border-gold-500/25 bg-gold-500/10 px-2 py-1 text-gold-300 hover:bg-gold-500/20"
-            >
-              <Pencil size={11} /> Izmeni
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={isGeneratingAi}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onGenerateAi(item);
+                }}
+                className="ml-2 inline-flex items-center gap-1 rounded-lg border border-gold-500/25 bg-gold-500/10 px-2 py-1 text-gold-300 hover:bg-gold-500/20 disabled:cursor-wait disabled:opacity-50"
+              >
+                <Sparkles size={11} /> {isGeneratingAi ? 'Generišem...' : 'Generiši AI analizu'}
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit(item);
+                }}
+                className="inline-flex items-center gap-1 rounded-lg border border-gold-500/25 bg-gold-500/10 px-2 py-1 text-gold-300 hover:bg-gold-500/20"
+              >
+                <Pencil size={11} /> Izmeni
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -247,7 +261,7 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onResultSaved }: { 
         </span>
       </div>}
 
-      <div className="relative mt-3 grid gap-2 md:grid-cols-[150px_1fr]">
+      <div className={`relative mt-3 grid gap-2 ${(isVipLocked || analysisText) ? 'md:grid-cols-[150px_1fr]' : ''}`}>
         <div className="rounded-2xl border border-gold-500/20 bg-gold-500/[0.08] p-3">
           <div className="text-[8px] font-black uppercase tracking-widest text-neutral-500">Predlog</div>
           {isVipLocked ? (
@@ -263,18 +277,18 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onResultSaved }: { 
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+        {(isVipLocked || analysisText) && <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
           <div className="mb-2 flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-neutral-500">
             <BarChart3 size={12} /> VIP analiza
           </div>
           {isVipLocked ? (
             <LockedPanel />
           ) : (
-            <p className="text-sm leading-6 text-neutral-300">
-              {item.reasoning || 'Analiza se priprema za ovaj meč.'}
+            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-neutral-300">
+              {analysisText}
             </p>
           )}
-        </div>
+        </div>}
       </div>
 
       {isAdmin && !isVipLocked && (
@@ -357,6 +371,8 @@ export default function DailyTips() {
   const [itemsByDate, setItemsByDate] = useState<Record<string, DailyAnalysisItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [editingAnalysis, setEditingAnalysis] = useState<DailyAnalysisItem | null>(null);
+  const [generatingAiId, setGeneratingAiId] = useState('');
+  const [adminAiMessage, setAdminAiMessage] = useState('');
 
   const getAnalyses = useCallback(async () => Promise.all(
     tabs.map(async (tab) => [tab.date, await dailyAnalysesService.getForDate(tab.date, { canAccessFree, canAccessVip, isAdmin })] as const),
@@ -395,6 +411,23 @@ export default function DailyTips() {
     await refreshAnalyses();
   };
 
+  const generateAiAnalysis = async (analysis: DailyAnalysisItem) => {
+    setGeneratingAiId(analysis.id);
+    setAdminAiMessage('');
+    try {
+      const source = await dailyAnalysesService.generateAiAnalysis(analysis);
+      setAdminAiMessage(source === 'gemini'
+        ? `AI analiza je generisana za ${analysis.homeTeam} - ${analysis.awayTeam}.`
+        : `Gemini trenutno nije odgovorio; sačuvana je fallback analiza za ${analysis.homeTeam} - ${analysis.awayTeam}.`);
+      await refreshAnalyses();
+    } catch (error) {
+      console.error('Daily tips AI generation failed:', error);
+      setAdminAiMessage('Generisanje AI analize nije uspelo.');
+    } finally {
+      setGeneratingAiId('');
+    }
+  };
+
   const activeDate = tabs.find((tab) => tab.key === activeTab)?.date || tabs[0].date;
   const activeItems = itemsByDate[activeDate] || [];
   const hasDailyAccess = isAdmin || canAccessFree || canAccessVip;
@@ -412,6 +445,11 @@ export default function DailyTips() {
           <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-400 md:text-base">
             Svakodnevno izdvajamo najbolje mečeve i najstabilnije tipove dana na osnovu statistike, forme i tržišta kvota.
           </p>
+          {isAdmin && adminAiMessage && (
+            <p className="mt-4 rounded-xl border border-gold-500/20 bg-gold-500/10 px-4 py-3 text-xs font-bold text-gold-300">
+              {adminAiMessage}
+            </p>
+          )}
         </div>
 
         <div className="mb-5 flex flex-wrap gap-2">
@@ -443,7 +481,7 @@ export default function DailyTips() {
           <div className="grid gap-4 lg:grid-cols-2">
             <AnimatePresence mode="popLayout">
               {activeItems.map((item) => (
-                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} isAdmin={isAdmin} onEdit={setEditingAnalysis} onResultSaved={refreshAnalyses} />
+                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} isAdmin={isAdmin} onEdit={setEditingAnalysis} onGenerateAi={generateAiAnalysis} isGeneratingAi={generatingAiId === item.id} onResultSaved={refreshAnalyses} />
               ))}
             </AnimatePresence>
           </div>

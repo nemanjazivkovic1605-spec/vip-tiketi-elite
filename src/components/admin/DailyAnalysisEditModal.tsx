@@ -233,7 +233,7 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
           </label>
           <label className="md:col-span-2">
             <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Analiza</span>
-            <textarea rows={4} className={fieldClass} value={draft.reasoning} onChange={(event) => updateDraft({ reasoning: event.target.value })} />
+            <textarea rows={6} className={fieldClass} value={draft.reasoning} onChange={(event) => updateDraft({ reasoning: event.target.value })} />
           </label>
         </div>
 

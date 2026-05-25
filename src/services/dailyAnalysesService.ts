@@ -44,6 +44,20 @@ const normalizeNumber = (value: unknown): number | undefined => {
 const formatScoreResult = (homeScore?: number, awayScore?: number): string | undefined =>
   homeScore !== undefined && awayScore !== undefined ? `${homeScore}:${awayScore}` : undefined;
 
+const getStoredAnalysisText = (value: Pick<DailyAnalysisItem, 'reasoning' | 'analysis' | 'vipAnalysis'>) =>
+  value.vipAnalysis?.trim() || value.analysis?.trim() || value.reasoning?.trim() || '';
+
+const hasLegacyApiPlaceholder = (data: DocumentData) =>
+  (data.source === 'api-football' || data.source === 'api-basketball')
+  && data.manualOverride !== true
+  && data.aiSource !== 'gemini'
+  && data.aiSource !== 'fallback'
+  && Boolean(String(data.vipAnalysis || data.analysis || data.reasoning || '').trim());
+
+const getNormalizedStoredAnalysis = (data: DocumentData) => hasLegacyApiPlaceholder(data)
+  ? ''
+  : String(data.vipAnalysis || data.analysis || data.reasoning || '').trim();
+
 export const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: number, awayScore?: number): DailyAnalysisStatus | undefined => {
   if (homeScore === undefined || awayScore === undefined) return undefined;
   const total = homeScore + awayScore;
@@ -79,7 +93,10 @@ export const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: numb
 export const isQuickResultPredictionSupported = (prediction: string) =>
   evaluateDailyAnalysisStatus(prediction, 1, 1) !== undefined;
 
-const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => ({
+const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
+  const analysisText = getNormalizedStoredAnalysis(data);
+
+  return ({
   id,
   source: data.source === 'api-basketball' ? 'api-basketball' : data.source === 'api-football' ? 'api-football' : 'manual',
   sport: data.sport === 'basketball' ? 'basketball' : 'football',
@@ -104,9 +121,9 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => (
   formNote: data.formNote || undefined,
   prediction: data.prediction || 'Over 1.5',
   odds: Number.isFinite(Number(data.odds)) ? Number(data.odds) : 1.5,
-  reasoning: data.reasoning || data.vipAnalysis || data.analysis || '',
-  analysis: data.analysis || data.reasoning || '',
-  vipAnalysis: data.vipAnalysis || undefined,
+  reasoning: analysisText,
+  analysis: analysisText,
+  vipAnalysis: data.access === 'VIP' && analysisText ? analysisText : undefined,
   aiSource: data.aiSource === 'gemini' ? 'gemini' : data.aiSource === 'fallback' ? 'fallback' : undefined,
   confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : undefined,
   riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(data.riskLevel) ? data.riskLevel : undefined,
@@ -119,7 +136,8 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => (
   hidden: data.hidden === true,
   createdAt: toIsoString(data.createdAt),
   updatedAt: toIsoString(data.updatedAt),
-});
+  });
+};
 
 const sortAnalyses = (items: DailyAnalysisItem[]) =>
   [...items].sort((a, b) => {
@@ -134,12 +152,34 @@ const readManual = async () => {
   return snapshot.docs.map((analysisDoc) => normalizeManual(analysisDoc.data(), analysisDoc.id));
 };
 
+const clearLegacyApiPlaceholders = async () => {
+  const snapshot = await getDocs(query(collection(db, COLLECTION)));
+  await Promise.all(snapshot.docs
+    .filter((analysisDoc) => hasLegacyApiPlaceholder(analysisDoc.data()))
+    .map((analysisDoc) => updateDoc(analysisDoc.ref, {
+      reasoning: '',
+      analysis: '',
+      vipAnalysis: '',
+      updatedAt: serverTimestamp(),
+    })));
+};
+
 const publicManualForDate = (items: DailyAnalysisItem[], date: string) =>
   sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && item.status === 'ACTIVE')).slice(0, 5);
 
 const readIndex = async (collectionName: string) => {
   const snapshot = await getDocs(query(collection(db, collectionName)));
-  return snapshot.docs.map((analysisDoc) => analysisDoc.data() as DailyAnalysisItem);
+  return snapshot.docs.map((analysisDoc) => {
+    const data = analysisDoc.data();
+    if (data.locked === true) return data as DailyAnalysisItem;
+    const analysisText = getNormalizedStoredAnalysis(data);
+    return {
+      ...data,
+      reasoning: analysisText,
+      analysis: analysisText,
+      vipAnalysis: data.access === 'VIP' && analysisText ? analysisText : undefined,
+    } as DailyAnalysisItem;
+  });
 };
 
 const publicIndexForDate = (items: DailyAnalysisItem[], date: string) =>
@@ -207,7 +247,7 @@ const getStableAnalysisId = (analysis: DailyAnalysisItem) => {
 };
 
 const withCompleteAnalysis = (analysis: DailyAnalysisItem, analysisText?: string, aiSource?: 'gemini' | 'fallback') => {
-  const text = analysisText?.trim() || analysis.reasoning?.trim() || dailyAnalysisAiService.fallbackAnalysis(analysis);
+  const text = analysisText === undefined ? getStoredAnalysisText(analysis) : analysisText.trim();
   return {
     ...analysis,
     reasoning: text,
@@ -222,19 +262,23 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem, generateAi 
   const ref = doc(db, COLLECTION, id);
   const existingSnapshot = await getDoc(ref);
 
-  if (existingSnapshot.exists()) {
-    const existing = normalizeManual(existingSnapshot.data(), existingSnapshot.id);
+  const existing = existingSnapshot.exists() ? normalizeManual(existingSnapshot.data(), existingSnapshot.id) : undefined;
+  if (existing) {
     if (existing.manualOverride) {
       return { saved: false, skippedManualOverride: true };
     }
   }
 
-  let completedAnalysis = withCompleteAnalysis(analysis);
+  const existingAnalysisText = existing ? getStoredAnalysisText(existing) : '';
+  let completedAnalysis = withCompleteAnalysis(analysis, existingAnalysisText);
   let aiSource: 'gemini' | 'fallback' | undefined;
-  if (generateAi) {
+  if (generateAi && !existingAnalysisText) {
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
     const generated = await dailyAnalysisAiService.generateDailyAnalysisText(analysis);
     aiSource = generated.source;
     completedAnalysis = withCompleteAnalysis(analysis, generated.analysis, generated.source);
+  } else if (existingAnalysisText) {
+    completedAnalysis = withCompleteAnalysis(analysis, existingAnalysisText, existing?.aiSource);
   }
 
   await setDoc(ref, removeUndefined({
@@ -272,6 +316,7 @@ export const dailyAnalysesService = {
   },
 
   getAdminAnalyses: async (): Promise<DailyAnalysisItem[]> => {
+    await clearLegacyApiPlaceholders();
     const analyses = sortAnalyses(await readManual());
     await Promise.all(analyses.map((analysis) => syncReadIndexes(analysis)));
     return analyses;
