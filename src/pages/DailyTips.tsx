@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, Pencil, ShieldCheck, Sparkles, Star, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -6,7 +6,9 @@ import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
 import { getDailyAnalysisDates } from '../utils/dailyDates';
 import { dailyAnalysesService, isQuickResultPredictionSupported } from '../services/dailyAnalysesService';
 import { useAuth } from '../hooks/useAuth';
-import DailyAnalysisEditModal from '../components/admin/DailyAnalysisEditModal';
+import DataLoadFailure from '../components/utils/DataLoadFailure';
+import { withTimeout } from '../utils/async';
+const DailyAnalysisEditModal = lazy(() => import('../components/admin/DailyAnalysisEditModal'));
 
 const formatDate = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString('sr-Latn-RS', {
@@ -373,19 +375,24 @@ export default function DailyTips() {
   const [editingAnalysis, setEditingAnalysis] = useState<DailyAnalysisItem | null>(null);
   const [generatingAiId, setGeneratingAiId] = useState('');
   const [adminAiMessage, setAdminAiMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
 
-  const getAnalyses = useCallback(async () => Promise.all(
+  const getAnalyses = useCallback(async () => withTimeout(Promise.all(
     tabs.map(async (tab) => [tab.date, await dailyAnalysesService.getForDate(tab.date, { canAccessFree, canAccessVip, isAdmin })] as const),
-  ), [tabs, canAccessFree, canAccessVip, isAdmin]);
+  ), 'Dnevni tipovi se učitavaju predugo. Pokušajte ponovo.'), [tabs, canAccessFree, canAccessVip, isAdmin]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadAnalyses = async () => {
       setLoading(true);
+      setLoadError('');
       try {
         const entries = await getAnalyses();
         if (!cancelled) setItemsByDate(Object.fromEntries(entries));
+      } catch (error) {
+        console.error('Daily tips load failed:', error);
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Dnevni tipovi trenutno nisu dostupni.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -398,7 +405,13 @@ export default function DailyTips() {
   }, [getAnalyses]);
 
   const refreshAnalyses = async () => {
-    setItemsByDate(Object.fromEntries(await getAnalyses()));
+    setLoadError('');
+    try {
+      setItemsByDate(Object.fromEntries(await getAnalyses()));
+    } catch (error) {
+      console.error('Daily tips refresh failed:', error);
+      setLoadError(error instanceof Error ? error.message : 'Dnevni tipovi trenutno nisu dostupni.');
+    }
   };
 
   const saveAnalysis = async (analysis: DailyAnalysisItem) => {
@@ -477,6 +490,8 @@ export default function DailyTips() {
           </div>
         ) : !hasDailyAccess ? (
           <AccessWall />
+        ) : loadError && activeItems.length === 0 ? (
+          <DataLoadFailure message={loadError} onRetry={() => void refreshAnalyses()} />
         ) : activeItems.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-2">
             <AnimatePresence mode="popLayout">
@@ -493,12 +508,14 @@ export default function DailyTips() {
         )}
       </section>
       {isAdmin && editingAnalysis && (
-        <DailyAnalysisEditModal
-          analysis={editingAnalysis}
-          onClose={() => setEditingAnalysis(null)}
-          onSave={saveAnalysis}
-          onDelete={deleteAnalysis}
-        />
+        <Suspense fallback={null}>
+          <DailyAnalysisEditModal
+            analysis={editingAnalysis}
+            onClose={() => setEditingAnalysis(null)}
+            onSave={saveAnalysis}
+            onDelete={deleteAnalysis}
+          />
+        </Suspense>
       )}
     </div>
   );

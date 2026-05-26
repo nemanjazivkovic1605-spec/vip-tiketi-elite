@@ -27,8 +27,10 @@ import { VIP_PACKAGES } from '../lib/demoData';
 import { MembershipStatus, type AdminNotification, type User, type VipPackage } from '../types';
 import { sendWelcomeEmail } from './welcomeEmailService';
 import { resendEmailService } from './resendEmailService';
+import { withTimeout } from '../utils/async';
 
 const TRUSTED_ADMIN_EMAILS = ['nemanjazivkovic1605@gmail.com'];
+const AUTH_REQUEST_TIMEOUT_MS = 12000;
 
 export type RegisterPayload = {
   email: string;
@@ -369,33 +371,61 @@ const ensureUserDocument = async (firebaseUser: FirebaseUser): Promise<User> => 
   return mapUserDoc(firebaseUser, ensuredSnapshot.data() || {}, firebaseUser.uid);
 };
 
+let hydratingUserId = '';
+let hydratingUserPromise: Promise<User> | null = null;
+
+const hydrateUserDocument = (firebaseUser: FirebaseUser) => {
+  if (hydratingUserPromise && hydratingUserId === firebaseUser.uid) {
+    return hydratingUserPromise;
+  }
+
+  hydratingUserId = firebaseUser.uid;
+  hydratingUserPromise = ensureUserDocument(firebaseUser).finally(() => {
+    if (hydratingUserId === firebaseUser.uid) {
+      hydratingUserId = '';
+      hydratingUserPromise = null;
+    }
+  });
+  return hydratingUserPromise;
+};
+
 export const authService = {
   onUserChanged: (callback: (user: User | null) => void) => {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
+    return onAuthStateChanged(auth, (firebaseUser) => {
       if (!firebaseUser) {
         callback(null);
         return;
       }
 
-      try {
-        callback(await ensureUserDocument(firebaseUser));
-      } catch (error) {
+      // Authentication should unlock the UI immediately; Firestore enriches access state afterwards.
+      callback(mapUserDoc(firebaseUser, {}, firebaseUser.uid));
+      void hydrateUserDocument(firebaseUser).then(callback).catch((error) => {
         console.error('Firebase user profile error:', error);
-        callback(mapUserDoc(firebaseUser, {}, firebaseUser.uid));
-      }
+      });
     });
   },
 
   login: async (email: string, password: string): Promise<User> => {
-    const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-    return ensureUserDocument(credential.user);
+    const credential = await withTimeout(
+      signInWithEmailAndPassword(auth, email.trim(), password),
+      'Prijava traje predugo. Proverite internet vezu i pokušajte ponovo.',
+      AUTH_REQUEST_TIMEOUT_MS,
+    );
+    void hydrateUserDocument(credential.user).catch((error) => {
+      console.error('Firebase user profile hydration failed:', error);
+    });
+    return mapUserDoc(credential.user, {}, credential.user.uid);
   },
 
   register: async ({ email, password, displayName }: RegisterPayload): Promise<User> => {
     let credential;
 
     try {
-      credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      credential = await withTimeout(
+        createUserWithEmailAndPassword(auth, email.trim(), password),
+        'Registracija traje predugo. Proverite internet vezu i pokušajte ponovo.',
+        AUTH_REQUEST_TIMEOUT_MS,
+      );
     } catch (error) {
       throw createDetailedError('Firebase Auth registracija nije uspela', error);
     }
@@ -437,7 +467,7 @@ export const authService = {
       updatedAt: serverTimestamp(),
     };
 
-    try {
+    const profileWrite = (async () => {
       const batch = writeBatch(db);
       batch.set(doc(db, 'users', credential.user.uid), payload);
       batch.set(doc(collection(db, 'adminNotifications')), {
@@ -449,18 +479,24 @@ export const authService = {
         read: false,
       });
       await batch.commit();
-    } catch (error) {
-      throw createDetailedError('Firestore users profil nije upisan', error);
-    }
+    })();
 
     try {
       if (!isAdmin && !credential.user.emailVerified && credential.user.email) {
         const token = await credential.user.getIdToken();
-        await resendEmailService.sendVerificationEmail(credential.user.email, token);
+        await withTimeout(
+          resendEmailService.sendVerificationEmail(credential.user.email, token),
+          'Slanje verifikacionog emaila traje predugo. Pokušajte ponovo sa stranice za potvrdu emaila.',
+          AUTH_REQUEST_TIMEOUT_MS,
+        );
       }
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
     }
+
+    void profileWrite.catch((error) => {
+      console.error('Firestore users profile write delayed or failed:', getFirebaseErrorDetails(error));
+    });
 
     sendWelcomeEmail({
       email: normalizedEmail,
@@ -493,7 +529,16 @@ export const authService = {
 
   refreshCurrentUser: async (): Promise<User | null> => {
     if (!auth.currentUser) return null;
-    return ensureUserDocument(auth.currentUser);
+    await withTimeout(
+      reload(auth.currentUser),
+      'Provera email statusa traje predugo. Pokušajte ponovo.',
+      AUTH_REQUEST_TIMEOUT_MS,
+    );
+    const refreshedUser = mapUserDoc(auth.currentUser, {}, auth.currentUser.uid);
+    void hydrateUserDocument(auth.currentUser).catch((error) => {
+      console.error('Firebase user refresh hydration failed:', error);
+    });
+    return refreshedUser;
   },
 
   resetPassword: async (email: string) => {

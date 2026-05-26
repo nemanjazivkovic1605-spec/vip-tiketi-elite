@@ -15,7 +15,9 @@ import { authService } from '../../services/authService';
 import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User, AdminNotification, DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisStatus } from '../../types';
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
+import AdminOverview from '../../components/admin/AdminOverview';
 import { calculateTotalOdds, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
+import { evaluateImportedMatchPrediction } from '../../utils/predictionResults';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
 const dailyPredictionOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5', 'Over poeni', 'Handicap favorit'];
@@ -47,23 +49,6 @@ const getSixMonthsAgo = () => {
   date.setHours(0, 0, 0, 0);
   date.setMonth(date.getMonth() - 6);
   return date;
-};
-
-const evaluatePrediction = (prediction: string, match: ImportedMatch): TicketStatus => {
-  const home = match.homeScore;
-  const away = match.awayScore;
-  const totalGoals = home + away;
-  const normalized = prediction.toUpperCase();
-
-  if (normalized === 'GG') return home > 0 && away > 0 ? TicketStatus.WON : TicketStatus.LOST;
-  if (normalized === '3+') return totalGoals >= 3 ? TicketStatus.WON : TicketStatus.LOST;
-  if (normalized === '1') return home > away ? TicketStatus.WON : TicketStatus.LOST;
-  if (normalized === 'X') return home === away ? TicketStatus.WON : TicketStatus.LOST;
-  if (normalized === '2') return away > home ? TicketStatus.WON : TicketStatus.LOST;
-  if (normalized === '1X') return home >= away ? TicketStatus.WON : TicketStatus.LOST;
-  if (normalized === 'X2') return away >= home ? TicketStatus.WON : TicketStatus.LOST;
-
-  return TicketStatus.PENDING;
 };
 
 export default function AdminDashboard() {
@@ -483,7 +468,7 @@ export default function AdminDashboard() {
       match,
       prediction: preferred.prediction,
       odds: Number(preferred.odds.toFixed(2)),
-      status: evaluatePrediction(preferred.prediction, match),
+      status: evaluateImportedMatchPrediction(preferred.prediction, match),
     };
   };
 
@@ -935,7 +920,7 @@ export default function AdminDashboard() {
       const prediction = m.prediction.toUpperCase();
       const totalGoals = homeScore + awayScore;
       
-      let status = evaluatePrediction(prediction, matchResult);
+      let status = evaluateImportedMatchPrediction(prediction, matchResult);
       if (prediction === 'GG3+') {
         status = homeScore > 0 && awayScore > 0 && totalGoals >= 3 ? TicketStatus.WON : TicketStatus.LOST;
       } else if (prediction === 'OVER 2.5') {
@@ -1437,89 +1422,20 @@ export default function AdminDashboard() {
         <div className={`p-8 transition-[padding] duration-300 ${ticketCart.length > 0 ? 'md:pr-[470px]' : ''}`}>
            <AnimatePresence mode="wait">
               {activeTab === 'overview' && (
-                <motion.div key="overview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-                   <h2 className="text-3xl font-display font-bold mb-8">Pregled sistema</h2>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                      {[
-                        { label: 'Ukupno Korisnika', value: userList.length, icon: <Users className="text-gold-500" /> },
-                        { label: 'Aktivni VIP', value: userList.filter(u => u.membershipStatus === MembershipStatus.APPROVED).length, icon: <ShieldCheck className="text-gold-500" />, onClick: () => openUsersTab('approved') },
-                        { label: 'Novi Zahtevi', value: userList.filter(u => u.membershipStatus === MembershipStatus.PENDING).length, icon: <Clock className="text-gold-500" />, highlight: true, onClick: () => openUsersTab('pending') },
-                        { label: 'Mesečni ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
-                      ].map((s, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={s.onClick}
-                          disabled={!s.onClick}
-                          className={`glass p-6 rounded-3xl text-left transition-all ${s.highlight ? 'border-gold-500/50' : 'border-white/5'} ${s.onClick ? 'cursor-pointer hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]' : 'cursor-default'}`}
-                        >
-                           <div className="flex items-center justify-between mb-4">
-                              <div className="p-2 bg-white/5 rounded-xl">{s.icon}</div>
-                              {s.onClick && (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
-                                  Pogledaj <ChevronRight size={12} />
-                                </span>
-                              )}
-                           </div>
-                           <div className="text-3xl font-display font-bold">{s.value}</div>
-                           <div className="text-xs text-neutral-500 font-bold uppercase tracking-widest mt-1">{s.label}</div>
-                        </button>
-                        ))}
-                     </div>
-                   
-                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('matches')}
-                        className="glass p-5 rounded-2xl border-white/5 text-left cursor-pointer transition-all hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]"
-                      >
-                         <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">Admin baza</div>
-                         <div className="flex items-end justify-between gap-3">
-                           <div className="text-2xl font-display font-bold">{availableMatches.length}</div>
-                           <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
-                             Pogledaj <ChevronRight size={12} />
-                           </span>
-                         </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openTipsTab('draft')}
-                        className="glass p-5 rounded-2xl border-white/5 text-left cursor-pointer transition-all hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]"
-                      >
-                         <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">DRAFT</div>
-                         <div className="flex items-end justify-between gap-3">
-                           <div className="text-2xl font-display font-bold">{draftTips.length}</div>
-                           <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
-                             Pogledaj <ChevronRight size={12} />
-                           </span>
-                         </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openTipsTab('published')}
-                        className="glass p-5 rounded-2xl border-white/5 text-left cursor-pointer transition-all hover:border-gold-500/40 hover:shadow-[0_0_24px_rgba(245,124,0,0.12)]"
-                      >
-                         <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">PUBLISHED</div>
-                         <div className="flex items-end justify-between gap-3">
-                           <div className="text-2xl font-display font-bold text-gold-500">{tips.filter(t => t.publicationStatus === TipPublicationStatus.PUBLISHED).length}</div>
-                           <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-gold-500">
-                             Pogledaj <ChevronRight size={12} />
-                           </span>
-                         </div>
-                      </button>
-                   </div>
-
-                   {/* More details could go here */}
-                   <div className="bg-green-500/10 border-green-500/20 border p-6 rounded-3xl flex items-center gap-4">
-                      <AlertTriangle className="text-green-500 shrink-0" size={32} />
-                      <div>
-                         <h4 className="font-bold text-green-500">Rucni import rezim</h4>
-                         <p className="text-sm text-neutral-400">
-                           Utakmice se uvoze iz CSV/Excel fajla i ostaju vidljive samo adminu. Public deo vidi samo objavljene tipove.
-                         </p>
-                      </div>
-                   </div>
-                </motion.div>
+                <AdminOverview
+                  userCount={userList.length}
+                  activeVipCount={userList.filter((member) => member.membershipStatus === MembershipStatus.APPROVED).length}
+                  pendingCount={userList.filter((member) => member.membershipStatus === MembershipStatus.PENDING).length}
+                  roi={stats?.roi ?? 0}
+                  matchCount={availableMatches.length}
+                  draftCount={draftTips.length}
+                  publishedCount={tips.filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED).length}
+                  onOpenApprovedUsers={() => openUsersTab('approved')}
+                  onOpenPendingUsers={() => openUsersTab('pending')}
+                  onOpenMatches={() => setActiveTab('matches')}
+                  onOpenDraftTips={() => openTipsTab('draft')}
+                  onOpenPublishedTips={() => openTipsTab('published')}
+                />
               )}
 
               {activeTab === 'users' && (

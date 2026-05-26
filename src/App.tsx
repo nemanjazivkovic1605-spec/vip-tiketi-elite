@@ -8,6 +8,7 @@ import Footer from './components/layout/Footer';
 import ScrollToTop from './components/utils/ScrollToTop';
 import MembershipGuard from './components/MembershipGuard';
 import EmailVerificationGate from './components/EmailVerificationGate';
+import AppErrorBoundary from './components/errors/AppErrorBoundary';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -61,9 +62,10 @@ export default function App() {
         <ScrollToTop />
         {!isAdminPath && <Navbar />}
         <main className={!isAdminPath ? "pt-20" : ""}>
-          <Suspense fallback={<PageLoader />}>
-            <AnimatePresence mode="wait">
-              <Routes>
+          <AppErrorBoundary key={location.pathname}>
+            <Suspense fallback={<PageLoader />}>
+              <AnimatePresence mode="wait">
+                <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/tickets" element={<Tickets />} />
                 <Route path="/table" element={<Tickets />} />
@@ -124,9 +126,10 @@ export default function App() {
 
                 {/* Catch-all */}
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </AnimatePresence>
-          </Suspense>
+                </Routes>
+              </AnimatePresence>
+            </Suspense>
+          </AppErrorBoundary>
         </main>
         {!isAdminPath && <Footer />}
       </div>

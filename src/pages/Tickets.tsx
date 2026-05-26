@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, TrendingUp, X, XCircle } from 'lucide-react';
@@ -6,7 +6,8 @@ import { mockTipsService } from '../services/mockTips';
 import { footballApiService } from '../services/footballApiService';
 import { Tip, TicketStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import AdminTicketEditor from '../components/admin/AdminTicketEditor';
+import DataLoadFailure from '../components/utils/DataLoadFailure';
+import { withTimeout } from '../utils/async';
 import {
   calculateTicketUnitsProfit,
   canReadVipAnalysis,
@@ -81,6 +82,7 @@ const formatUnits = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2
 const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
 
 const formatPublishedAt = formatTicketPublishedAt;
+const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
 
 export default function Tickets() {
   const { user, isVerified, isAdmin, canAccessFree, canAccessVip } = useAuth();
@@ -92,28 +94,36 @@ export default function Tickets() {
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
   const [accessMessage, setAccessMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
   const isRealApiMode = footballApiService.isRealApiMode();
 
   useEffect(() => {
-    fetchData();
-    return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
+    void fetchData(true);
+    return mockTipsService.subscribe(() => void fetchData(), { canAccessFree, canAccessVip });
   }, [canAccessFree, canAccessVip]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setLoadError('');
     try {
-      const allTips = await mockTipsService.getVisibleTips({ canAccessFree, canAccessVip });
+      const allTips = await withTimeout(
+        mockTipsService.getVisibleTips({ canAccessFree, canAccessVip }),
+        'Istorija se učitava predugo. Pokušajte ponovo.',
+      );
       setTips(allTips);
+    } catch (error) {
+      console.error('History tickets load failed:', error);
+      setLoadError(error instanceof Error ? error.message : 'Istorija trenutno nije dostupna.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
-  const filteredTips = tips.filter((tip) => {
+  const filteredTips = useMemo(() => tips.filter((tip) => {
     const matchesStatus = filter === 'all' || tip.status === filter;
     const matchesType = typeFilter === 'all' || (typeFilter === 'vip' ? tip.isVip : !tip.isVip);
     return matchesStatus && matchesType;
-  });
+  }), [tips, filter, typeFilter]);
 
   const showVipPopup = (message: string) => {
     setAccessMessage(message);
@@ -314,6 +324,8 @@ export default function Tickets() {
         <div className="flex items-center justify-center py-20">
           <div className="w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
+      ) : loadError && tips.length === 0 ? (
+        <DataLoadFailure message={loadError} onRetry={() => void fetchData(true)} />
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           <AnimatePresence mode="popLayout">
@@ -411,7 +423,7 @@ export default function Tickets() {
         </div>
       )}
 
-      {filteredTips.length === 0 && !loading && (
+      {filteredTips.length === 0 && !loading && !loadError && (
         <div className="text-center py-20 glass rounded-[3rem]">
           <p className="text-neutral-500 font-bold">
             {tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
@@ -540,12 +552,14 @@ export default function Tickets() {
         )}
       </AnimatePresence>
 
-      {isAdmin && (
-        <AdminTicketEditor
-          tip={editingTip}
-          onClose={() => setEditingTip(null)}
-          onChanged={fetchData}
-        />
+      {isAdmin && editingTip && (
+        <Suspense fallback={null}>
+          <AdminTicketEditor
+            tip={editingTip}
+            onClose={() => setEditingTip(null)}
+            onChanged={fetchData}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -1,16 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Award, ChevronRight, Clock, Lock, ShieldCheck, Target, TrendingUp, Zap } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { mockTipsService } from '../services/mockTips';
 import { MembershipStatus, TicketStatus, Tip, GlobalStats } from '../types';
-import AdminTicketEditor from '../components/admin/AdminTicketEditor';
 import { formatTicketPublishedAt, isPredictionLockedForUser } from '../utils/tickets';
+import DataLoadFailure from '../components/utils/DataLoadFailure';
+import { withTimeout } from '../utils/async';
 
 const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
 
 const formatPublishedAt = formatTicketPublishedAt;
+const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
 
 export default function Dashboard() {
   const { user, isAdmin, isApproved, canAccessFree, canAccessVip } = useAuth();
@@ -18,29 +20,43 @@ export default function Dashboard() {
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
+  const [loadError, setLoadError] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setLoadError('');
     try {
-      const [visibleTips, s] = await Promise.all([
+      const [visibleTips, s] = await withTimeout(Promise.all([
         mockTipsService.getVisibleTips({ canAccessFree, canAccessVip }),
         mockTipsService.getVisibleStats({ canAccessFree, canAccessVip }),
-      ]);
+      ]), 'Dashboard se učitava predugo. Pokušajte ponovo.');
       setRecentTips(visibleTips.slice(0, 3));
       setStats(s);
+    } catch (error) {
+      console.error('Dashboard load failed:', error);
+      setLoadError(error instanceof Error ? error.message : 'Dashboard trenutno nije dostupan.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
-    return mockTipsService.subscribe(fetchData, { canAccessFree, canAccessVip });
+    void fetchData(true);
+    return mockTipsService.subscribe(() => void fetchData(), { canAccessFree, canAccessVip });
   }, [canAccessFree, canAccessVip]);
 
   if (loading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (loadError && !stats) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-16">
+        <DataLoadFailure message={loadError} onRetry={() => void fetchData(true)} />
       </div>
     );
   }
@@ -217,12 +233,14 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-      {isAdmin && (
-        <AdminTicketEditor
-          tip={editingTip}
-          onClose={() => setEditingTip(null)}
-          onChanged={fetchData}
-        />
+      {isAdmin && editingTip && (
+        <Suspense fallback={null}>
+          <AdminTicketEditor
+            tip={editingTip}
+            onClose={() => setEditingTip(null)}
+            onChanged={fetchData}
+          />
+        </Suspense>
       )}
     </div>
   );

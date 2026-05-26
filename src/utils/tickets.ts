@@ -86,6 +86,13 @@ export const formatTicketPublishedAt = (tip: Pick<Tip, 'publishedAt' | 'publishe
   });
 };
 
+export const sortTicketsByDate = (tips: Tip[]) =>
+  [...tips].sort((a, b) => {
+    const dateCompare = b.date.localeCompare(a.date);
+    if (dateCompare !== 0) return dateCompare;
+    return (b.publishedAt || '').localeCompare(a.publishedAt || '');
+  });
+
 export const getStatusLabel = (status: TicketStatus) => {
   if (status === TicketStatus.WON) return 'PROSLO';
   if (status === TicketStatus.LOST) return 'PALO';

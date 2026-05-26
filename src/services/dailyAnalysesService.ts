@@ -15,11 +15,15 @@ import {
 import { db } from '../lib/firebase';
 import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
 import { dailyAnalysisAiService } from './dailyAnalysisAiService';
+import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 
 const COLLECTION = 'dailyAnalyses';
 const PUBLIC_COLLECTION = 'publicDailyAnalyses';
 const FREE_COLLECTION = 'freeDailyAnalyses';
 const inFlightPulls = new Map<string, AbortController>();
+const DAILY_PUBLIC_CACHE_KEY = 'daily-analyses:public';
+const DAILY_FREE_CACHE_KEY = 'daily-analyses:free';
+const invalidateDailyIndexCache = () => invalidateCachedQueries(DAILY_PUBLIC_CACHE_KEY, DAILY_FREE_CACHE_KEY);
 
 type DailyAnalysesAccess = {
   canAccessFree: boolean;
@@ -168,17 +172,20 @@ const publicManualForDate = (items: DailyAnalysisItem[], date: string) =>
   sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && item.status === 'ACTIVE')).slice(0, 5);
 
 const readIndex = async (collectionName: string) => {
-  const snapshot = await getDocs(query(collection(db, collectionName)));
-  return snapshot.docs.map((analysisDoc) => {
-    const data = analysisDoc.data();
-    if (data.locked === true) return data as DailyAnalysisItem;
-    const analysisText = getNormalizedStoredAnalysis(data);
-    return {
-      ...data,
-      reasoning: analysisText,
-      analysis: analysisText,
-      vipAnalysis: data.access === 'VIP' && analysisText ? analysisText : undefined,
-    } as DailyAnalysisItem;
+  const cacheKey = collectionName === PUBLIC_COLLECTION ? DAILY_PUBLIC_CACHE_KEY : DAILY_FREE_CACHE_KEY;
+  return getCachedQuery(cacheKey, async () => {
+    const snapshot = await getDocs(query(collection(db, collectionName)));
+    return snapshot.docs.map((analysisDoc) => {
+      const data = analysisDoc.data();
+      if (data.locked === true) return data as DailyAnalysisItem;
+      const analysisText = getNormalizedStoredAnalysis(data);
+      return {
+        ...data,
+        reasoning: analysisText,
+        analysis: analysisText,
+        vipAnalysis: data.access === 'VIP' && analysisText ? analysisText : undefined,
+      } as DailyAnalysisItem;
+    });
   });
 };
 
@@ -217,6 +224,7 @@ const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
       deleteDoc(publicRef).catch(() => undefined),
       deleteDoc(freeRef).catch(() => undefined),
     ]);
+    invalidateDailyIndexCache();
     return;
   }
 
@@ -225,6 +233,7 @@ const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
       setDoc(publicRef, removeUndefined(sanitizeLockedVipAnalysis(analysis))),
       deleteDoc(freeRef).catch(() => undefined),
     ]);
+    invalidateDailyIndexCache();
     return;
   }
 
@@ -232,6 +241,7 @@ const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
     setDoc(freeRef, removeUndefined(analysis)),
     deleteDoc(publicRef).catch(() => undefined),
   ]);
+  invalidateDailyIndexCache();
 };
 
 const syncReadIndexFromDoc = async (analysisId: string) => {
@@ -416,6 +426,7 @@ export const dailyAnalysesService = {
       deleteDoc(doc(db, PUBLIC_COLLECTION, id)).catch(() => undefined),
       deleteDoc(doc(db, FREE_COLLECTION, id)).catch(() => undefined),
     ]);
+    invalidateDailyIndexCache();
   },
 
   subscribeAdmin: (callback: () => void) =>

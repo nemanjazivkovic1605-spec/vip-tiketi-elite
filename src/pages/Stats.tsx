@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Activity, Award, BarChart3, ChevronRight, Lock, PieChart, Target, TrendingUp, Zap } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
 import { GlobalStats, MonthlyStats, TicketStatus, Tip } from '../types';
 import { getTicketUnitsStake, isPredictionLockedForUser } from '../utils/tickets';
 import { useAuth } from '../hooks/useAuth';
-import AdminTicketEditor from '../components/admin/AdminTicketEditor';
+import DataLoadFailure from '../components/utils/DataLoadFailure';
+import { withTimeout } from '../utils/async';
+const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
 
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
@@ -34,33 +36,52 @@ export default function Stats() {
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
+  const [loadError, setLoadError] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    setLoadError('');
     try {
-      const nextStats = isAdmin || canAccessVip
-        ? await mockTipsService.getStats()
-        : await mockTipsService.getPublicStats();
+      const nextStats = await withTimeout(
+        isAdmin || canAccessVip
+          ? mockTipsService.getStats()
+          : mockTipsService.getPublicStats(),
+        'Statistika se učitava predugo. Pokušajte ponovo.',
+      );
       setStats(nextStats);
       setSelectedMonth((current) => {
         if (!current) return nextStats.monthlyBreakdown[0] || null;
         return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
       });
+    } catch (error) {
+      console.error('Statistics load failed:', error);
+      setLoadError(error instanceof Error ? error.message : 'Statistika trenutno nije dostupna.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    void fetchData(true);
     return isAdmin || canAccessVip
-      ? mockTipsService.subscribe(fetchData)
-      : mockTipsService.subscribePublicStats(fetchData);
+      ? mockTipsService.subscribe(() => void fetchData())
+      : mockTipsService.subscribePublicStats(() => void fetchData());
   }, [isAdmin, canAccessVip]);
+
+  const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
 
   if (loading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (loadError && !stats) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-16">
+        <DataLoadFailure message={loadError} onRetry={() => void fetchData(true)} />
       </div>
     );
   }
@@ -159,7 +180,7 @@ export default function Stats() {
           </div>
 
           <div className="space-y-3 md:hidden">
-            {selectedMonth && ticketRows(selectedMonth.tickets).map((row) => {
+            {selectedTicketRows.map((row) => {
               const meta = statusMeta(row.ticket.status);
               const locked = isPredictionLockedForUser(row.ticket, user, canAccessFree, canAccessVip);
               return (
@@ -215,7 +236,7 @@ export default function Stats() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 <AnimatePresence mode="popLayout">
-                  {selectedMonth && ticketRows(selectedMonth.tickets).map((row) => {
+                  {selectedTicketRows.map((row) => {
                     const meta = statusMeta(row.ticket.status);
                     const locked = isPredictionLockedForUser(row.ticket, user, canAccessFree, canAccessVip);
                     return (
@@ -257,12 +278,14 @@ export default function Stats() {
           )}
         </div>
       </div>
-      {isAdmin && (
-        <AdminTicketEditor
-          tip={editingTip}
-          onClose={() => setEditingTip(null)}
-          onChanged={fetchData}
-        />
+      {isAdmin && editingTip && (
+        <Suspense fallback={null}>
+          <AdminTicketEditor
+            tip={editingTip}
+            onClose={() => setEditingTip(null)}
+            onChanged={fetchData}
+          />
+        </Suspense>
       )}
     </div>
   );
