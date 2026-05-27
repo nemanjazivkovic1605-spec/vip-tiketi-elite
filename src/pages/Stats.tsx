@@ -33,6 +33,7 @@ const ticketRows = (tickets: Tip[]) =>
 export default function Stats() {
   const { user, isAdmin, canAccessFree, canAccessVip } = useAuth();
   const [stats, setStats] = useState<GlobalStats | null>(null);
+  const [comparisonStats, setComparisonStats] = useState<{ free: GlobalStats | null; vip: GlobalStats | null }>({ free: null, vip: null });
   const [statsFilter, setStatsFilter] = useState<'all' | 'free' | 'vip'>('all');
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,13 +44,18 @@ export default function Stats() {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
-      const nextStats = await withTimeout(
-        isAdmin || canAccessVip
-          ? mockTipsService.getStats(filter)
-          : mockTipsService.getPublicStats(filter),
-        'Statistika se učitava predugo. Pokušajte ponovo.',
-      );
+      const statsLoader = isAdmin || canAccessVip
+        ? mockTipsService.getStats
+        : mockTipsService.getPublicStats;
+
+      const [nextStats, freeStats, vipStats] = await Promise.all([
+        withTimeout(statsLoader(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
+        withTimeout(statsLoader('free'), 'Statistika FREE se učitava predugo.'),
+        withTimeout(statsLoader('vip'), 'Statistika VIP se učitava predugo.'),
+      ]);
+
       setStats(nextStats);
+      setComparisonStats({ free: freeStats, vip: vipStats });
       setSelectedMonth((current) => {
         if (!current) return nextStats.monthlyBreakdown[0] || null;
         return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
@@ -70,6 +76,42 @@ export default function Stats() {
   }, [isAdmin, canAccessVip, statsFilter]);
 
   const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
+
+  const overviewCards = useMemo(() => [
+    { label: 'Yield', value: formatPercent(stats?.yield ?? 0), desc: 'Čist profit / ukupne units', icon: <TrendingUp className="text-gold-500" /> },
+    { label: 'Hit Rate', value: `${stats?.hitRate ?? 0}%`, desc: 'Pogođeni / završeni tiketi', icon: <Target className="text-gold-500" /> },
+    { label: 'Average Odds', value: (stats?.averageOdds ?? 0).toFixed(2), desc: 'Prosečna kvota završenih tiketa', icon: <BarChart3 className="text-gold-500" /> },
+    { label: 'Units Profit', value: formatUnits(stats?.unitsProfit ?? 0), desc: 'Profit u jedinicama po tipu', icon: <Award className="text-gold-500" /> },
+    { label: 'Profit RSD', value: formatRsd(stats?.monthlyProfit ?? 0), desc: '1 unit = 1000 RSD', icon: <TrendingUp className="text-gold-500" /> },
+    {
+      label: 'Završeni Tiketi',
+      value: stats?.completedCount ?? 0,
+      desc: `${stats?.winCount ?? 0}W • ${stats?.lossCount ?? 0}L${stats?.refundCount ? ` • ${stats?.refundCount}V` : ''}`,
+      icon: <Zap className="text-gold-500" />,
+    },
+  ], [stats]);
+
+  const freeVsVipOverview = useMemo(() => {
+    const free = comparisonStats.free;
+    const vip = comparisonStats.vip;
+
+    if (!free || !vip) return null;
+
+    const vipYield = vip.yield ?? 0;
+    const freeYield = free.yield ?? 0;
+    const vipProfit = vip.unitsProfit ?? 0;
+    const freeProfit = free.unitsProfit ?? 0;
+    const yieldDelta = vipYield - freeYield;
+    const profitDelta = vipProfit - freeProfit;
+
+    return {
+      free,
+      vip,
+      yieldDelta,
+      profitDelta,
+      premiumMultiplier: freeProfit !== 0 ? vipProfit / freeProfit : 0,
+    };
+  }, [comparisonStats]);
 
   const monthOptions = stats?.monthlyBreakdown || [];
   const selectedMonthIndex = monthOptions.findIndex((month) => month.key === selectedMonth?.key);
@@ -102,20 +144,11 @@ export default function Stats() {
     );
   }
 
-  const overviewCards = [
-    { label: 'Yield', value: formatPercent(stats?.yield ?? 0), desc: 'Čist profit / ukupne units', icon: <TrendingUp className="text-gold-500" /> },
-    { label: 'Hit Rate', value: `${stats?.hitRate ?? 0}%`, desc: 'Pogođeni / završeni', icon: <Target className="text-gold-500" /> },
-    { label: 'Average Odds', value: (stats?.averageOdds ?? 0).toFixed(2), desc: 'Prosek završenih tiketa', icon: <BarChart3 className="text-gold-500" /> },
-    { label: 'Units Profit', value: formatUnits(stats?.unitsProfit ?? 0), desc: 'Profit u jedinicama', icon: <Award className="text-gold-500" /> },
-    { label: 'Profit RSD', value: formatRsd(stats?.monthlyProfit ?? 0), desc: '1 unit = 1000 RSD', icon: <TrendingUp className="text-gold-500" /> },
-    { label: 'Završeni Tiketi', value: stats?.completedCount ?? 0, desc: `${stats?.winCount ?? 0} / ${stats?.lossCount ?? 0} / ${stats?.refundCount ?? 0}`, icon: <Zap className="text-gold-500" /> },
-  ];
-
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="text-center mb-10">
         <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">GLOBALNA <span className="gold-text">STATISTIKA</span></h1>
-        <p className="text-neutral-400">Profesionalni tipsterski pregled kroz yield, ROI, hit rate i units profit.</p>
+        <p className="text-neutral-400">Profesionalni tipsterski pregled kroz yield, hit rate i units profit.</p>
       </div>
 
       <div className="mb-6 flex flex-wrap justify-center gap-2">
@@ -126,8 +159,16 @@ export default function Stats() {
             onClick={() => setStatsFilter(option)}
             className={`rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition ${
               statsFilter === option
-                ? 'border-gold-500 bg-gold-500 text-black'
-                : 'border-white/10 bg-white/5 text-neutral-300 hover:border-gold-500/30 hover:text-gold-300'
+                ? option === 'vip'
+                  ? 'border-gold-500 bg-gold-500 text-black shadow-[0_0_24px_rgba(245,124,0,0.18)]'
+                  : option === 'free'
+                    ? 'border-emerald-400 bg-emerald-400/15 text-emerald-100 shadow-[0_0_24px_rgba(52,211,153,0.12)]'
+                    : 'border-gold-500 bg-gold-500 text-black'
+                : option === 'vip'
+                  ? 'border-gold-500/20 bg-gold-500/8 text-gold-100 hover:border-gold-500/50 hover:bg-gold-500/12'
+                  : option === 'free'
+                    ? 'border-emerald-400/20 bg-emerald-400/8 text-emerald-100 hover:border-emerald-400/50 hover:bg-emerald-400/12'
+                    : 'border-white/10 bg-white/5 text-neutral-300 hover:border-gold-500/30 hover:text-gold-300'
             }`}
           >
             {option === 'all' ? 'Svi' : option === 'free' ? 'Free' : 'VIP'}
@@ -153,6 +194,48 @@ export default function Stats() {
           </motion.div>
         ))}
       </div>
+
+      {freeVsVipOverview && (
+        <div className="mb-12 grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+          <div className="glass rounded-[2rem] border border-white/10 p-5 md:p-6">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-gold-400">FREE vs VIP</p>
+            <h2 className="mt-2 text-xl md:text-2xl font-display font-black">Komparacija performansi</h2>
+            <p className="mt-2 text-sm text-neutral-400">Brzo poređenje koliko VIP paketi nose veću dobit u odnosu na FREE tipove.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <article className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">FREE</div>
+                <div className="mt-2 text-2xl font-display font-black text-neutral-100">{formatPercent(freeVsVipOverview.free.yield)}</div>
+                <p className="mt-1 text-xs text-neutral-400">Yield • {formatUnits(freeVsVipOverview.free.unitsProfit)}</p>
+              </article>
+              <article className="rounded-2xl border border-gold-500/30 bg-gold-500/10 p-4 shadow-[0_0_30px_rgba(245,124,0,0.12)]">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-gold-300">VIP</div>
+                <div className="mt-2 text-2xl font-display font-black text-gold-100">{formatPercent(freeVsVipOverview.vip.yield)}</div>
+                <p className="mt-1 text-xs text-gold-100/90">Yield • {formatUnits(freeVsVipOverview.vip.unitsProfit)}</p>
+              </article>
+            </div>
+          </div>
+
+          <div className="glass rounded-[2rem] border border-gold-500/20 bg-gradient-to-br from-gold-500/8 via-transparent to-transparent p-5 md:p-6">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-gold-400">Marketing insight</p>
+            <h3 className="mt-2 text-xl md:text-2xl font-display font-black text-neutral-100">VIP premium ima jači profitni doprinos</h3>
+            <p className="mt-3 text-sm text-neutral-400">VIP paket daje {formatPercent(freeVsVipOverview.yieldDelta)} veći yield i {formatUnits(freeVsVipOverview.profitDelta)} veću dobit u odnosu na FREE segment.</p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Yield razlika</div>
+                <div className="mt-2 text-xl font-display font-black text-gold-300">{formatPercent(freeVsVipOverview.yieldDelta)}</div>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Units razlika</div>
+                <div className="mt-2 text-xl font-display font-black text-gold-300">{formatUnits(freeVsVipOverview.profitDelta)}</div>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Premium faktor</div>
+                <div className="mt-2 text-xl font-display font-black text-gold-300">{freeVsVipOverview.premiumMultiplier.toFixed(2)}x</div>
+              </article>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid xl:grid-cols-[1fr_1.25fr] gap-8">
         <div className="glass p-5 md:p-6 rounded-[2rem]">
