@@ -33,19 +33,20 @@ const ticketRows = (tickets: Tip[]) =>
 export default function Stats() {
   const { user, isAdmin, canAccessFree, canAccessVip } = useAuth();
   const [stats, setStats] = useState<GlobalStats | null>(null);
+  const [statsFilter, setStatsFilter] = useState<'all' | 'free' | 'vip'>('all');
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [loadError, setLoadError] = useState('');
 
-  const fetchData = async (showLoading = false) => {
+  const fetchData = async (showLoading = false, filter: 'all' | 'free' | 'vip' = statsFilter) => {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
       const nextStats = await withTimeout(
         isAdmin || canAccessVip
-          ? mockTipsService.getStats()
-          : mockTipsService.getPublicStats(),
+          ? mockTipsService.getStats(filter)
+          : mockTipsService.getPublicStats(filter),
         'Statistika se učitava predugo. Pokušajte ponovo.',
       );
       setStats(nextStats);
@@ -62,11 +63,11 @@ export default function Stats() {
   };
 
   useEffect(() => {
-    void fetchData(true);
+    void fetchData(true, statsFilter);
     return isAdmin || canAccessVip
-      ? mockTipsService.subscribe(() => void fetchData())
-      : mockTipsService.subscribePublicStats(() => void fetchData());
-  }, [isAdmin, canAccessVip]);
+      ? mockTipsService.subscribe(() => void fetchData(false, statsFilter))
+      : mockTipsService.subscribePublicStats(() => void fetchData(false, statsFilter));
+  }, [isAdmin, canAccessVip, statsFilter]);
 
   const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
 
@@ -112,9 +113,26 @@ export default function Stats() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
-      <div className="text-center mb-14">
+      <div className="text-center mb-10">
         <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">GLOBALNA <span className="gold-text">STATISTIKA</span></h1>
         <p className="text-neutral-400">Profesionalni tipsterski pregled kroz yield, ROI, hit rate i units profit.</p>
+      </div>
+
+      <div className="mb-6 flex flex-wrap justify-center gap-2">
+        {(['all','free','vip'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setStatsFilter(option)}
+            className={`rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition ${
+              statsFilter === option
+                ? 'border-gold-500 bg-gold-500 text-black'
+                : 'border-white/10 bg-white/5 text-neutral-300 hover:border-gold-500/30 hover:text-gold-300'
+            }`}
+          >
+            {option === 'all' ? 'Svi' : option === 'free' ? 'Free' : 'VIP'}
+          </button>
+        ))}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-12">
@@ -260,7 +278,6 @@ export default function Stats() {
                   <div><span className="block text-neutral-500 uppercase font-black">Profit u</span>{formatUnits(month.profitUnits)}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">Profit RSD</span>{formatRsd(month.profitRsd)}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">Yield</span>{formatPercent(month.yield)}</div>
-                  <div><span className="block text-neutral-500 uppercase font-black">ROI</span>{formatPercent(month.roi)}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">Povrat</span>{month.refunds}</div>
                   <div><span className="block text-neutral-500 uppercase font-black">Units</span>{month.unitsStaked.toFixed(2)}u</div>
                 </div>

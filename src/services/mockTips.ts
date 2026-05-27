@@ -260,6 +260,14 @@ const readAdminActiveTips = async (): Promise<Tip[]> => {
 const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
 const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
+
+type StatsFilter = 'all' | 'free' | 'vip';
+
+const filterTipsByType = (tips: Tip[], filter: StatsFilter) => {
+  if (filter === 'all') return tips;
+  const wantVip = filter === 'vip';
+  return tips.filter((tip) => Boolean(tip.isVip) === wantVip);
+};
 const getPublicStatsTicketsCollection = () => collection(db, PUBLIC_STATS_TICKETS_COLLECTION);
 
 const getTicketDoc = (id: string) => doc(db, TICKETS_COLLECTION, id);
@@ -448,20 +456,20 @@ export const mockTipsService = {
     return sortTicketsByDate(mergeTips(dailyTips, tips).filter((t) => !t.isVip));
   },
 
-  getStats: async (): Promise<GlobalStats> => {
+  getStats: async (filter: StatsFilter = 'all'): Promise<GlobalStats> => {
     const [tickets, dailyTips] = await Promise.all([
       readFinishedPublishedTips(),
       readFinishedDailyAnalysisTips(),
     ]);
-    return calculateStats(sortTicketsByDate(mergeTips(dailyTips, tickets)));
+    return calculateStats(filterTipsByType(sortTicketsByDate(mergeTips(dailyTips, tickets)), filter));
   },
 
   getVisibleStats: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<GlobalStats> => {
     return calculateStats(await mockTipsService.getVisibleTips(access));
   },
 
-  getPublicStats: async (): Promise<GlobalStats> => {
-    return calculateStats(await readPublicStatsTips());
+  getPublicStats: async (filter: StatsFilter = 'all'): Promise<GlobalStats> => {
+    return calculateStats(filterTipsByType(await readPublicStatsTips(), filter));
   },
 
   syncPublicTickets: async (tips?: Tip[]): Promise<void> => {
