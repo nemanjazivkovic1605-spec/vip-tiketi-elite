@@ -158,11 +158,12 @@ export default function AdminDashboard() {
     });
   }, [availableMatches, matchDateFilter, matchLeagueFilter, matchTeamFilter]);
 
-  const filteredDailyAnalyses = useMemo(() => dailyAnalyses.filter((analysis) => (
-    dailyLifecycleFilter === 'active'
-      ? isVisibleInAdminActiveDailyList(analysis)
-      : isFinishedDailyAnalysisStatus(analysis.status)
-  )), [dailyAnalyses, dailyLifecycleFilter]);
+  const activeAdminTips = useMemo(() => dailyAnalyses.filter((analysis) => isVisibleInAdminActiveDailyList(analysis)), [dailyAnalyses]);
+  const finishedAdminTips = useMemo(() => dailyAnalyses.filter((analysis) => isFinishedDailyAnalysisStatus(analysis.status)), [dailyAnalyses]);
+
+  const filteredDailyAnalyses = useMemo(() => (
+    dailyLifecycleFilter === 'active' ? activeAdminTips : finishedAdminTips
+  ), [activeAdminTips, dailyLifecycleFilter, finishedAdminTips]);
 
   const ticketTotalOdds = useMemo(() => {
     const matches = ticketCart.map((item) => ({
@@ -264,6 +265,16 @@ export default function AdminDashboard() {
 
     await mockTipsService.syncTicketMetadata(fetchedTips);
     await mockTipsService.syncPublicTickets(fetchedTips);
+
+    const debugActive = fetchedDailyAnalyses.filter((analysis) => isVisibleInAdminActiveDailyList(analysis));
+    const debugFinished = fetchedDailyAnalyses.filter((analysis) => isFinishedDailyAnalysisStatus(analysis.status));
+
+    console.debug('[daily-admin-debug] view split', {
+      firestoreCount: fetchedDailyAnalyses.length,
+      statuses: fetchedDailyAnalyses.map((analysis) => analysis.status),
+      activeCount: debugActive.length,
+      finishedCount: debugFinished.length,
+    });
 
     setTips(fetchedTips);
     setAvailableMatches(fetchedMatches);

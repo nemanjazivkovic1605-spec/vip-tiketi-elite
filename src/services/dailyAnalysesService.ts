@@ -15,7 +15,7 @@ import {
 import { auth, db } from '../lib/firebase';
 import { DailyAnalysisItem, DailyAnalysisStatus, TicketStatus, TipPublicationStatus } from '../types';
 import { createDailyPublicationMeta, getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublication';
-import { isFinishedDailyAnalysisStatus, isVisibleInDailyFeed } from '../utils/dailyLifecycle';
+import { isFinishedDailyAnalysisStatus, isVisibleInDailyFeed, normalizeDailyAnalysisStatus } from '../utils/dailyLifecycle';
 import { dailyAnalysisAiService, type AiAnalysisResult, type AnalysisGenerationType } from './dailyAnalysisAiService';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 
@@ -177,7 +177,7 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
   id,
   source: data.source === 'api-basketball' ? 'api-basketball' : data.source === 'api-football' ? 'api-football' : 'manual',
   sport: data.sport === 'basketball' ? 'basketball' : 'football',
-  status: ['ACTIVE', 'WON', 'LOST', 'POSTPONED', 'REFUND', 'HIDDEN'].includes(data.status) ? data.status : 'ACTIVE',
+  status: normalizeDailyAnalysisStatus(String(data.status || 'ACTIVE')),
   manualOverride: data.manualOverride === true,
   resultManualOverride: hasManualResult,
   topPick: data.topPick === true,
@@ -496,6 +496,17 @@ export const dailyAnalysesService = {
   getAdminAnalyses: async (): Promise<DailyAnalysisItem[]> => {
     await clearLegacyApiPlaceholders();
     const analyses = sortAnalyses(await readManual());
+    const statusMap = analyses.reduce<Record<string, number>>((acc, analysis) => {
+      const status = normalizeDailyAnalysisStatus(String(analysis.status || 'ACTIVE'));
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
+
+    console.debug('[daily-admin-debug] fetched analyses', {
+      count: analyses.length,
+      statuses: statusMap,
+    });
+
     await Promise.all(analyses.map((analysis) => syncReadIndexes(analysis)));
     return analyses;
   },
