@@ -12,9 +12,11 @@ import {
   type DocumentData,
   type Timestamp,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
-import { dailyAnalysisAiService } from './dailyAnalysisAiService';
+import { auth, db } from '../lib/firebase';
+import { DailyAnalysisItem, DailyAnalysisStatus, TicketStatus, TipPublicationStatus } from '../types';
+import { createDailyPublicationMeta, getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublication';
+import { isFinishedDailyAnalysisStatus, isVisibleInDailyFeed } from '../utils/dailyLifecycle';
+import { dailyAnalysisAiService, type AiAnalysisResult, type AnalysisGenerationType } from './dailyAnalysisAiService';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 
 const COLLECTION = 'dailyAnalyses';
@@ -31,6 +33,26 @@ type DailyAnalysesAccess = {
   isAdmin: boolean;
 };
 
+type ApiFixtureResult = {
+  fixtureId?: number;
+  lookupMethod?: 'fixture_id' | 'teams_date_league';
+  homeScore: number | null;
+  awayScore: number | null;
+  status?: string;
+  statusLong?: string;
+  elapsed?: number | null;
+  finished: boolean;
+  postponed: boolean;
+};
+
+export type ResultRefreshOutcome = {
+  updated: boolean;
+  skippedManualOverride?: boolean;
+  result?: ApiFixtureResult | null;
+  status?: DailyAnalysisStatus;
+  message: string;
+};
+
 const toIsoString = (value: unknown) => {
   if (!value) return undefined;
   if (typeof value === 'string') return value;
@@ -45,22 +67,50 @@ const normalizeNumber = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const normalizeOptionalPercent = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
 const formatScoreResult = (homeScore?: number, awayScore?: number): string | undefined =>
   homeScore !== undefined && awayScore !== undefined ? `${homeScore}:${awayScore}` : undefined;
 
-const getStoredAnalysisText = (value: Pick<DailyAnalysisItem, 'reasoning' | 'analysis' | 'vipAnalysis'>) =>
-  value.vipAnalysis?.trim() || value.analysis?.trim() || value.reasoning?.trim() || '';
+const getAnalysisTextForType = (
+  value: Pick<DailyAnalysisItem, 'access' | 'reasoning' | 'analysis' | 'freeAnalysis' | 'vipAnalysis'>,
+  analysisType: AnalysisGenerationType = value.access,
+) => {
+  const hasExplicit = analysisType === 'VIP' ? value.vipAnalysis !== undefined : value.freeAnalysis !== undefined;
+  const explicit = analysisType === 'VIP' ? value.vipAnalysis?.trim() : value.freeAnalysis?.trim();
+  if (hasExplicit) return explicit || '';
+  const otherExplicit = analysisType === 'VIP' ? value.freeAnalysis?.trim() : value.vipAnalysis?.trim();
+  if (otherExplicit) return '';
+  return value.analysis?.trim() || value.reasoning?.trim() || '';
+};
 
 const hasLegacyApiPlaceholder = (data: DocumentData) =>
   (data.source === 'api-football' || data.source === 'api-basketball')
-  && data.manualOverride !== true
-  && data.aiSource !== 'gemini'
-  && data.aiSource !== 'fallback'
-  && Boolean(String(data.vipAnalysis || data.analysis || data.reasoning || '').trim());
+  && (
+    (
+      data.manualOverride !== true
+      && data.aiSource !== 'gemini'
+      && data.aiSource !== 'fallback'
+      && Boolean(String(data.freeAnalysis || data.vipAnalysis || data.analysis || data.reasoning || '').trim())
+    )
+    || /Ovaj par vi(?:s|š)e li(?:c|č)i|Me(?:c|č) deluje otvoreno|Fokus je na efikasnosti|predstavlja razuman izbor u odnosu na profil ovog meca|odgovorno upravljanje ulogom/i.test(
+      String(data.freeAnalysis || data.vipAnalysis || data.analysis || data.reasoning || ''),
+    )
+  );
 
-const getNormalizedStoredAnalysis = (data: DocumentData) => hasLegacyApiPlaceholder(data)
-  ? ''
-  : String(data.vipAnalysis || data.analysis || data.reasoning || '').trim();
+const getNormalizedStoredAnalysis = (data: DocumentData) => {
+  if (hasLegacyApiPlaceholder(data)) return '';
+  const access = data.access === 'VIP' ? 'VIP' : 'FREE';
+  const explicit = access === 'VIP' ? data.vipAnalysis : data.freeAnalysis;
+  const otherExplicit = access === 'VIP' ? data.freeAnalysis : data.vipAnalysis;
+  if (String(explicit || '').trim()) return String(explicit).trim();
+  if (String(otherExplicit || '').trim()) return '';
+  return String(data.analysis || data.reasoning || '').trim();
+};
 
 export const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: number, awayScore?: number): DailyAnalysisStatus | undefined => {
   if (homeScore === undefined || awayScore === undefined) return undefined;
@@ -82,12 +132,14 @@ export const evaluateDailyAnalysisStatus = (prediction: string, homeScore?: numb
   const overMatch = normalized.match(/^OVER\s*(\d+(?:\.\d+)?)$/);
   if (overMatch) {
     const threshold = Number(overMatch[1]);
+    if (Number.isInteger(threshold) && total === threshold) return 'REFUND';
     return total > threshold ? 'WON' : 'LOST';
   }
 
   const underMatch = normalized.match(/^UNDER\s*(\d+(?:\.\d+)?)$/);
   if (underMatch) {
     const threshold = Number(underMatch[1]);
+    if (Number.isInteger(threshold) && total === threshold) return 'REFUND';
     return total < threshold ? 'WON' : 'LOST';
   }
 
@@ -98,7 +150,28 @@ export const isQuickResultPredictionSupported = (prediction: string) =>
   evaluateDailyAnalysisStatus(prediction, 1, 1) !== undefined;
 
 const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
+  const access = data.access === 'VIP' ? 'VIP' : 'FREE';
+  const isLegacyPlaceholder = hasLegacyApiPlaceholder(data);
   const analysisText = getNormalizedStoredAnalysis(data);
+  const freeAnalysis = isLegacyPlaceholder ? '' : String(data.freeAnalysis || (access === 'FREE' ? analysisText : '')).trim();
+  const vipAnalysis = isLegacyPlaceholder ? '' : String(data.vipAnalysis || (access === 'VIP' ? analysisText : '')).trim();
+  const date = data.date || new Date().toISOString().split('T')[0];
+  const time = data.kickoffTime || data.matchTime || data.time || '20:00';
+  const publicationMeta = getDailyPublicationMeta({
+    date,
+    publishedAt: toIsoString(data.publishedAt),
+    publishedDate: data.publishedDate,
+    publishedTime: data.publishedTime,
+    publishTime: data.publishTime,
+    createdAt: toIsoString(data.createdAt),
+  });
+  const hasManualResult = data.resultManualOverride === true
+    || (data.manualOverride === true && Boolean(
+      data.result
+      || data.homeScore !== undefined
+      || data.awayScore !== undefined
+      || isFinishedDailyAnalysisStatus(data.status as DailyAnalysisStatus | undefined),
+    ));
 
   return ({
   id,
@@ -106,11 +179,15 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
   sport: data.sport === 'basketball' ? 'basketball' : 'football',
   status: ['ACTIVE', 'WON', 'LOST', 'POSTPONED', 'REFUND', 'HIDDEN'].includes(data.status) ? data.status : 'ACTIVE',
   manualOverride: data.manualOverride === true,
+  resultManualOverride: hasManualResult,
   topPick: data.topPick === true,
   units: Number.isFinite(Number(data.units)) ? Number(data.units) : undefined,
   fixtureId: Number.isFinite(Number(data.fixtureId)) ? Number(data.fixtureId) : undefined,
-  date: data.date || new Date().toISOString().split('T')[0],
-  time: data.time || '20:00',
+  date,
+  time,
+  matchTime: data.matchTime || data.kickoffTime || data.time || time,
+  kickoffTime: data.kickoffTime || data.matchTime || data.time || time,
+  ...publicationMeta,
   league: data.league || '',
   leagueId: Number.isFinite(Number(data.leagueId)) ? Number(data.leagueId) : undefined,
   homeTeam: data.homeTeam || '',
@@ -118,23 +195,27 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
   homeScore: normalizeNumber(data.homeScore),
   awayScore: normalizeNumber(data.awayScore),
   result: data.result || formatScoreResult(normalizeNumber(data.homeScore), normalizeNumber(data.awayScore)),
+  fixtureStatus: data.fixtureStatus || undefined,
+  elapsed: normalizeNumber(data.elapsed) ?? null,
+  isFinished: data.isFinished === true,
   homeLogo: data.homeLogo || '',
   awayLogo: data.awayLogo || '',
-  homeFormPercent: Number.isFinite(Number(data.homeFormPercent)) ? Number(data.homeFormPercent) : null,
-  awayFormPercent: Number.isFinite(Number(data.awayFormPercent)) ? Number(data.awayFormPercent) : null,
+  homeFormPercent: normalizeOptionalPercent(data.homeFormPercent),
+  awayFormPercent: normalizeOptionalPercent(data.awayFormPercent),
   formNote: data.formNote || undefined,
   prediction: data.prediction || 'Over 1.5',
   odds: Number.isFinite(Number(data.odds)) ? Number(data.odds) : 1.5,
   reasoning: analysisText,
   analysis: analysisText,
-  vipAnalysis: data.access === 'VIP' && analysisText ? analysisText : undefined,
+  freeAnalysis: freeAnalysis || undefined,
+  vipAnalysis: vipAnalysis || undefined,
   aiSource: data.aiSource === 'gemini' ? 'gemini' : data.aiSource === 'fallback' ? 'fallback' : undefined,
   confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : undefined,
   riskLevel: ['LOW', 'MEDIUM', 'HIGH'].includes(data.riskLevel) ? data.riskLevel : undefined,
   averageTotal: data.averageTotal || undefined,
   h2hNote: data.h2hNote || undefined,
   badges: Array.isArray(data.badges) ? data.badges.filter(Boolean) : undefined,
-  access: data.access === 'VIP' ? 'VIP' : 'FREE',
+  access,
   sortOrder: Number.isFinite(Number(data.sortOrder)) ? Number(data.sortOrder) : 0,
   enabled: data.enabled !== false,
   hidden: data.hidden === true,
@@ -163,13 +244,14 @@ const clearLegacyApiPlaceholders = async () => {
     .map((analysisDoc) => updateDoc(analysisDoc.ref, {
       reasoning: '',
       analysis: '',
+      freeAnalysis: '',
       vipAnalysis: '',
       updatedAt: serverTimestamp(),
     })));
 };
 
 const publicManualForDate = (items: DailyAnalysisItem[], date: string) =>
-  sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && item.status === 'ACTIVE')).slice(0, 5);
+  sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && isVisibleInDailyFeed(item))).slice(0, 5);
 
 const readIndex = async (collectionName: string) => {
   const cacheKey = collectionName === PUBLIC_COLLECTION ? DAILY_PUBLIC_CACHE_KEY : DAILY_FREE_CACHE_KEY;
@@ -179,18 +261,20 @@ const readIndex = async (collectionName: string) => {
       const data = analysisDoc.data();
       if (data.locked === true) return data as DailyAnalysisItem;
       const analysisText = getNormalizedStoredAnalysis(data);
+      const access = data.access === 'VIP' ? 'VIP' : 'FREE';
       return {
         ...data,
         reasoning: analysisText,
         analysis: analysisText,
-        vipAnalysis: data.access === 'VIP' && analysisText ? analysisText : undefined,
+        freeAnalysis: access === 'FREE' && analysisText ? analysisText : undefined,
+        vipAnalysis: access === 'VIP' && analysisText ? analysisText : undefined,
       } as DailyAnalysisItem;
     });
   });
 };
 
 const publicIndexForDate = (items: DailyAnalysisItem[], date: string) =>
-  sortAnalyses(items.filter((item) => item.date === date && item.status === 'ACTIVE')).slice(0, 5);
+  sortAnalyses(items.filter((item) => item.date === date && isVisibleInDailyFeed(item))).slice(0, 5);
 
 const removeUndefined = <T>(value: T): T => {
   if (Array.isArray(value)) return value.map((item) => removeUndefined(item)) as T;
@@ -209,15 +293,32 @@ const sanitizeLockedVipAnalysis = (analysis: DailyAnalysisItem): DailyAnalysisIt
   league: analysis.league,
   date: analysis.date,
   time: analysis.time,
+  matchTime: analysis.matchTime,
+  kickoffTime: analysis.kickoffTime,
+  publishedDate: analysis.publishedDate,
+  publishedTime: analysis.publishedTime,
+  publishTime: analysis.publishTime,
+  publishedAt: analysis.publishedAt,
   type: 'VIP',
   status: analysis.status,
   locked: true,
 } as DailyAnalysisItem);
 
+const sanitizeFreeAnalysis = (analysis: DailyAnalysisItem): DailyAnalysisItem => {
+  const freeAnalysis = getAnalysisTextForType(analysis, 'FREE');
+  return {
+    ...analysis,
+    reasoning: freeAnalysis,
+    analysis: freeAnalysis,
+    freeAnalysis,
+    vipAnalysis: undefined,
+  };
+};
+
 const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
   const publicRef = doc(db, PUBLIC_COLLECTION, analysis.id);
   const freeRef = doc(db, FREE_COLLECTION, analysis.id);
-  const visible = analysis.enabled && !analysis.hidden && analysis.status === 'ACTIVE';
+  const visible = analysis.enabled && !analysis.hidden && isVisibleInDailyFeed(analysis);
 
   if (!visible) {
     await Promise.all([
@@ -238,16 +339,10 @@ const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
   }
 
   await Promise.all([
-    setDoc(freeRef, removeUndefined(analysis)),
+    setDoc(freeRef, removeUndefined(sanitizeFreeAnalysis(analysis))),
     deleteDoc(publicRef).catch(() => undefined),
   ]);
   invalidateDailyIndexCache();
-};
-
-const syncReadIndexFromDoc = async (analysisId: string) => {
-  const snapshot = await getDoc(doc(db, COLLECTION, analysisId));
-  if (!snapshot.exists()) return;
-  await syncReadIndexes(normalizeManual(snapshot.data(), snapshot.id));
 };
 
 const getStableAnalysisId = (analysis: DailyAnalysisItem) => {
@@ -256,18 +351,89 @@ const getStableAnalysisId = (analysis: DailyAnalysisItem) => {
   return `manual-daily-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 };
 
-const withCompleteAnalysis = (analysis: DailyAnalysisItem, analysisText?: string, aiSource?: 'gemini' | 'fallback') => {
-  const text = analysisText === undefined ? getStoredAnalysisText(analysis) : analysisText.trim();
+const withCompleteAnalysis = (analysis: DailyAnalysisItem, aiSource?: 'gemini' | 'fallback') => {
+  const freeAnalysis = getAnalysisTextForType(analysis, 'FREE');
+  const vipAnalysis = getAnalysisTextForType(analysis, 'VIP');
+  const text = analysis.access === 'VIP' ? vipAnalysis : freeAnalysis;
   return {
     ...analysis,
     reasoning: text,
     analysis: text,
-    vipAnalysis: analysis.access === 'VIP' ? text : '',
+    freeAnalysis,
+    vipAnalysis,
     ...(aiSource ? { aiSource } : {}),
   };
 };
 
-const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem, generateAi = false) => {
+const withGeneratedAnalysis = (
+  analysis: DailyAnalysisItem,
+  analysisType: AnalysisGenerationType,
+  analysisText: string,
+  aiSource: 'gemini' | 'fallback',
+) => withCompleteAnalysis({
+  ...analysis,
+  ...(analysisType === 'VIP' ? { vipAnalysis: analysisText } : { freeAnalysis: analysisText }),
+}, aiSource);
+
+const publishFinishedAnalysisToHistory = async (
+  analysis: DailyAnalysisItem,
+  status: Exclude<DailyAnalysisStatus, 'ACTIVE' | 'HIDDEN'>,
+) => {
+  const { mockTipsService } = await import('./mockTips');
+  const ticketStatus = status === 'WON'
+    ? TicketStatus.WON
+    : status === 'LOST'
+      ? TicketStatus.LOST
+      : status === 'REFUND'
+        ? TicketStatus.REFUND
+        : TicketStatus.POSTPONED;
+  const publicationMeta = getDailyPublicationMeta(analysis);
+  const result = formatScoreResult(analysis.homeScore, analysis.awayScore) || analysis.result;
+
+  await mockTipsService.addTip({
+    id: `daily-${analysis.id}`,
+    source: 'admin',
+    publicationStatus: TipPublicationStatus.PUBLISHED,
+    date: analysis.date,
+    ...publicationMeta,
+    matches: [{
+      id: `${analysis.id}-match`,
+      externalMatchId: analysis.fixtureId ? String(analysis.fixtureId) : undefined,
+      teams: `${analysis.homeTeam} - ${analysis.awayTeam}`,
+      homeTeam: analysis.homeTeam,
+      awayTeam: analysis.awayTeam,
+      league: analysis.league,
+      prediction: analysis.prediction,
+      odds: Number(analysis.odds) || 1,
+      time: getKickoffTime(analysis),
+      result,
+      status: ticketStatus,
+      analysis: analysis.reasoning,
+    }],
+    totalOdds: Number(analysis.odds) || 1,
+    ticketType: 'SINGL',
+    unitsStake: Number(analysis.units) || 3,
+    status: ticketStatus,
+    analysis: analysis.reasoning || '',
+    isVip: analysis.access === 'VIP',
+    result,
+  });
+};
+
+const syncLifecycleFromDoc = async (analysisId: string) => {
+  const snapshot = await getDoc(doc(db, COLLECTION, analysisId));
+  if (!snapshot.exists()) return;
+  const analysis = normalizeManual(snapshot.data(), snapshot.id);
+  await syncReadIndexes(analysis);
+  if (isFinishedDailyAnalysisStatus(analysis.status)) {
+    await publishFinishedAnalysisToHistory(
+      analysis,
+      analysis.status as Exclude<DailyAnalysisStatus, 'ACTIVE' | 'HIDDEN'>,
+    );
+  }
+};
+
+const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
   const id = getStableAnalysisId(analysis);
   const ref = doc(db, COLLECTION, id);
   const existingSnapshot = await getDoc(ref);
@@ -279,32 +445,34 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem, generateAi 
     }
   }
 
-  const existingAnalysisText = existing ? getStoredAnalysisText(existing) : '';
-  let completedAnalysis = withCompleteAnalysis(analysis, existingAnalysisText);
-  let aiSource: 'gemini' | 'fallback' | undefined;
-  if (generateAi && !existingAnalysisText) {
-    await new Promise((resolve) => window.setTimeout(resolve, 300));
-    const generated = await dailyAnalysisAiService.generateDailyAnalysisText(analysis);
-    aiSource = generated.source;
-    completedAnalysis = withCompleteAnalysis(analysis, generated.analysis, generated.source);
-  } else if (existingAnalysisText) {
-    completedAnalysis = withCompleteAnalysis(analysis, existingAnalysisText, existing?.aiSource);
-  }
-
+  const existingAnalysisText = existing ? getAnalysisTextForType(existing, analysis.access) : '';
+  const preservedResultStatus = existing && existing.status !== 'ACTIVE'
+    ? existing.status
+    : analysis.status || 'ACTIVE';
+  const completedAnalysis = withCompleteAnalysis({
+    ...analysis,
+    matchTime: existing?.matchTime || analysis.matchTime || analysis.time,
+    kickoffTime: existing?.kickoffTime || analysis.kickoffTime || analysis.time,
+    ...getDailyPublicationMeta(existing || analysis),
+    freeAnalysis: existing?.freeAnalysis,
+    vipAnalysis: existing?.vipAnalysis,
+    analysis: existingAnalysisText,
+    reasoning: existingAnalysisText,
+  });
   await setDoc(ref, removeUndefined({
     ...completedAnalysis,
     id,
     source: completedAnalysis.source,
     manualOverride: false,
-    status: analysis.status || 'ACTIVE',
+    status: preservedResultStatus,
     enabled: analysis.enabled !== false,
     hidden: analysis.hidden === true,
     updatedAt: serverTimestamp(),
     createdAt: existingSnapshot.exists() ? existingSnapshot.data().createdAt : serverTimestamp(),
   }), { merge: true });
-  await syncReadIndexFromDoc(id);
+  await syncLifecycleFromDoc(id);
 
-  return { saved: true, skippedManualOverride: false, aiSource };
+  return { saved: true, skippedManualOverride: false };
 };
 
 export const dailyAnalysesService = {
@@ -341,9 +509,15 @@ export const dailyAnalysesService = {
       : evaluateDailyAnalysisStatus(analysis.prediction, homeScore, awayScore) || 'ACTIVE';
 
     const completedAnalysis = withCompleteAnalysis(analysis);
+    const publicationMeta = analysis.publishedAt || analysis.publishedDate || analysis.publishedTime || analysis.publishTime
+      ? getDailyPublicationMeta(analysis)
+      : createDailyPublicationMeta();
 
     await setDoc(doc(db, COLLECTION, id), removeUndefined({
       ...completedAnalysis,
+      matchTime: analysis.matchTime || analysis.kickoffTime || analysis.time,
+      kickoffTime: analysis.kickoffTime || analysis.matchTime || analysis.time,
+      ...publicationMeta,
       id,
       source: completedAnalysis.source || 'manual',
       status,
@@ -351,6 +525,10 @@ export const dailyAnalysesService = {
       homeScore,
       awayScore,
       manualOverride: true,
+      resultManualOverride: analysis.resultManualOverride === true
+        || homeScore !== undefined
+        || awayScore !== undefined
+        || isFinishedDailyAnalysisStatus(analysis.status),
       odds: Number(analysis.odds) || 1,
       units: Number(analysis.units) || 3,
       sortOrder: Number(analysis.sortOrder) || 0,
@@ -359,7 +537,7 @@ export const dailyAnalysesService = {
       updatedAt: serverTimestamp(),
       createdAt: analysis.createdAt || serverTimestamp(),
     }), { merge: true });
-    await syncReadIndexFromDoc(id);
+    await syncLifecycleFromDoc(id);
   },
 
   updateManualAnalysis: async (id: string, patch: Partial<DailyAnalysisItem>): Promise<void> => {
@@ -370,26 +548,106 @@ export const dailyAnalysesService = {
       : patch.prediction
         ? evaluateDailyAnalysisStatus(patch.prediction, homeScore, awayScore)
         : undefined;
+    const hasManualResultPatch = patch.result !== undefined
+      || patch.homeScore !== undefined
+      || patch.awayScore !== undefined
+      || (patch.status !== undefined && patch.status !== 'ACTIVE' && patch.status !== 'HIDDEN');
 
     await updateDoc(doc(db, COLLECTION, id), removeUndefined({
       ...patch,
+      ...(patch.publishedAt || patch.publishedDate || patch.publishedTime || patch.publishTime
+        ? getDailyPublicationMeta({ ...patch, date: patch.date || new Date().toISOString().split('T')[0] })
+        : {}),
       ...(homeScore !== undefined ? { homeScore } : {}),
       ...(awayScore !== undefined ? { awayScore } : {}),
       ...(status ? { status } : {}),
       ...(homeScore !== undefined && awayScore !== undefined ? { result: formatScoreResult(homeScore, awayScore) } : {}),
       manualOverride: true,
+      ...(hasManualResultPatch
+        ? { resultManualOverride: true }
+        : {}),
       updatedAt: serverTimestamp(),
     }));
-    await syncReadIndexFromDoc(id);
+    await syncLifecycleFromDoc(id);
   },
 
-  generateAiAnalysis: async (analysis: DailyAnalysisItem): Promise<'gemini' | 'fallback'> => {
-    const generated = await dailyAnalysisAiService.generateDailyAnalysisText(analysis);
-    await dailyAnalysesService.saveManualAnalysis(withCompleteAnalysis(analysis, generated.analysis, generated.source));
-    return generated.source;
+  generateAiAnalysis: async (analysis: DailyAnalysisItem, analysisType: AnalysisGenerationType): Promise<AiAnalysisResult> => {
+    const existingAnalysis = analysisType === 'VIP' ? analysis.vipAnalysis?.trim() : analysis.freeAnalysis?.trim();
+    const generated = await dailyAnalysisAiService.generateSportsAnalysis(analysisType, analysis, {
+      manualRequest: true,
+      forceRegenerate: Boolean(existingAnalysis),
+    });
+    await dailyAnalysesService.saveManualAnalysis(withGeneratedAnalysis(analysis, analysisType, generated.analysis, generated.source));
+    return generated;
   },
 
-  pullFromApiForDate: async (date: string, options?: { generateAi?: boolean }): Promise<{ saved: number; skippedManualOverride: number; fetched: number; aiGenerated: number; fallbackGenerated: number }> => {
+  refreshResultFromApi: async (analysis: DailyAnalysisItem): Promise<ResultRefreshOutcome> => {
+    if (analysis.resultManualOverride) {
+      return {
+        updated: false,
+        skippedManualOverride: true,
+        message: 'Rezultat je rucno izmenjen i API osvezavanje ga nije pregazilo.',
+      };
+    }
+    if (analysis.sport === 'basketball') {
+      return { updated: false, message: 'Automatsko povlacenje rezultata je trenutno dostupno za fudbal.' };
+    }
+    const user = auth.currentUser;
+    if (!user) throw new Error('Admin prijava je potrebna za povlacenje rezultata.');
+    const token = await user.getIdToken();
+    const response = await fetch('/api/fetch-fixture-result', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        fixtureId: analysis.fixtureId,
+        date: analysis.date,
+        league: analysis.league,
+        homeTeam: analysis.homeTeam,
+        awayTeam: analysis.awayTeam,
+      }),
+    });
+    const payload = await response.json() as { result?: ApiFixtureResult | null; error?: string };
+    if (!response.ok) throw new Error(payload.error || 'Povlacenje rezultata nije uspelo.');
+    if (!payload.result) {
+      return { updated: false, result: null, message: 'Rezultat za ovaj mec jos nije pronadjen.' };
+    }
+
+    const result = payload.result;
+    const hasScore = result.homeScore !== null && result.awayScore !== null;
+    const evaluatedStatus = hasScore && result.finished
+      ? evaluateDailyAnalysisStatus(analysis.prediction, result.homeScore!, result.awayScore!)
+      : undefined;
+    const status: DailyAnalysisStatus = result.postponed
+      ? 'POSTPONED'
+      : result.finished
+        ? evaluatedStatus || 'ACTIVE'
+        : 'ACTIVE';
+
+    await updateDoc(doc(db, COLLECTION, analysis.id), removeUndefined({
+      fixtureId: result.fixtureId || analysis.fixtureId,
+      fixtureStatus: result.status || result.statusLong,
+      elapsed: result.elapsed ?? null,
+      isFinished: result.finished,
+      ...(hasScore ? {
+        homeScore: result.homeScore,
+        awayScore: result.awayScore,
+        result: formatScoreResult(result.homeScore!, result.awayScore!),
+      } : {}),
+      status,
+      updatedAt: serverTimestamp(),
+    }));
+    await syncLifecycleFromDoc(analysis.id);
+
+    const message = result.finished && !evaluatedStatus && !result.postponed
+      ? 'Rezultat je povucen, ali tip zahteva rucnu procenu statusa.'
+      : `Rezultat je osvezen (${result.lookupMethod === 'fixture_id' ? 'fixture ID' : 'timovi/datum/liga'}).`;
+    return { updated: true, result, status, message };
+  },
+
+  pullFromApiForDate: async (date: string): Promise<{ saved: number; skippedManualOverride: number; fetched: number }> => {
     const previous = inFlightPulls.get(date);
     if (previous) previous.abort();
 
@@ -401,18 +659,13 @@ export const dailyAnalysesService = {
       const analyses = await apiFootballService.fetchDailyAnalysesForDate(date, controller.signal);
       let saved = 0;
       let skippedManualOverride = 0;
-      let aiGenerated = 0;
-      let fallbackGenerated = 0;
-
       for (const analysis of analyses) {
-        const result = await saveApiAnalysisIfAllowed(analysis, options?.generateAi === true);
+        const result = await saveApiAnalysisIfAllowed(analysis);
         if (result.saved) saved += 1;
         if (result.skippedManualOverride) skippedManualOverride += 1;
-        if (result.aiSource === 'gemini') aiGenerated += 1;
-        if (result.aiSource === 'fallback') fallbackGenerated += 1;
       }
 
-      return { saved, skippedManualOverride, fetched: analyses.length, aiGenerated, fallbackGenerated };
+      return { saved, skippedManualOverride, fetched: analyses.length };
     } finally {
       if (inFlightPulls.get(date) === controller) {
         inFlightPulls.delete(date);

@@ -4,6 +4,7 @@ import { Activity, BarChart3, CalendarDays, CircleDot, Dumbbell, Flame, Lock, Pe
 import { Link } from 'react-router-dom';
 import { DailyAnalysisItem, DailyAnalysisStatus } from '../types';
 import { getDailyAnalysisDates } from '../utils/dailyDates';
+import { formatDailyPublishedAt, getKickoffTime } from '../utils/dailyPublication';
 import { dailyAnalysesService, isQuickResultPredictionSupported } from '../services/dailyAnalysesService';
 import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
@@ -21,6 +22,14 @@ const riskStyle = {
   MEDIUM: 'border-gold-500/25 bg-gold-500/10 text-gold-300',
   HIGH: 'border-orange-500/25 bg-orange-500/10 text-orange-300',
 };
+
+const dailyStatusStyle = (status?: DailyAnalysisStatus) => {
+  if (status === 'WON') return 'border-green-500/35 bg-green-500/12 text-green-300';
+  return 'border-orange-500/25 bg-orange-500/10 text-orange-300';
+};
+
+const dailyStatusLabel = (status?: DailyAnalysisStatus) =>
+  status === 'WON' ? 'PROŠAO' : 'AKTIVAN';
 
 const sportLabel = (sport?: string) => sport === 'basketball' ? 'KOŠARKA' : 'FUDBAL';
 
@@ -40,27 +49,32 @@ const TeamLogo = ({ src, name }: { src?: string; name: string }) => (
   </div>
 );
 
-const FormLine = ({ label, value }: { label: string; value?: number | null }) => (
+const FormLine = ({ label, value }: { label: string; value: number }) => (
   <div>
     <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-neutral-500">
       <span>{label}</span>
-      <span>{value === null || value === undefined ? 'Nedovoljno' : `${value}%`}</span>
+      <span>{value}%</span>
     </div>
     <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
       <div
-        className={`h-full rounded-full ${value === null || value === undefined ? 'bg-neutral-700' : 'bg-gradient-to-r from-orange-500 to-gold-400'}`}
-        style={{ width: value === null || value === undefined ? '30%' : `${value}%` }}
+        className="h-full rounded-full bg-gradient-to-r from-orange-500 to-gold-400"
+        style={{ width: `${value}%` }}
       />
     </div>
   </div>
 );
 
-const Metric = ({ label, value }: { label: string; value?: string | number }) => (
+const Metric = ({ label, value }: { label: string; value: string | number }) => (
   <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2">
     <div className="text-[8px] font-black uppercase tracking-widest text-neutral-500">{label}</div>
-    <div className="mt-1 text-xs font-black text-neutral-200">{value || 'Nedovoljno podataka'}</div>
+    <div className="mt-1 text-xs font-black text-neutral-200">{value}</div>
   </div>
 );
+
+const hasDisplayMetric = (value?: string) => {
+  const normalized = value?.trim().toLocaleLowerCase('sr-Latn-RS');
+  return Boolean(normalized && !normalized.includes('nedovoljno podataka'));
+};
 
 const AccessWall = () => (
   <div className="relative overflow-hidden rounded-[2rem] border border-gold-500/20 bg-black/45 px-5 py-12 text-center shadow-[0_18px_50px_rgba(0,0,0,0.38)] backdrop-blur-sm sm:px-8 sm:py-16">
@@ -106,7 +120,7 @@ const LockedPanel = () => (
   </button>
 );
 
-const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGeneratingAi, onResultSaved }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void; onGenerateAi: (analysis: DailyAnalysisItem) => Promise<void>; isGeneratingAi: boolean; onResultSaved: () => Promise<void> }) => {
+const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, generatingAiType, onResultSaved }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void; onGenerateAi: (analysis: DailyAnalysisItem, analysisType: 'FREE' | 'VIP') => Promise<void>; generatingAiType?: 'FREE' | 'VIP'; onResultSaved: () => Promise<void> }) => {
   const access = item.type || item.access;
   const isVipLocked = item.locked === true || (access === 'VIP' && !canAccessVip);
   const hasOdds = Number.isFinite(Number(item.odds)) && Number(item.odds) > 1;
@@ -119,21 +133,33 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
   const [awayScore, setAwayScore] = useState<number | ''>(item.awayScore ?? '');
   const [manualStatus, setManualStatus] = useState<DailyAnalysisStatus>(item.status || 'ACTIVE');
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshingResult, setIsRefreshingResult] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [apiResultMessage, setApiResultMessage] = useState<string | null>(null);
   const supportedPrediction = isQuickResultPredictionSupported(item.prediction || '');
   const showManualStatus = !supportedPrediction && homeScore !== '' && awayScore !== '';
-  const analysisText = item.vipAnalysis || item.analysis || item.reasoning;
+  const hasHomeForm = Number(item.homeFormPercent) > 0;
+  const hasAwayForm = Number(item.awayFormPercent) > 0;
+  const hasFormStats = hasHomeForm || hasAwayForm;
+  const hasAverageTotal = hasDisplayMetric(item.averageTotal);
+  const hasH2hNote = hasDisplayMetric(item.h2hNote);
+  const hasExtraStats = hasAverageTotal || hasH2hNote;
+  const analysisText = access === 'VIP'
+    ? item.vipAnalysis || item.analysis || item.reasoning
+    : item.freeAnalysis || item.analysis || item.reasoning;
 
   useEffect(() => {
     setHomeScore(item.homeScore ?? '');
     setAwayScore(item.awayScore ?? '');
     setManualStatus(item.status || 'ACTIVE');
     setErrorMessage(null);
+    setApiResultMessage(null);
   }, [item.id, item.homeScore, item.awayScore, item.status]);
 
   const handleSaveResult = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setErrorMessage(null);
+    setApiResultMessage(null);
 
     if (homeScore === '' || awayScore === '') {
       setErrorMessage('Unesite rezultat za oba tima.');
@@ -164,6 +190,22 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
     }
   };
 
+  const handleRefreshApiResult = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setErrorMessage(null);
+    setIsRefreshingResult(true);
+    try {
+      const outcome = await dailyAnalysesService.refreshResultFromApi(item);
+      setApiResultMessage(outcome.message);
+      if (outcome.updated) await onResultSaved();
+    } catch (error) {
+      console.error('Failed to refresh daily analysis result:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'Povlačenje rezultata nije uspelo.');
+    } finally {
+      setIsRefreshingResult(false);
+    }
+  };
+
   return (
     <motion.article
       layout
@@ -171,7 +213,9 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 10 }}
       className={`group relative overflow-hidden rounded-[1.45rem] border bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(4,4,4,0.98))] p-3.5 shadow-[0_14px_45px_rgba(0,0,0,0.34)] transition-all hover:-translate-y-0.5 md:p-4 ${
-        isElite
+        item.status === 'WON'
+          ? 'border-green-500/40 shadow-[0_0_38px_rgba(34,197,94,0.16)]'
+          : isElite
           ? 'border-gold-500/35 shadow-[0_0_44px_rgba(245,124,0,0.14)]'
           : 'border-white/10 hover:border-gold-500/30 hover:shadow-[0_0_32px_rgba(245,124,0,0.1)]'
       }`}
@@ -194,21 +238,36 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
           }`}>
             {access}
           </span>
+          <span className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${dailyStatusStyle(item.status)}`}>
+            {dailyStatusLabel(item.status)}
+          </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-neutral-500">
-          <CalendarDays size={12} /> {formatDate(item.date)} · {item.time || '--:--'}
+        <div className="flex flex-wrap items-center justify-end gap-2 text-[9px] font-black uppercase tracking-widest text-neutral-500">
+          <span className="inline-flex items-center gap-1.5"><CalendarDays size={12} /> Meč: {formatDate(item.date)} · {getKickoffTime(item) || '--:--'}</span>
+          <span className="text-gold-400">Objavljeno: {formatDailyPublishedAt(item)}</span>
           {isAdmin && (
             <>
               <button
                 type="button"
-                disabled={isGeneratingAi}
+                disabled={Boolean(generatingAiType)}
                 onClick={(event) => {
                   event.stopPropagation();
-                  void onGenerateAi(item);
+                  void onGenerateAi(item, 'FREE');
                 }}
-                className="ml-2 inline-flex items-center gap-1 rounded-lg border border-gold-500/25 bg-gold-500/10 px-2 py-1 text-gold-300 hover:bg-gold-500/20 disabled:cursor-wait disabled:opacity-50"
+                className="ml-2 inline-flex items-center gap-1 rounded-lg border border-green-500/25 bg-green-500/10 px-2 py-1 text-green-300 hover:bg-green-500/20 disabled:cursor-wait disabled:opacity-50"
               >
-                <Sparkles size={11} /> {isGeneratingAi ? 'Generišem...' : 'Generiši AI analizu'}
+                <Sparkles size={11} /> {generatingAiType === 'FREE' ? 'Generišem...' : item.freeAnalysis ? 'Regeneriši FREE' : 'Generiši FREE'}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(generatingAiType)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onGenerateAi(item, 'VIP');
+                }}
+                className="inline-flex items-center gap-1 rounded-lg border border-gold-500/25 bg-gold-500/10 px-2 py-1 text-gold-300 hover:bg-gold-500/20 disabled:cursor-wait disabled:opacity-50"
+              >
+                <Sparkles size={11} /> {generatingAiType === 'VIP' ? 'Generišem...' : item.vipAnalysis ? 'Regeneriši VIP' : 'Generiši VIP'}
               </button>
               <button
                 type="button"
@@ -237,18 +296,18 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
         </div>
       </div>
 
-      {!isVipLocked && <div className="relative mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_120px]">
-        <FormLine label="Forma domaćina" value={item.homeFormPercent} />
-        <FormLine label="Forma gosta" value={item.awayFormPercent} />
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2">
+      {!isVipLocked && (hasFormStats || confidence > 0) && <div className="relative mt-3 grid gap-2 sm:grid-cols-3">
+        {hasHomeForm && <FormLine label="Forma domaćina" value={Number(item.homeFormPercent)} />}
+        {hasAwayForm && <FormLine label="Forma gosta" value={Number(item.awayFormPercent)} />}
+        {confidence > 0 && <div className="rounded-2xl border border-white/10 bg-white/[0.035] px-3 py-2">
           <div className="mb-1 flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-neutral-500">
             <span>Confidence</span>
-            <span>{confidence ? `${confidence}%` : 'N/A'}</span>
+            <span>{confidence}%</span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gradient-to-r from-gold-500 to-orange-500" style={{ width: `${confidence || 35}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-gold-500 to-orange-500" style={{ width: `${confidence}%` }} />
           </div>
-        </div>
+        </div>}
       </div>}
 
       {!isVipLocked && <div className="relative mt-3 flex flex-wrap gap-2">
@@ -281,7 +340,7 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
 
         {(isVipLocked || analysisText) && <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
           <div className="mb-2 flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-neutral-500">
-            <BarChart3 size={12} /> VIP analiza
+            <BarChart3 size={12} /> {access} analiza
           </div>
           {isVipLocked ? (
             <LockedPanel />
@@ -334,6 +393,16 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
             )}
           </div>
 
+          <button
+            type="button"
+            disabled={isRefreshingResult || item.resultManualOverride}
+            onClick={handleRefreshApiResult}
+            className="mb-3 inline-flex min-h-[42px] items-center justify-center rounded-2xl border border-blue-500/25 bg-blue-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-300 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-45"
+            title={item.resultManualOverride ? 'Ručno postavljen rezultat je zaštićen od API osvežavanja.' : undefined}
+          >
+            {isRefreshingResult ? 'Povlačim rezultat...' : item.resultManualOverride ? 'Ručni rezultat zaštićen' : 'Povuci rezultat iz API-ja'}
+          </button>
+
           {showManualStatus && (
             <label className="mb-3 flex flex-col gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">
               <span>Odaberite status</span>
@@ -345,7 +414,7 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
                 <option value="WON">PROŠAO</option>
                 <option value="LOST">PAO</option>
                 <option value="POSTPONED">ODLOŽENO</option>
-                <option value="REFUND">POVRAT</option>
+                <option value="REFUND">VOID / PUSH (POVRAT)</option>
               </select>
             </label>
           )}
@@ -355,12 +424,17 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, isGen
               {errorMessage}
             </div>
           )}
+          {apiResultMessage && (
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-[11px] font-black uppercase tracking-widest text-blue-200">
+              {apiResultMessage}
+            </div>
+          )}
         </div>
       )}
 
-      {!isVipLocked && <div className="relative mt-3 grid gap-2 sm:grid-cols-2">
-        <Metric label={item.sport === 'basketball' ? 'Prosek poena' : 'Prosek golova'} value={item.averageTotal} />
-        <Metric label="H2H" value={item.h2hNote} />
+      {!isVipLocked && hasExtraStats && <div className="relative mt-3 grid gap-2 sm:grid-cols-2">
+        {hasAverageTotal && <Metric label={item.sport === 'basketball' ? 'Prosek poena' : 'Prosek golova'} value={item.averageTotal!} />}
+        {hasH2hNote && <Metric label="H2H" value={item.h2hNote!} />}
       </div>}
     </motion.article>
   );
@@ -424,18 +498,27 @@ export default function DailyTips() {
     await refreshAnalyses();
   };
 
-  const generateAiAnalysis = async (analysis: DailyAnalysisItem) => {
-    setGeneratingAiId(analysis.id);
+  const generateAiAnalysis = async (analysis: DailyAnalysisItem, analysisType: 'FREE' | 'VIP') => {
+    setGeneratingAiId(`${analysis.id}:${analysisType}`);
     setAdminAiMessage('');
     try {
-      const source = await dailyAnalysesService.generateAiAnalysis(analysis);
-      setAdminAiMessage(source === 'gemini'
-        ? `AI analiza je generisana za ${analysis.homeTeam} - ${analysis.awayTeam}.`
-        : `Gemini trenutno nije odgovorio; sačuvana je fallback analiza za ${analysis.homeTeam} - ${analysis.awayTeam}.`);
+      const result = await dailyAnalysesService.generateAiAnalysis(analysis, analysisType);
+      const generationDetails = [
+        result.model ? `Analiza generisana modelom: ${result.model}.` : '',
+        result.statsProvider ? `Sports provider: ${result.statsProvider}.` : 'Sports provider: osnovni podaci.',
+        `Enriched stats: ${result.enrichedStatsFound ? 'da' : 'ne'}.`,
+        result.enrichmentCacheHit ? 'Sports cache: korišćen.' : '',
+        result.aiCacheHit ? 'AI cache: korišćen.' : '',
+      ].filter(Boolean).join(' ');
+      setAdminAiMessage(`${result.insufficientData
+        ? `${analysisType}: Nema dovoljno relevantnih podataka za kvalitetnu AI analizu.`
+        : result.source === 'gemini'
+        ? `${analysisType} AI analiza je generisana za ${analysis.homeTeam} - ${analysis.awayTeam}.`
+        : `Gemini trenutno nije odgovorio; sačuvana je ${analysisType} fallback analiza za ${analysis.homeTeam} - ${analysis.awayTeam}.`} ${result.enrichmentMessage || ''} ${generationDetails}`.trim());
       await refreshAnalyses();
     } catch (error) {
       console.error('Daily tips AI generation failed:', error);
-      setAdminAiMessage('Generisanje AI analize nije uspelo.');
+      setAdminAiMessage(error instanceof Error ? error.message : 'Generisanje AI analize nije uspelo.');
     } finally {
       setGeneratingAiId('');
     }
@@ -496,7 +579,7 @@ export default function DailyTips() {
           <div className="grid gap-4 lg:grid-cols-2">
             <AnimatePresence mode="popLayout">
               {activeItems.map((item) => (
-                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} isAdmin={isAdmin} onEdit={setEditingAnalysis} onGenerateAi={generateAiAnalysis} isGeneratingAi={generatingAiId === item.id} onResultSaved={refreshAnalyses} />
+                <AnalysisCard key={item.id} item={item} canAccessVip={canAccessVip} isAdmin={isAdmin} onEdit={setEditingAnalysis} onGenerateAi={generateAiAnalysis} generatingAiType={generatingAiId.startsWith(`${item.id}:`) ? generatingAiId.split(':').pop() as 'FREE' | 'VIP' : undefined} onResultSaved={refreshAnalyses} />
               ))}
             </AnimatePresence>
           </div>

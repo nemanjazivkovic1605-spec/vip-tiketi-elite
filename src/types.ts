@@ -104,6 +104,7 @@ export interface Tip {
   publishedTime?: string;
   publishedAt?: string;
   ticketCode?: string;
+  createdAt?: string;
   locked?: boolean;
   date: string;
   matches: Match[];
@@ -235,7 +236,13 @@ export interface DailyAnalysisItem {
   units?: number;
   fixtureId?: number;
   date: string;
+  matchTime?: string;
+  kickoffTime?: string;
   time: string;
+  publishedDate?: string;
+  publishedTime?: string;
+  publishTime?: string;
+  publishedAt?: string;
   league: string;
   leagueId?: number;
   homeTeam: string;
@@ -243,6 +250,10 @@ export interface DailyAnalysisItem {
   homeScore?: number;
   awayScore?: number;
   result?: string;
+  fixtureStatus?: string;
+  elapsed?: number | null;
+  isFinished?: boolean;
+  resultManualOverride?: boolean;
   homeLogo?: string;
   awayLogo?: string;
   homeFormPercent?: number | null;
@@ -252,6 +263,7 @@ export interface DailyAnalysisItem {
   odds: number;
   reasoning: string;
   analysis?: string;
+  freeAnalysis?: string;
   vipAnalysis?: string;
   aiSource?: 'gemini' | 'fallback';
   confidence?: number;

@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { AlertCircle, Calendar, CheckCircle2, Clock, Search, XCircle } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
 import { Match, TicketStatus, Tip } from '../types';
-import { isPublicFinishedTicket } from '../utils/tickets';
+import { formatTicketPublishedAt, isPublicFinishedTicket } from '../utils/tickets';
 
 type PublishedResult = {
   tip: Tip;
@@ -174,8 +174,11 @@ export default function Results() {
                   <div>
                     <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.league}</div>
                     <div className="flex items-center gap-3 text-xs text-neutral-500 font-bold">
-                      <Calendar size={12} /> {formatDate(tip.date)}
+                      <Calendar size={12} /> Meč: {formatDate(tip.date)}
                       <Clock size={12} /> {match.time}
+                    </div>
+                    <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-gold-400">
+                      Objavljeno: {formatTicketPublishedAt(tip)}
                     </div>
                   </div>
 

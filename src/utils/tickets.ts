@@ -31,13 +31,6 @@ export const normalizePublishedDate = (value?: string) => {
   return new Date().toISOString().split('T')[0];
 };
 
-const stableMinute = (seed: string) => {
-  const hash = seed.split('').reduce((acc, char, index) => acc + char.charCodeAt(0) * (index + 1), 0);
-  return hash % 60;
-};
-
-export const generateStablePublishedTime = (seed: string) => `12:${pad2(stableMinute(seed || 'ticket'))}`;
-
 export const normalizePublishedTime = (value?: string) => {
   const raw = (value || '').trim();
   const match = raw.match(/^(\d{1,2}):(\d{2})/);
@@ -60,21 +53,34 @@ export const generateTicketCode = (isVip: boolean, publishedDate: string, publis
   return `${isVip ? 'V' : 'F'}${day}${month}${year}${hour}${minute}`;
 };
 
-export const getTicketPublicationMeta = (tip: Pick<Tip, 'date' | 'isVip' | 'publishedDate' | 'publishedTime'> & Partial<Pick<Tip, 'id'>>) => {
-  const publishedDate = normalizePublishedDate(tip.publishedDate || tip.date);
-  const stableSeed = `${tip.id || 'ticket'}-${publishedDate}-${tip.isVip ? 'vip' : 'free'}`;
-  const publishedTime = normalizePublishedTime(tip.publishedTime || generateStablePublishedTime(stableSeed));
+export const getTicketPublicationMeta = (
+  tip: Pick<Tip, 'date' | 'isVip' | 'publishedDate' | 'publishedTime'> & Partial<Pick<Tip, 'id' | 'publishedAt' | 'createdAt'>>,
+) => {
+  const fallbackCreatedAt = !tip.publishedDate && !tip.publishedTime && !tip.publishedAt
+    ? tip.createdAt
+    : undefined;
+  const storedTimestamp = tip.publishedAt || fallbackCreatedAt;
+  const parsedTimestamp = storedTimestamp ? new Date(storedTimestamp) : undefined;
+  const hasTimestamp = parsedTimestamp && Number.isFinite(parsedTimestamp.getTime());
+  const publishedDate = normalizePublishedDate(
+    tip.publishedDate || (hasTimestamp ? formatLocalIsoDate(parsedTimestamp) : tip.date),
+  );
+  const publishedTime = normalizePublishedTime(
+    tip.publishedTime || (hasTimestamp ? formatLocalTime(parsedTimestamp) : '12:00'),
+  );
 
   return {
     publishedDate,
     publishedTime,
-    publishedAt: buildPublishedAt(publishedDate, publishedTime),
+    publishedAt: storedTimestamp && hasTimestamp && !tip.publishedDate && !tip.publishedTime
+      ? storedTimestamp
+      : buildPublishedAt(publishedDate, publishedTime),
     ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime),
   };
 };
 
-export const formatTicketPublishedAt = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date'>) => {
-  const value = tip.publishedAt || buildPublishedAt(tip.publishedDate || tip.date, tip.publishedTime || '12:00');
+export const formatTicketPublishedAt = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date' | 'createdAt'>) => {
+  const value = tip.publishedAt || tip.createdAt || buildPublishedAt(tip.publishedDate || tip.date, tip.publishedTime || '12:00');
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return tip.date;
   return date.toLocaleString('sr-Latn-RS', {

@@ -1,4 +1,5 @@
 import { DailyAnalysisAccess, DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisSport } from '../types';
+import { createDailyPublicationMeta } from '../utils/dailyPublication';
 
 const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
 const BASKETBALL_API_BASE_URL = 'https://v1.basketball.api-sports.io';
@@ -279,6 +280,9 @@ const mapFootballFixture = async (fixture: ApiFixture, sortOrder: number): Promi
   const provisionalAccess: DailyAnalysisAccess = sortOrder < 2 ? 'FREE' : 'VIP';
   const pick = generateFootballPick(homeFormPercent, awayFormPercent, seed, provisionalAccess);
   const date = new Date(fixture.fixture.date);
+  const kickoffTime = Number.isFinite(date.getTime())
+    ? date.toLocaleTimeString('sr-Latn-RS', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE })
+    : '';
 
   return {
     id: `api-football-${fixture.fixture.id}`,
@@ -290,9 +294,10 @@ const mapFootballFixture = async (fixture: ApiFixture, sortOrder: number): Promi
     units: provisionalAccess === 'VIP' ? 5 : 3,
     fixtureId: fixture.fixture.id,
     date: fixture.fixture.date.slice(0, 10),
-    time: Number.isFinite(date.getTime())
-      ? date.toLocaleTimeString('sr-Latn-RS', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE })
-      : '',
+    time: kickoffTime,
+    matchTime: kickoffTime,
+    kickoffTime,
+    ...createDailyPublicationMeta(),
     league: fixture.league.country ? `${fixture.league.name} · ${fixture.league.country}` : fixture.league.name,
     leagueId: fixture.league.id,
     homeTeam: fixture.teams.home.name,
@@ -323,6 +328,9 @@ const mapBasketballGame = (game: BasketballGame, sortOrder: number): RankedAnaly
   const provisionalAccess: DailyAnalysisAccess = sortOrder < 2 ? 'FREE' : 'VIP';
   const pick = generateBasketballPick(seed, game.league.name, provisionalAccess, game.league.country);
   const gameDate = new Date(game.date);
+  const kickoffTime = game.time || (Number.isFinite(gameDate.getTime())
+    ? gameDate.toLocaleTimeString('sr-Latn-RS', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE })
+    : '');
 
   return {
     id: `api-basketball-${game.id}`,
@@ -334,9 +342,10 @@ const mapBasketballGame = (game: BasketballGame, sortOrder: number): RankedAnaly
     units: provisionalAccess === 'VIP' ? 5 : 3,
     fixtureId: game.id,
     date: game.date.slice(0, 10),
-    time: game.time || (Number.isFinite(gameDate.getTime())
-      ? gameDate.toLocaleTimeString('sr-Latn-RS', { hour: '2-digit', minute: '2-digit', timeZone: TIMEZONE })
-      : ''),
+    time: kickoffTime,
+    matchTime: kickoffTime,
+    kickoffTime,
+    ...createDailyPublicationMeta(),
     league: game.league.country ? `${game.league.name} · ${game.league.country}` : game.league.name,
     leagueId: game.league.id,
     homeTeam: game.teams.home.name,

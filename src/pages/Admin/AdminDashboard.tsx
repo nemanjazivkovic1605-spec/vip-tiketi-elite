@@ -16,8 +16,10 @@ import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSet
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import AdminOverview from '../../components/admin/AdminOverview';
-import { calculateTotalOdds, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
+import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 import { evaluateImportedMatchPrediction } from '../../utils/predictionResults';
+import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyPublishedAt, getDailyPublicationInputValue, getKickoffTime } from '../../utils/dailyPublication';
+import { isFinishedDailyAnalysisStatus, isVisibleInDailyFeed } from '../../utils/dailyLifecycle';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
 const dailyPredictionOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5', 'Over poeni', 'Handicap favorit'];
@@ -33,6 +35,7 @@ type TicketAccessType = 'FREE' | 'VIP';
 type BuilderTicketType = 'VIP Dubl' | 'VIP Combo';
 type UserStatusFilter = 'all' | 'pending' | 'approved' | 'expired' | 'blocked' | 'free' | 'silver' | 'gold' | 'elite';
 type TipPublicationFilter = 'all' | 'draft' | 'published';
+type DailyLifecycleFilter = 'active' | 'finished';
 
 type HistoricalPick = {
   match: ImportedMatch;
@@ -70,6 +73,8 @@ export default function AdminDashboard() {
   const [dailyPullMessage, setDailyPullMessage] = useState('');
   const [dailyPullLoadingDate, setDailyPullLoadingDate] = useState('');
   const [dailyAiLoadingId, setDailyAiLoadingId] = useState('');
+  const [dailyResultLoadingId, setDailyResultLoadingId] = useState('');
+  const [dailyLifecycleFilter, setDailyLifecycleFilter] = useState<DailyLifecycleFilter>('active');
   const [dailyAnalysisForm, setDailyAnalysisForm] = useState<DailyAnalysisItem>({
     id: '',
     source: 'manual',
@@ -80,6 +85,9 @@ export default function AdminDashboard() {
     units: 3,
     date: new Date().toISOString().split('T')[0],
     time: '20:00',
+    matchTime: '20:00',
+    kickoffTime: '20:00',
+    ...createDailyPublicationMeta(),
     league: '',
     homeTeam: '',
     awayTeam: '',
@@ -91,6 +99,8 @@ export default function AdminDashboard() {
     prediction: 'Over 1.5',
     odds: 1.5,
     reasoning: '',
+    freeAnalysis: '',
+    vipAnalysis: '',
     confidence: 70,
     riskLevel: 'MEDIUM',
     averageTotal: '',
@@ -123,6 +133,7 @@ export default function AdminDashboard() {
   const [builderTicketType, setBuilderTicketType] = useState<BuilderTicketType>('VIP Dubl');
   const [ticketStatus, setTicketStatus] = useState<TicketStatus>(TicketStatus.PENDING);
   const [ticketUnits, setTicketUnits] = useState('5');
+  const [ticketPublishedTime, setTicketPublishedTime] = useState(() => formatLocalTime(new Date()));
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => mockSettingsService.getSettings());
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -145,6 +156,12 @@ export default function AdminDashboard() {
       return matchesTeam && matchesLeague && matchesDate;
     });
   }, [availableMatches, matchDateFilter, matchLeagueFilter, matchTeamFilter]);
+
+  const filteredDailyAnalyses = useMemo(() => dailyAnalyses.filter((analysis) => (
+    dailyLifecycleFilter === 'active'
+      ? analysis.enabled && !analysis.hidden && isVisibleInDailyFeed(analysis)
+      : isFinishedDailyAnalysisStatus(analysis.status)
+  )), [dailyAnalyses, dailyLifecycleFilter]);
 
   const ticketTotalOdds = useMemo(() => {
     const matches = ticketCart.map((item) => ({
@@ -385,6 +402,7 @@ export default function AdminDashboard() {
     setBuilderTicketType('VIP Dubl');
     setTicketStatus(TicketStatus.PENDING);
     setTicketUnits(String(getDefaultUnitsStake(true, 0)));
+    setTicketPublishedTime(formatLocalTime(new Date()));
   };
 
   const handlePublishTicket = async () => {
@@ -431,8 +449,10 @@ export default function AdminDashboard() {
       id: `ticket-${Date.now()}`,
       source: 'admin',
       publicationStatus: TipPublicationStatus.PUBLISHED,
-      publishedAt: createdAt,
       date: sortedDates[0] || createdAt.split('T')[0],
+      publishedDate: sortedDates[0] || createdAt.split('T')[0],
+      publishedTime: ticketPublishedTime,
+      publishedAt: buildPublishedAt(sortedDates[0] || createdAt.split('T')[0], ticketPublishedTime),
       isVip: true,
       status: ticketStatus,
       totalOdds: ticketTotalOdds,
@@ -593,6 +613,9 @@ export default function AdminDashboard() {
       units: 3,
       date: new Date().toISOString().split('T')[0],
       time: '20:00',
+      matchTime: '20:00',
+      kickoffTime: '20:00',
+      ...createDailyPublicationMeta(),
       league: '',
       homeTeam: '',
       awayTeam: '',
@@ -604,6 +627,8 @@ export default function AdminDashboard() {
       prediction: 'Over 1.5',
       odds: 1.5,
       reasoning: '',
+      freeAnalysis: '',
+      vipAnalysis: '',
       confidence: 70,
       riskLevel: 'MEDIUM',
       averageTotal: '',
@@ -663,9 +688,8 @@ export default function AdminDashboard() {
     setDailyPullMessage('');
     setDailyPullLoadingDate(date);
     try {
-      const result = await dailyAnalysesService.pullFromApiForDate(date, { generateAi: true });
-      const aiSummary = ` AI analize: ${result.aiGenerated} Gemini${result.fallbackGenerated ? `, ${result.fallbackGenerated} fallback` : ''}.`;
-      setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}.${aiSummary}`);
+      const result = await dailyAnalysesService.pullFromApiForDate(date);
+      setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}. Analize se generišu samo ručnim klikom.`);
       await refreshData();
     } catch (error) {
       console.error('Daily tips API pull failed:', error);
@@ -675,18 +699,27 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleGenerateDailyAiAnalysis = async (analysis: DailyAnalysisItem) => {
-    setDailyAiLoadingId(analysis.id);
+  const handleGenerateDailyAiAnalysis = async (analysis: DailyAnalysisItem, analysisType: 'FREE' | 'VIP') => {
+    setDailyAiLoadingId(`${analysis.id}:${analysisType}`);
     setDailyPullMessage('');
     try {
-      const source = await dailyAnalysesService.generateAiAnalysis(analysis);
-      setDailyPullMessage(source === 'gemini'
-        ? `AI analiza je generisana za ${analysis.homeTeam} - ${analysis.awayTeam}.`
-        : `Gemini trenutno nije odgovorio; sačuvana je fallback analiza za ${analysis.homeTeam} - ${analysis.awayTeam}.`);
+      const result = await dailyAnalysesService.generateAiAnalysis(analysis, analysisType);
+      const generationDetails = [
+        result.model ? `Analiza generisana modelom: ${result.model}.` : '',
+        result.statsProvider ? `Sports provider: ${result.statsProvider}.` : 'Sports provider: osnovni podaci.',
+        `Enriched stats: ${result.enrichedStatsFound ? 'da' : 'ne'}.`,
+        result.enrichmentCacheHit ? 'Sports cache: korišćen.' : '',
+        result.aiCacheHit ? 'AI cache: korišćen.' : '',
+      ].filter(Boolean).join(' ');
+      setDailyPullMessage(`${result.insufficientData
+        ? `${analysisType}: Nema dovoljno relevantnih podataka za kvalitetnu AI analizu.`
+        : result.source === 'gemini'
+        ? `${analysisType} AI analiza je generisana za ${analysis.homeTeam} - ${analysis.awayTeam}.`
+        : `Gemini trenutno nije odgovorio; sačuvana je ${analysisType} fallback analiza za ${analysis.homeTeam} - ${analysis.awayTeam}.`} ${result.enrichmentMessage || ''} ${generationDetails}`.trim());
       await refreshData();
     } catch (error) {
       console.error('AI daily analysis generation failed:', error);
-      setDailyPullMessage('Generisanje AI analize nije uspelo.');
+      setDailyPullMessage(error instanceof Error ? error.message : 'Generisanje AI analize nije uspelo.');
     } finally {
       setDailyAiLoadingId('');
     }
@@ -697,37 +730,27 @@ export default function AdminDashboard() {
     await refreshData();
   };
 
-  const handleDailyResult = async (analysis: DailyAnalysisItem, status: 'WON' | 'LOST') => {
+  const handleRefreshDailyResult = async (analysis: DailyAnalysisItem) => {
+    setDailyResultLoadingId(analysis.id);
+    setDailyPullMessage('');
+    try {
+      const outcome = await dailyAnalysesService.refreshResultFromApi(analysis);
+      setDailyPullMessage(outcome.message);
+      if (outcome.updated) await refreshData();
+    } catch (error) {
+      console.error('Daily result refresh failed:', error);
+      setDailyPullMessage(error instanceof Error ? error.message : 'Povlačenje rezultata nije uspelo.');
+    } finally {
+      setDailyResultLoadingId('');
+    }
+  };
+
+  const handleDailyResult = async (analysis: DailyAnalysisItem, status: 'WON' | 'LOST' | 'REFUND' | 'POSTPONED') => {
     await dailyAnalysesService.updateManualAnalysis(analysis.id, {
       status,
-      enabled: false,
-      hidden: true,
+      enabled: status === 'WON',
+      hidden: status !== 'WON',
       manualOverride: true,
-    });
-
-    await mockTipsService.addTip({
-      id: `daily-${analysis.id}`,
-      source: 'admin',
-      publicationStatus: TipPublicationStatus.PUBLISHED,
-      date: analysis.date,
-      matches: [{
-        id: `${analysis.id}-match`,
-        teams: `${analysis.homeTeam} - ${analysis.awayTeam}`,
-        homeTeam: analysis.homeTeam,
-        awayTeam: analysis.awayTeam,
-        league: analysis.league,
-        prediction: analysis.prediction,
-        odds: Number(analysis.odds) || 1,
-        time: analysis.time,
-        status: status === 'WON' ? TicketStatus.WON : TicketStatus.LOST,
-        analysis: analysis.reasoning,
-      }],
-      totalOdds: Number(analysis.odds) || 1,
-      ticketType: 'SINGL',
-      unitsStake: Number(analysis.units) || 3,
-      status: status === 'WON' ? TicketStatus.WON : TicketStatus.LOST,
-      analysis: analysis.reasoning || '',
-      isVip: analysis.access === 'VIP',
     });
 
     await refreshData();
@@ -1095,6 +1118,15 @@ export default function AdminDashboard() {
                 {Number(ticketUnits) || 0}u = {unitsToRsd(Number(ticketUnits) || 0).toLocaleString('sr-RS')} RSD
               </div>
             </label>
+            <label className="bg-white/5 border border-white/10 rounded-2xl px-5 py-3 col-span-2 sm:col-span-1">
+              <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Vreme objave tiketa</div>
+              <input
+                type="time"
+                value={ticketPublishedTime}
+                onChange={(event) => setTicketPublishedTime(event.target.value)}
+                className="w-full bg-transparent text-xl font-display font-black outline-none text-neutral-100"
+              />
+            </label>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -1230,6 +1262,16 @@ export default function AdminDashboard() {
             <div className="text-[9px] font-black uppercase tracking-widest text-neutral-500">
               {Number(ticketUnits) || 0}u = {unitsToRsd(Number(ticketUnits) || 0).toLocaleString('sr-RS')} RSD
             </div>
+          </label>
+
+          <label className="block rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+            <div className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Vreme objave tiketa</div>
+            <input
+              type="time"
+              value={ticketPublishedTime}
+              onChange={(event) => setTicketPublishedTime(event.target.value)}
+              className="w-full bg-transparent font-display text-xl font-black text-neutral-100 outline-none"
+            />
           </label>
 
           <label className="block">
@@ -2241,12 +2283,16 @@ export default function AdminDashboard() {
                       <h3 className="mb-5 text-xl font-bold">{dailyAnalysisForm.id ? 'Izmeni analizu' : 'Dodaj ručnu analizu'}</h3>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block">
-                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Datum</span>
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Datum utakmice</span>
                           <input type="date" value={dailyAnalysisForm.date} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, date: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
                         </label>
                         <label className="block">
-                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Vreme</span>
-                          <input type="time" value={dailyAnalysisForm.time} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, time: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Vreme početka utakmice</span>
+                          <input type="time" value={getKickoffTime(dailyAnalysisForm)} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, time: event.target.value, matchTime: event.target.value, kickoffTime: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="col-span-2 block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Vreme objave tiketa</span>
+                          <input type="datetime-local" value={getDailyPublicationInputValue(dailyAnalysisForm)} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, ...dailyPublicationMetaFromInput(event.target.value) })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
                         </label>
                         <label className="block">
                           <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Sport</span>
@@ -2261,6 +2307,8 @@ export default function AdminDashboard() {
                             <option value="ACTIVE">Aktivan</option>
                             <option value="WON">Prošao</option>
                             <option value="LOST">Pao</option>
+                            <option value="REFUND">VOID / PUSH</option>
+                            <option value="POSTPONED">Odloženo</option>
                             <option value="HIDDEN">Sakriven</option>
                           </select>
                         </label>
@@ -2349,8 +2397,12 @@ export default function AdminDashboard() {
                           <input value={dailyAnalysisForm.h2hNote || ''} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, h2hNote: event.target.value })} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
                         </label>
                         <label className="col-span-2 block">
-                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Obrazloženje</span>
-                          <textarea value={dailyAnalysisForm.reasoning} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, reasoning: event.target.value })} rows={4} className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none focus:border-gold-500/50" />
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">FREE analiza</span>
+                          <textarea value={dailyAnalysisForm.freeAnalysis || ''} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, freeAnalysis: event.target.value })} rows={7} className="min-h-40 w-full resize-y rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm leading-6 outline-none focus:border-gold-500/50" />
+                        </label>
+                        <label className="col-span-2 block">
+                          <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">VIP analiza</span>
+                          <textarea value={dailyAnalysisForm.vipAnalysis || ''} onChange={(event) => setDailyAnalysisForm({ ...dailyAnalysisForm, vipAnalysis: event.target.value })} rows={12} className="min-h-64 w-full resize-y rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm leading-6 outline-none focus:border-gold-500/50" />
                         </label>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3">
@@ -2374,7 +2426,31 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="space-y-4">
-                      {dailyAnalyses.map((analysis) => (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDailyLifecycleFilter('active')}
+                          className={`rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition ${
+                            dailyLifecycleFilter === 'active'
+                              ? 'border-gold-500 bg-gold-500 text-black'
+                              : 'border-white/10 bg-white/5 text-neutral-400 hover:border-gold-500/30'
+                          }`}
+                        >
+                          Aktivni
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDailyLifecycleFilter('finished')}
+                          className={`rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition ${
+                            dailyLifecycleFilter === 'finished'
+                              ? 'border-gold-500 bg-gold-500 text-black'
+                              : 'border-white/10 bg-white/5 text-neutral-400 hover:border-gold-500/30'
+                          }`}
+                        >
+                          Završeni
+                        </button>
+                      </div>
+                      {filteredDailyAnalyses.map((analysis) => (
                         <div key={analysis.id} className="glass rounded-[2rem] border-white/5 p-5">
                           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div>
@@ -2387,19 +2463,33 @@ export default function AdminDashboard() {
                                 </span>
                                 {analysis.manualOverride && <span className="rounded-full border border-orange-500/25 bg-orange-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-orange-300">Manual override</span>}
                               </div>
-                              <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{analysis.date} · {analysis.time} · {analysis.league}</div>
+                              <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                                Meč: {analysis.date} · {getKickoffTime(analysis)} · {analysis.league}
+                              </div>
+                              <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-gold-400">
+                                Objavljeno: {formatDailyPublishedAt(analysis)}
+                              </div>
                               <div className="mt-2 font-display text-xl font-black text-white">{analysis.homeTeam} - {analysis.awayTeam}</div>
                               <div className="mt-2 text-sm text-neutral-400">Tip: <span className="font-black text-gold-400">{analysis.prediction}</span> · Kvota {Number(analysis.odds) > 1 ? analysis.odds.toFixed(2) : 'uskoro'} · Confidence {analysis.confidence || '-'}%</div>
-                              {analysis.reasoning && <p className="mt-3 max-w-3xl whitespace-pre-wrap break-words text-xs leading-6 text-neutral-500">{analysis.reasoning}</p>}
+                              {analysis.freeAnalysis && <p className="mt-3 max-w-3xl whitespace-pre-wrap break-words text-xs leading-6 text-neutral-400"><span className="font-black text-green-300">FREE:</span> {analysis.freeAnalysis}</p>}
+                              {analysis.vipAnalysis && <p className="mt-3 max-w-3xl whitespace-pre-wrap break-words text-xs leading-6 text-neutral-400"><span className="font-black text-gold-300">VIP:</span> {analysis.vipAnalysis}</p>}
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <button
-                                disabled={dailyAiLoadingId === analysis.id}
-                                onClick={() => handleGenerateDailyAiAnalysis(analysis)}
+                                disabled={dailyAiLoadingId === `${analysis.id}:FREE`}
+                                onClick={() => handleGenerateDailyAiAnalysis(analysis, 'FREE')}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-green-300 hover:bg-green-500/20 disabled:opacity-50"
+                              >
+                                <Sparkles size={13} />
+                                {dailyAiLoadingId === `${analysis.id}:FREE` ? 'Generišem...' : analysis.freeAnalysis ? 'Regeneriši FREE analizu' : 'Generiši FREE analizu'}
+                              </button>
+                              <button
+                                disabled={dailyAiLoadingId === `${analysis.id}:VIP`}
+                                onClick={() => handleGenerateDailyAiAnalysis(analysis, 'VIP')}
                                 className="inline-flex items-center gap-1.5 rounded-xl border border-gold-500/25 bg-gold-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gold-300 hover:bg-gold-500/20 disabled:opacity-50"
                               >
                                 <Sparkles size={13} />
-                                {dailyAiLoadingId === analysis.id ? 'Generišem...' : 'Generiši AI analizu'}
+                                {dailyAiLoadingId === `${analysis.id}:VIP` ? 'Generišem...' : analysis.vipAnalysis ? 'Regeneriši VIP analizu' : 'Generiši VIP analizu'}
                               </button>
                               <button onClick={() => handleEditDailyAnalysis(analysis)} className="rounded-xl bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:text-gold-400">Izmeni</button>
                               <button onClick={() => handleDailyQuickPatch(analysis, { hidden: !analysis.hidden, status: !analysis.hidden ? 'HIDDEN' : 'ACTIVE' })} className="rounded-xl bg-orange-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 hover:bg-orange-500/20">
@@ -2407,16 +2497,25 @@ export default function AdminDashboard() {
                               </button>
                               <button onClick={() => handleDailyQuickPatch(analysis, { access: 'FREE' })} className="rounded-xl bg-green-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-green-300 hover:bg-green-500/20">FREE</button>
                               <button onClick={() => handleDailyQuickPatch(analysis, { access: 'VIP' })} className="rounded-xl bg-gold-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gold-300 hover:bg-gold-500/20">VIP</button>
+                              <button
+                                disabled={dailyResultLoadingId === analysis.id || analysis.resultManualOverride}
+                                onClick={() => handleRefreshDailyResult(analysis)}
+                                className="rounded-xl bg-blue-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-300 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-45"
+                                title={analysis.resultManualOverride ? 'Ručno postavljen rezultat je zaštićen od API osvežavanja.' : undefined}
+                              >
+                                {dailyResultLoadingId === analysis.id ? 'Povlačim...' : analysis.resultManualOverride ? 'Ručni rezultat' : 'Povuci rezultat'}
+                              </button>
                               <button onClick={() => handleDailyResult(analysis, 'WON')} className="rounded-xl bg-green-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-green-300 hover:bg-green-500/20">PROŠAO</button>
                               <button onClick={() => handleDailyResult(analysis, 'LOST')} className="rounded-xl bg-red-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 hover:bg-red-500/20">PAO</button>
+                              <button onClick={() => handleDailyResult(analysis, 'REFUND')} className="rounded-xl bg-cyan-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-300 hover:bg-cyan-500/20">VOID / PUSH</button>
                               <button onClick={() => handleDeleteDailyAnalysis(analysis.id)} className="rounded-xl bg-red-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 hover:bg-red-500/20">Obriši</button>
                             </div>
                           </div>
                         </div>
                       ))}
-                      {dailyAnalyses.length === 0 && (
+                      {filteredDailyAnalyses.length === 0 && (
                         <div className="glass rounded-[2rem] border-white/5 p-10 text-center text-neutral-500 font-bold">
-                          Još nema ručno dodatih dnevnih analiza.
+                          {dailyLifecycleFilter === 'active' ? 'Nema aktivnih dnevnih tipova.' : 'Nema završenih dnevnih tipova.'}
                         </div>
                       )}
                     </div>

@@ -1,29 +1,54 @@
 import { auth } from '../lib/firebase';
 import type { DailyAnalysisItem } from '../types';
 
-type AiAnalysisResult = {
+export type AiAnalysisResult = {
   analysis: string;
   source: 'gemini' | 'fallback';
+  model?: string;
+  enrichedStatsFound?: boolean;
+  statsProvider?: string;
+  enrichmentMessage?: string;
+  enrichmentCacheHit?: boolean;
+  aiCacheHit?: boolean;
+  insufficientData?: boolean;
+};
+
+export type AnalysisGenerationType = 'FREE' | 'VIP';
+export type AnalysisGenerationOptions = {
+  manualRequest?: boolean;
+  forceRegenerate?: boolean;
 };
 
 const cleanAnalysis = (value: string) =>
   value
     .replace(/\*\*/g, '')
     .replace(/^\s*[-*]\s+/gm, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-const fallbackAnalysis = (item: DailyAnalysisItem) => {
-  const oddsText = Number(item.odds) > 1 ? ` po kvoti ${Number(item.odds).toFixed(2)}` : '';
-  return `${item.homeTeam} i ${item.awayTeam} ulaze u duel u okviru ${item.league}, gde predlog ${item.prediction}${oddsText} predstavlja razuman izbor u odnosu na profil ovog meca. Kod ovog marketa presudni su ritam igre, sposobnost ekipa da nametnu svoj plan i situacije u kojima izabrani tip dobija konkretnu vrednost. ${item.homeTeam} i ${item.awayTeam} zato zahtevaju disciplinovanu procenu, bez oslanjanja na reputaciju ili kratkorocni utisak. Predlog ${item.prediction} ima smisla u okviru dostupnih informacija, uz odgovorno upravljanje ulogom i svest da nijedan sportski ishod nije garantovan.`;
+const validateGenerationInput = (item: DailyAnalysisItem) => {
+  const match = `${item.homeTeam || ''} - ${item.awayTeam || ''}`.trim();
+  const odds = Number(item.odds);
+  const confidence = Number(item.confidence);
+  if (!item.homeTeam?.trim() || !item.awayTeam?.trim() || !item.prediction?.trim() || !Number.isFinite(odds) || odds <= 1 || !Number.isFinite(confidence)) {
+    throw new Error('Unesite meč, tip, kvotu i confidence pre generisanja analize.');
+  }
+  return { match, odds, confidence };
 };
 
 export const dailyAnalysisAiService = {
-  generateDailyAnalysisText: async (item: DailyAnalysisItem): Promise<AiAnalysisResult> => {
-    const fallback = fallbackAnalysis(item);
+  generateSportsAnalysis: async (
+    analysisType: AnalysisGenerationType,
+    item: DailyAnalysisItem,
+    options?: AnalysisGenerationOptions,
+  ): Promise<AiAnalysisResult> => {
+    const payload = validateGenerationInput(item);
     const firebaseUser = auth.currentUser;
-    if (!firebaseUser) return { analysis: fallback, source: 'fallback' };
+    if (!firebaseUser) throw new Error('Morate biti prijavljeni kao admin da biste generisali analizu.');
 
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 50_000);
     try {
       const token = await firebaseUser.getIdToken();
       const response = await fetch('/api/generate-daily-analysis', {
@@ -33,33 +58,47 @@ export const dailyAnalysisAiService = {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          matchData: {
-            league: item.league,
-            sport: item.sport || 'football',
-            homeTeam: item.homeTeam,
-            awayTeam: item.awayTeam,
-            prediction: item.prediction,
-            odds: item.odds,
-            formHome: item.homeFormPercent,
-            formAway: item.awayFormPercent,
-            confidence: item.confidence,
-            risk: item.riskLevel,
-            stats: [item.formNote, item.averageTotal, item.h2hNote].filter(Boolean).join(' | '),
-          },
+          analysisType,
+          match: payload.match,
+          prediction: item.prediction.trim(),
+          odds: payload.odds,
+          confidence: payload.confidence,
+          fixtureId: item.fixtureId === undefined ? undefined : String(item.fixtureId),
+          sport: item.sport || 'football',
+          league: item.league,
+          date: item.date,
+          homeTeam: item.homeTeam,
+          awayTeam: item.awayTeam,
+          manualRequest: options?.manualRequest === true,
+          forceRegenerate: options?.forceRegenerate === true,
         }),
+        signal: controller.signal,
       });
 
-      if (!response.ok) return { analysis: fallback, source: 'fallback' };
-      const result = await response.json() as Partial<AiAnalysisResult>;
+      const result = await response.json() as Partial<AiAnalysisResult> & { error?: string };
+      if (!response.ok) throw new Error(result.error || 'Generisanje analize trenutno nije dostupno.');
       const analysis = typeof result.analysis === 'string' && result.analysis.trim()
         ? cleanAnalysis(result.analysis)
-        : fallback;
-      return { analysis, source: result.source === 'gemini' ? 'gemini' : 'fallback' };
+        : '';
+      if (!analysis) throw new Error('Gemini nije vratio tekst analize.');
+      return {
+        analysis,
+        source: result.source === 'gemini' ? 'gemini' : 'fallback',
+        model: result.model,
+        enrichedStatsFound: result.enrichedStatsFound === true,
+        statsProvider: result.statsProvider,
+        enrichmentMessage: result.enrichmentMessage,
+        enrichmentCacheHit: result.enrichmentCacheHit === true,
+        aiCacheHit: result.aiCacheHit === true,
+        insufficientData: result.insufficientData === true,
+      };
     } catch (error) {
-      console.error('Daily analysis AI request failed:', error);
-      return { analysis: fallback, source: 'fallback' };
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error('Generisanje analize traje predugo. Pokušajte ponovo.');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   },
-
-  fallbackAnalysis,
 };

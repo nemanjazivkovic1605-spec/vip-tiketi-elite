@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { EyeOff, Save, Trash2, X } from 'lucide-react';
 import { DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisStatus } from '../../types';
+import { evaluateDailyAnalysisStatus } from '../../services/dailyAnalysesService';
+import { dailyPublicationMetaFromInput, getDailyPublicationInputValue } from '../../utils/dailyPublication';
 
 type DailyAnalysisEditModalProps = {
   analysis: DailyAnalysisItem;
@@ -21,43 +23,11 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const resolveResultStatus = (prediction: string, homeScore?: number, awayScore?: number) => {
-    if (homeScore === undefined || awayScore === undefined) return undefined;
-    const totalGoals = homeScore + awayScore;
-    const normalized = prediction.trim().toUpperCase();
-
-    if (normalized === 'GG') return homeScore > 0 && awayScore > 0 ? 'WON' : 'LOST';
-    if (normalized === 'NG') return homeScore === 0 && awayScore === 0 ? 'WON' : 'LOST';
-    if (normalized === '1') return homeScore > awayScore ? 'WON' : 'LOST';
-    if (normalized === 'X') return homeScore === awayScore ? 'WON' : 'LOST';
-    if (normalized === '2') return awayScore > homeScore ? 'WON' : 'LOST';
-    if (normalized === '1X') return homeScore >= awayScore ? 'WON' : 'LOST';
-    if (normalized === 'X2') return awayScore >= homeScore ? 'WON' : 'LOST';
-    if (normalized === '12') return homeScore !== awayScore ? 'WON' : 'LOST';
-    if (normalized === '3+' || normalized === 'OVER 2.5') return totalGoals >= 3 ? 'WON' : 'LOST';
-    if (normalized === '2+' || normalized === 'OVER 1.5') return totalGoals >= 2 ? 'WON' : 'LOST';
-    if (normalized === '0-2' || normalized === 'UNDER 2.5') return totalGoals <= 2 ? 'WON' : 'LOST';
-
-    const overMatch = normalized.match(/^OVER\s*(\d+(?:\.\d+)?)$/);
-    if (overMatch) {
-      const threshold = Number(overMatch[1]);
-      return totalGoals > threshold ? 'WON' : 'LOST';
-    }
-
-    const underMatch = normalized.match(/^UNDER\s*(\d+(?:\.\d+)?)$/);
-    if (underMatch) {
-      const threshold = Number(underMatch[1]);
-      return totalGoals < threshold ? 'WON' : 'LOST';
-    }
-
-    return undefined;
-  };
-
   const updateDraft = (patch: Partial<DailyAnalysisItem>) => {
     setDraft((current) => ({ ...current, ...patch, manualOverride: true }));
   };
 
-  const autoStatus = resolveResultStatus(draft.prediction, draft.homeScore, draft.awayScore);
+  const autoStatus = evaluateDailyAnalysisStatus(draft.prediction, draft.homeScore, draft.awayScore);
 
   const save = async (next = draft) => {
     setError('');
@@ -71,12 +41,16 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
       const homeScore = next.homeScore === undefined ? undefined : Number(next.homeScore);
       const awayScore = next.awayScore === undefined ? undefined : Number(next.awayScore);
       const result = homeScore !== undefined && awayScore !== undefined ? `${homeScore}:${awayScore}` : next.result;
-      const autoStatus = resolveResultStatus(next.prediction, homeScore, awayScore);
+      const autoStatus = evaluateDailyAnalysisStatus(next.prediction, homeScore, awayScore);
       const status = next.status && next.status !== 'ACTIVE' ? next.status : autoStatus || next.status || 'ACTIVE';
+      const resultChanged = homeScore !== analysis.homeScore
+        || awayScore !== analysis.awayScore
+        || (status !== analysis.status && status !== 'ACTIVE' && status !== 'HIDDEN');
 
       await onSave({
         ...next,
         manualOverride: true,
+        resultManualOverride: next.resultManualOverride === true || resultChanged,
         odds: Number(next.odds) || 1,
         confidence: next.confidence === undefined ? undefined : Number(next.confidence),
         badges: (next.badges || []).filter(Boolean),
@@ -130,12 +104,21 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
 
         <div className="grid gap-3 md:grid-cols-2">
           <label>
-            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Datum</span>
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Datum utakmice</span>
             <input type="date" className={fieldClass} value={draft.date} onChange={(event) => updateDraft({ date: event.target.value })} />
           </label>
           <label>
-            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Vreme</span>
-            <input type="time" className={fieldClass} value={draft.time} onChange={(event) => updateDraft({ time: event.target.value })} />
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Vreme početka utakmice</span>
+            <input type="time" className={fieldClass} value={draft.kickoffTime || draft.matchTime || draft.time} onChange={(event) => updateDraft({ time: event.target.value, matchTime: event.target.value, kickoffTime: event.target.value })} />
+          </label>
+          <label className="md:col-span-2">
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Vreme objave tiketa</span>
+            <input
+              type="datetime-local"
+              className={fieldClass}
+              value={getDailyPublicationInputValue(draft)}
+              onChange={(event) => updateDraft(dailyPublicationMetaFromInput(event.target.value))}
+            />
           </label>
           <label>
             <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Sport</span>
@@ -223,7 +206,7 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
               <option value="WON">Prošao</option>
               <option value="LOST">Pao</option>
               <option value="POSTPONED">Odloženo</option>
-              <option value="REFUND">Povrat</option>
+              <option value="REFUND">VOID / PUSH (Povrat)</option>
               <option value="HIDDEN">Sakriven</option>
             </select>
           </label>
@@ -232,8 +215,24 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
             <input className={fieldClass} value={(draft.badges || []).join(', ')} onChange={(event) => updateDraft({ badges: event.target.value.split(',').map((badge) => badge.trim()).filter(Boolean) })} placeholder="HIGH VALUE, VIP PICK" />
           </label>
           <label className="md:col-span-2">
-            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Analiza</span>
-            <textarea rows={6} className={fieldClass} value={draft.reasoning} onChange={(event) => updateDraft({ reasoning: event.target.value })} />
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">FREE analiza</span>
+            <textarea
+              rows={7}
+              className={`${fieldClass} min-h-40 resize-y leading-6`}
+              value={draft.freeAnalysis || ''}
+              onChange={(event) => updateDraft({ freeAnalysis: event.target.value })}
+              placeholder="Kratka analiza za FREE prikaz."
+            />
+          </label>
+          <label className="md:col-span-2">
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">VIP analiza</span>
+            <textarea
+              rows={12}
+              className={`${fieldClass} min-h-64 resize-y leading-6`}
+              value={draft.vipAnalysis || ''}
+              onChange={(event) => updateDraft({ vipAnalysis: event.target.value })}
+              placeholder="Detaljna premium analiza za VIP prikaz."
+            />
           </label>
         </div>
 

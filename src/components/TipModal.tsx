@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { Tip, Match, TicketStatus, TipPublicationStatus } from '../types';
 import { motion } from 'motion/react';
-import { calculateTotalOdds, getDefaultUnitsStake, normalizeOdds, unitsToRsd } from '../utils/tickets';
+import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, normalizeOdds, unitsToRsd } from '../utils/tickets';
 
 interface TipModalProps {
   onClose: () => void;
@@ -13,6 +13,7 @@ interface TipModalProps {
 export default function TipModal({ onClose, onSave, initialData }: TipModalProps) {
   const [isVip, setIsVip] = useState(initialData?.isVip ?? true);
   const [date, setDate] = useState(initialData?.date ?? new Date().toISOString().split('T')[0]);
+  const [publishedTime, setPublishedTime] = useState(initialData?.publishedTime ?? formatLocalTime(new Date()));
   const [status, setStatus] = useState<TicketStatus>(initialData?.status ?? TicketStatus.PENDING);
   const [unitsStake, setUnitsStake] = useState(String(initialData?.unitsStake ?? getDefaultUnitsStake(initialData?.isVip ?? true, initialData?.matches?.length ?? 1)));
   const [analysis, setAnalysis] = useState(initialData?.analysis ?? '');
@@ -66,8 +67,10 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
       id: initialData?.id || Math.random().toString(36).substr(2, 9),
       source: 'admin',
       publicationStatus: initialData?.publicationStatus ?? TipPublicationStatus.DRAFT,
-      publishedAt: initialData?.publishedAt,
       date,
+      publishedDate: initialData?.publishedDate || date,
+      publishedTime,
+      publishedAt: buildPublishedAt(initialData?.publishedDate || date, publishedTime),
       isVip,
       status,
       totalOdds,
@@ -139,6 +142,15 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                   <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
                   <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase text-neutral-500 tracking-widest mb-2">Vreme objave tiketa</label>
+                <input
+                  type="time"
+                  value={publishedTime}
+                  onChange={(event) => setPublishedTime(event.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-gold-500/50 transition-all"
+                />
               </div>
            </div>
 

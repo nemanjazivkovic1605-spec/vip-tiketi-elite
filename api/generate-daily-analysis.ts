@@ -1,18 +1,23 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
+import { getConfiguredSportsProviderIds, getEnrichedMatchStats, type EnrichedMatchStats } from '../src/services/sportsData/sportsDataProvider.js';
 
-type MatchData = {
+type AnalysisType = 'FREE' | 'VIP';
+
+type AnalysisRequest = {
+  analysisType: AnalysisType;
+  match: string;
+  prediction: string;
+  odds: number;
+  confidence: number;
+  fixtureId?: string;
+  sport?: 'football' | 'basketball';
   league?: string;
-  sport?: string;
+  date?: string;
   homeTeam?: string;
   awayTeam?: string;
-  prediction?: string;
-  odds?: number;
-  formHome?: number | null;
-  formAway?: number | null;
-  confidence?: number;
-  risk?: string;
-  stats?: string;
+  manualRequest?: boolean;
+  forceRegenerate?: boolean;
 };
 
 type AuthenticatedUser = {
@@ -22,166 +27,238 @@ type AuthenticatedUser = {
 };
 
 type RateEntry = { count: number; resetAt: number };
+type AnalysisResult = { analysis: string; source: 'gemini' | 'fallback'; model?: string; aiCacheHit?: boolean; insufficientData?: boolean };
 type ApiRequest = IncomingMessage & { body?: unknown };
 
-// gemini-1.5-flash is no longer exposed by the current Gemini API (404).
-const MODEL = 'gemini-2.5-flash';
+const PRIMARY_MODEL = process.env.GEMINI_ANALYSIS_MODEL?.trim() || 'gemini-3-flash-preview';
+const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const ANALYSIS_MODELS = Array.from(new Set([PRIMARY_MODEL, ...FALLBACK_MODELS]));
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 12;
-const MIN_ANALYSIS_LENGTH = 400;
+const MANUAL_COOLDOWN_MS = 7_000;
+const AI_CACHE_TTL_MS = 20 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 14_000;
+const GENERATION_BUDGET_MS = 34_000;
 const TRUSTED_ADMIN_EMAILS = new Set(['nemanjazivkovic1605@gmail.com']);
 const requestCounts = new Map<string, RateEntry>();
+const lastManualRequestAt = new Map<string, number>();
+const aiCache = new Map<string, { expiresAt: number; result: AnalysisResult }>();
+const pendingAnalyses = new Map<string, Promise<AnalysisResult>>();
+const STATS_GROUNDING_INSTRUCTION = 'KORISTI ISKLJUČIVO DOSTAVLJENE STATISTIKE. NE IZMIŠLJAJ xG, POVREDE, SUSPENZIJE ILI BROJEVE KOJI NISU PRISUTNI U enrichedStats.';
+const INSUFFICIENT_DATA_MESSAGE = 'Nema dovoljno relevantnih podataka za kvalitetnu AI analizu.';
 
-const MASTER_PROMPT = `Ti si elitni evropski sportski tipster sa iskustvom u premium fudbalskim analizama.
+const FREE_SYSTEM_INSTRUCTION = `Napiši kratku, prirodnu FREE sportsku analizu na srpskom jeziku za dostavljeni tip. Objasni odnos tipa, kvote i podataka koji su stvarno prisutni u enrichedStats. Kada su dostavljene konkretne brojke, koristi relevantne brojke u obrazloženju.
 
-Napiši analizu u srpskom jeziku koja zvuči kao da ju je napisao iskusan tipster, ne AI asistent. Ton treba da bude moderan, agresivan, prirodan i direktan. Analiza treba da bude fokusirana na konkretan matchup i da koristi fudbalski rečnik, bez opštih fraza i bez AI safe disklamera.
+Tekst neka bude čitljiv i sažet, u jednom ili dva pasusa. Ne obećavaj ishod i ne navodi podatke koji nisu dostavljeni.`;
 
-Ne koristi:
-- nijedan ishod nije garantovan
-- odgovorno upravljanje ulogom
-- razuman izbor
-- u okviru dostupnih informacija
-- sportski događaji su nepredvidljivi
-- predstavlja value
-- profil meča
-- disciplinovana procena
+const VIP_SYSTEM_INSTRUCTION = `Napiši premium VIP sportsku analizu na srpskom jeziku za dostavljeni tip. Analiza treba da bude konkretnija od FREE verzije: objasni value kvote i relevantne činjenice iz enrichedStats, uz jasan zaključak o izabranom marketu. Kada su dostavljene konkretne brojke, koristi relevantne brojke u obrazloženju.
 
-Nema markdowna, nema bullet lista, nema navodnika. Napiši 3 do 5 punih rečenica sa 400 do 900 karaktera. Direktno pominjaj timove više puta i koristi sportsku logiku za tempo, stil igre, matchup, prostor za golove, tranziciju, ranjive odbrane, momentum, intenzitet i način otvaranja tipa.
+Piši prirodno u povezanim pasusima. Ne obećavaj ishod i ne dodaj statistiku, formu, H2H, povrede, suspenzije ili kontekst koji nije dostavljen u enrichedStats.`;
 
-Za GG / BTTS fokusiraj na otvoren meč, obe ekipe napadački opasne su, prostor iza odbrane, ritam, tranziciju i zašto rani gol otvara utakmicu.
-Za OVER fokusiraj na tempo, efikasnost, agresivan ritam, matchup koji vodi ka šansama i potencijal otvorenog meča posle prvog gola.
-Za UNDER fokusiraj na disciplinu, sporiji ritam, tvrđi matchup i manje prostora.
-Za 1 ili 2 fokusiraj na kvalitet, momentum, domaći teren, formu i matchup prednost.
-Za 1X / X2 fokusiraj na stabilnost, kontrolu i zašto je favorit još uvek pod pritiskom.
-Za NG fokusiraj na slab napad jednog tima, defanzivnu stabilnost drugog i kontrolu ritma.
-
-Obavezno koristi imena timova i naziv lige prirodno i više puta. Tekst treba da zvuči kao pravi evropski VIP tipster.`;
-
-const normalizeText = (value: unknown, fallback = '') =>
-  typeof value === 'string' && value.trim() ? value.trim() : fallback;
-
-const formatOptional = (value: unknown) =>
-  value === null || value === undefined || value === '' ? 'Nedovoljno podataka' : String(value);
+const normalizeText = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 
 const cleanGeneratedText = (value: string) =>
   value
     .replace(/\*\*/g, '')
     .replace(/^\s*[-*]\s+/gm, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-const getSafeMatchData = (body: unknown): MatchData => {
-  const value = body && typeof body === 'object' && 'matchData' in body
-    ? (body as { matchData: Record<string, unknown> }).matchData
-    : {};
+const parseRequest = (body: unknown): AnalysisRequest | null => {
+  if (!body || typeof body !== 'object') return null;
+  const input = body as Record<string, unknown>;
+  const analysisType = input.analysisType === 'VIP' ? 'VIP' : input.analysisType === 'FREE' ? 'FREE' : undefined;
+  const match = normalizeText(input.match);
+  const prediction = normalizeText(input.prediction);
+  const odds = Number(input.odds);
+  const confidence = Number(input.confidence);
 
-  return {
-    league: normalizeText(value.league, 'Takmicenje'),
-    sport: normalizeText(value.sport, 'football'),
-    homeTeam: normalizeText(value.homeTeam, 'Domacin'),
-    awayTeam: normalizeText(value.awayTeam, 'Gost'),
-    prediction: normalizeText(value.prediction, 'predlozeni market'),
-    odds: Number.isFinite(Number(value.odds)) ? Number(value.odds) : undefined,
-    formHome: Number.isFinite(Number(value.formHome)) ? Number(value.formHome) : null,
-    formAway: Number.isFinite(Number(value.formAway)) ? Number(value.formAway) : null,
-    confidence: Number.isFinite(Number(value.confidence)) ? Number(value.confidence) : undefined,
-    risk: normalizeText(value.risk, 'MEDIUM'),
-    stats: normalizeText(value.stats, 'Nedovoljno dodatnih statistickih podataka.'),
-  };
-};
-
-export const buildFallbackAnalysis = (matchData: MatchData) => {
-  const homeTeam = normalizeText(matchData.homeTeam, 'Domaci tim');
-  const awayTeam = normalizeText(matchData.awayTeam, 'gostujuci tim');
-  const prediction = normalizeText(matchData.prediction, 'izabrani market');
-  const league = normalizeText(matchData.league, 'ovom takmicenju');
-  const oddsText = matchData.odds && matchData.odds > 1 ? ` po kvoti ${matchData.odds.toFixed(2)}` : '';
-
-  return `${homeTeam} i ${awayTeam} ulaze u duel u okviru ${league}, gde predlog ${prediction}${oddsText} predstavlja razuman izbor u odnosu na profil ovog meca. Kod ovog marketa presudni su ritam igre, sposobnost ekipa da nametnu svoj plan i situacije u kojima izabrani tip dobija konkretnu vrednost. ${homeTeam} i ${awayTeam} zato zahtevaju disciplinovanu procenu, bez oslanjanja na reputaciju ili kratkorocni utisak. Predlog ${prediction} ima smisla u okviru dostupnih informacija, uz odgovorno upravljanje ulogom i svest da nijedan sportski ishod nije garantovan.`;
-};
-
-const buildPrompt = (matchData: MatchData, retry = false) => `${MASTER_PROMPT}
-
-Ulazni podaci:
-Liga: ${formatOptional(matchData.league)}
-Sport: ${formatOptional(matchData.sport)}
-Domacin: ${formatOptional(matchData.homeTeam)}
-Gost: ${formatOptional(matchData.awayTeam)}
-Predlog: ${formatOptional(matchData.prediction)}
-Kvota: ${formatOptional(matchData.odds)}
-Forma domacina: ${formatOptional(matchData.formHome)}
-Forma gosta: ${formatOptional(matchData.formAway)}
-Confidence: ${formatOptional(matchData.confidence)}
-Rizik: ${formatOptional(matchData.risk)}
-Statistika: ${formatOptional(matchData.stats)}
-
-Sada napisi premium VIP analizu.${retry ? '\n\nPrethodni odgovor je bio previše generički i slabog tipsterskog tona. Napiši ponovo snažno i direktno, sa najmanje 400 karaktera i 3 do 5 punih, prirodnih rečenica koje zvuče kao pravi evropski VIP tipster.' : ''}`;
-
-const requestGeminiAnalysis = async (apiKey: string, matchData: MatchData, retry = false) => {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: buildPrompt(matchData, retry) }] }],
-        generationConfig: {
-          temperature: retry ? 0.62 : 0.72,
-          maxOutputTokens: 700,
-        },
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Gemini generation failed with status ${response.status}.`);
+  if (!analysisType || !match || !prediction || !Number.isFinite(odds) || odds <= 1 || !Number.isFinite(confidence) || confidence < 0 || confidence > 100) {
+    return null;
   }
 
-  const result = await response.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  return {
+    analysisType,
+    match,
+    prediction,
+    odds,
+    confidence,
+    fixtureId: normalizeText(input.fixtureId) || undefined,
+    sport: input.sport === 'basketball' ? 'basketball' : 'football',
+    league: normalizeText(input.league) || undefined,
+    date: normalizeText(input.date) || undefined,
+    homeTeam: normalizeText(input.homeTeam) || match.split(/\s+-\s+/)[0]?.trim() || undefined,
+    awayTeam: normalizeText(input.awayTeam) || match.split(/\s+-\s+/)[1]?.trim() || undefined,
+    manualRequest: input.manualRequest === true,
+    forceRegenerate: input.forceRegenerate === true,
   };
-
-  return (result.candidates || [])
-    .map((candidate) => cleanGeneratedText(candidate.content?.parts
-      ?.map((part) => part.text || '')
-      .join(' ') || ''))
-    .sort((a, b) => b.length - a.length)[0] || '';
 };
 
-const isAnalysisTooGeneric = (value: string) => {
-  const genericPhrases = [
-    /nijedan ishod nije garantovan/i,
-    /odgovorno upravljanje ulogom/i,
-    /razuman izbor/i,
-    /u okviru dostupnih informacija/i,
-    /sportski događaji su nepredvidivi/i,
-    /predstavlja value/i,
-    /profil meča/i,
-    /disciplinovana procena/i,
-    /value/i,
-  ];
-
-  if (value.length < MIN_ANALYSIS_LENGTH) return true;
-  return genericPhrases.some((phrase) => phrase.test(value));
+const formatEnrichedStats = (stats: EnrichedMatchStats | null) => {
+  if (!stats) return 'Nema dostupnih dodatnih statistika za ovaj meč.';
+  const serialized = JSON.stringify(stats);
+  return serialized.length > 12_000 ? `${serialized.slice(0, 12_000)}...` : serialized;
 };
 
-export async function generateDailyAnalysisText(matchData: MatchData): Promise<string> {
-  const fallback = buildFallbackAnalysis(matchData);
+export const buildUserPrompt = (input: AnalysisRequest, enrichedStats: EnrichedMatchStats | null) =>
+  `Meč: ${input.match} | Tip: ${input.prediction} | Kvota: ${input.odds.toFixed(2)} | Confidence: ${input.confidence}%
+
+KORISTI ISKLJUČIVO DOSTAVLJENE STATISTIKE. NE IZMIŠLJAJ xG, POVREDE, SUSPENZIJE ILI BROJEVE KOJI NISU PRISUTNI U enrichedStats.
+
+enrichedStats:
+${formatEnrichedStats(enrichedStats)}`;
+
+const hasDataValue = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.length > 0;
+  if (!value || typeof value !== 'object') return value !== null && value !== undefined && value !== '';
+  return Object.values(value as Record<string, unknown>).some(hasDataValue);
+};
+
+export const hasRelevantStatsForAnalysis = (stats: EnrichedMatchStats | null) =>
+  Boolean(stats && [
+    stats.statistics,
+    stats.lastMatches,
+    stats.h2h,
+    stats.standings,
+    stats.homeAwayForm,
+  ].some(hasDataValue));
+
+const buildFallbackAnalysis = (input: AnalysisRequest, hasRelevantStats: boolean) => {
+  if (!hasRelevantStats) return INSUFFICIENT_DATA_MESSAGE;
+  const impliedProbability = (100 / input.odds).toFixed(1);
+  const overlay = (input.confidence - (100 / input.odds)).toFixed(1);
+  return `Za ${input.match}, tip ${input.prediction} po kvoti ${input.odds.toFixed(2)} nosi implicitnu verovatnoću od ${impliedProbability}%, u odnosu na procenu od ${input.confidence}% i razliku od ${overlay} procentnih poena. Gemini trenutno nije vratio kompletan tekst, zato ovu kratku procenu treba dopuniti ručnom proverom dostupne statistike pre objave.`;
+};
+
+const getSystemInstruction = (analysisType: AnalysisType) =>
+  analysisType === 'VIP' ? VIP_SYSTEM_INSTRUCTION : FREE_SYSTEM_INSTRUCTION;
+
+const isAcceptableAnalysis = (analysis: string, analysisType: AnalysisType) => {
+  const minimumLength = analysisType === 'VIP' ? 180 : 100;
+  return analysis.length >= minimumLength;
+};
+
+const requestGeminiAnalysis = async (apiKey: string, input: AnalysisRequest, enrichedStats: EnrichedMatchStats | null, model: string, deadline: number, retry = false) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, deadline - Date.now())));
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: `${getSystemInstruction(input.analysisType)}\n\n${STATS_GROUNDING_INSTRUCTION}` }],
+          },
+          contents: [{
+            role: 'user',
+            parts: [{
+              text: `${buildUserPrompt(input, enrichedStats)}${retry ? '\nPrethodni tekst nije ispunio dužinu ili ton. Napiši kompletnu, povezanu analizu prema instrukciji.' : ''}`,
+            }],
+          }],
+          generationConfig: {
+            temperature: input.analysisType === 'VIP' ? 0.58 : 0.64,
+            maxOutputTokens: input.analysisType === 'VIP' ? 1400 : 600,
+          },
+        }),
+        signal: controller.signal,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`${response.status}`);
+    }
+
+    const result = await response.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    return cleanGeneratedText((result.candidates || [])
+      .flatMap((candidate) => candidate.content?.parts || [])
+      .map((part) => part.text || '')
+      .join('\n\n'));
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+export async function generateSportsAnalysis(input: AnalysisRequest, enrichedStats: EnrichedMatchStats | null = null): Promise<AnalysisResult> {
+  const hasRelevantStats = hasRelevantStatsForAnalysis(enrichedStats);
+  const fallback = buildFallbackAnalysis(input, hasRelevantStats);
+  if (!hasRelevantStats) return { analysis: fallback, source: 'fallback', insufficientData: true };
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return fallback;
+  if (!apiKey) return { analysis: fallback, source: 'fallback' };
 
-  const firstResult = await requestGeminiAnalysis(apiKey, matchData);
-  if (!isAnalysisTooGeneric(firstResult)) return firstResult;
+  const deadline = Date.now() + GENERATION_BUDGET_MS;
+  for (const model of ANALYSIS_MODELS) {
+    if (Date.now() >= deadline) break;
+    try {
+      const firstResult = await requestGeminiAnalysis(apiKey, input, enrichedStats, model, deadline);
+      if (isAcceptableAnalysis(firstResult, input.analysisType)) {
+        return { analysis: firstResult, source: 'gemini', model };
+      }
 
-  const secondResult = await requestGeminiAnalysis(apiKey, matchData, true);
-  if (!isAnalysisTooGeneric(secondResult)) return secondResult;
+      if (Date.now() >= deadline) break;
+      const retryResult = await requestGeminiAnalysis(apiKey, input, enrichedStats, model, deadline, true);
+      if (isAcceptableAnalysis(retryResult, input.analysisType)) {
+        return { analysis: retryResult, source: 'gemini', model };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown';
+      console.info(`Gemini model fallback from ${model}: ${message}`);
+    }
+  }
 
-  const thirdResult = await requestGeminiAnalysis(apiKey, matchData, true);
-  return !isAnalysisTooGeneric(thirdResult) ? thirdResult : fallback;
+  return { analysis: fallback, source: 'fallback' };
 }
+
+const getAnalysisCacheKey = (input: AnalysisRequest) =>
+  [input.analysisType, input.match, input.prediction, input.odds.toFixed(2), input.confidence].join(':').toLowerCase();
+
+export async function generateProtectedSportsAnalysis(
+  input: AnalysisRequest,
+  enrichedStats: EnrichedMatchStats | null = null,
+): Promise<AnalysisResult> {
+  const cacheKey = getAnalysisCacheKey(input);
+  if (!input.forceRegenerate) {
+    const cached = aiCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { ...cached.result, aiCacheHit: true };
+    }
+  }
+
+  const pending = pendingAnalyses.get(cacheKey);
+  if (pending) {
+    return { ...(await pending), aiCacheHit: true };
+  }
+
+  const request = generateSportsAnalysis(input, enrichedStats)
+    .then((result) => {
+      const completed = { ...result, aiCacheHit: false };
+      aiCache.set(cacheKey, { expiresAt: Date.now() + AI_CACHE_TTL_MS, result: completed });
+      return completed;
+    })
+    .finally(() => {
+      if (pendingAnalyses.get(cacheKey) === request) {
+        pendingAnalyses.delete(cacheKey);
+      }
+    });
+  pendingAnalyses.set(cacheKey, request);
+  return request;
+}
+
+export const getEnrichmentMessage = (configuredProviders: string[], stats: EnrichedMatchStats | null) => {
+  if (configuredProviders.length === 0) {
+    return 'Sports API ključevi nisu podešeni, analiza je generisana samo iz osnovnih podataka.';
+  }
+  return stats
+    ? `Dodatna statistika: ${stats.provider}.`
+    : 'Dodatna statistika nije pronađena, analiza je generisana iz osnovnih podataka.';
+};
 
 const readBody = async (request: ApiRequest) => {
   if (request.body && typeof request.body === 'object') return request.body;
@@ -246,6 +323,14 @@ const canGenerateNow = (key: string) => {
   return true;
 };
 
+const canStartManualGeneration = (key: string) => {
+  const now = Date.now();
+  const lastRequestAt = lastManualRequestAt.get(key) || 0;
+  if (now - lastRequestAt < MANUAL_COOLDOWN_MS) return false;
+  lastManualRequestAt.set(key, now);
+  return true;
+};
+
 export default async function handler(request: ApiRequest, response: ServerResponse) {
   if (request.method !== 'POST') {
     sendJson(response, 405, { error: 'Method not allowed.' });
@@ -259,22 +344,47 @@ export default async function handler(request: ApiRequest, response: ServerRespo
       return;
     }
 
-    const matchData = getSafeMatchData(await readBody(request));
-    const fallback = buildFallbackAnalysis(matchData);
-
-    if (!canGenerateNow(user.uid)) {
-      sendJson(response, 200, { analysis: fallback, source: 'fallback', reason: 'rate_limit' });
+    const input = parseRequest(await readBody(request));
+    if (!input) {
+      sendJson(response, 400, { error: 'Unesite meč, tip, kvotu i confidence pre generisanja analize.' });
       return;
     }
 
-    try {
-      const analysis = await generateDailyAnalysisText(matchData);
-      const source = process.env.GEMINI_API_KEY && analysis !== fallback ? 'gemini' : 'fallback';
-      sendJson(response, 200, { analysis, source });
-    } catch (generationError) {
-      console.error('Gemini daily analysis generation failed:', generationError instanceof Error ? generationError.message : 'Unknown error');
-      sendJson(response, 200, { analysis: fallback, source: 'fallback', reason: 'generation_failed' });
+    if (!input.manualRequest) {
+      sendJson(response, 400, { error: 'AI analiza se generiše samo ručnom admin akcijom.' });
+      return;
     }
+
+    if (!canGenerateNow(user.uid)) {
+      sendJson(response, 429, { error: 'Previše zahteva. Sačekajte minut i pokušajte ponovo.' });
+      return;
+    }
+
+    if (input.manualRequest && !canStartManualGeneration(user.uid)) {
+      sendJson(response, 429, { error: 'Sačekaj nekoliko sekundi pre novog AI zahteva.' });
+      return;
+    }
+
+    const configuredSportsProviders = getConfiguredSportsProviderIds();
+    const enrichment = configuredSportsProviders.length > 0 && input.homeTeam && input.awayTeam
+      ? await getEnrichedMatchStats({
+          fixtureId: input.fixtureId,
+          sport: input.sport,
+          league: input.league,
+          date: input.date,
+          homeTeam: input.homeTeam,
+          awayTeam: input.awayTeam,
+        })
+      : { stats: null, fromCache: false, attemptedProviders: [] };
+    const result = await generateProtectedSportsAnalysis(input, enrichment.stats);
+    sendJson(response, 200, {
+      ...result,
+      enrichedStatsFound: Boolean(enrichment.stats),
+      statsProvider: enrichment.stats?.provider,
+      enrichmentCacheHit: enrichment.fromCache,
+      configuredSportsProviders,
+      enrichmentMessage: getEnrichmentMessage(configuredSportsProviders, enrichment.stats),
+    });
   } catch (error) {
     console.error('Daily analysis API handler failed:', error instanceof Error ? error.message : 'Unknown error');
     sendJson(response, 500, { error: 'Generisanje analize trenutno nije dostupno.' });

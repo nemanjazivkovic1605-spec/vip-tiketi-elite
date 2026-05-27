@@ -23,6 +23,7 @@ import {
   sortTicketsByDate,
 } from '../utils/tickets';
 import { calculateStats } from '../utils/ticketStats';
+import { getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublication';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
 
@@ -65,6 +66,8 @@ const normalizeTip = (tip: Tip): Tip => {
     isVip: Boolean(tip.isVip),
     publishedDate: tip.publishedDate,
     publishedTime: tip.publishedTime,
+    publishedAt: tip.publishedAt,
+    createdAt: tip.createdAt,
   });
   const existingTicketCode = (tip.ticketCode || '').trim();
   const ticketCode = existingTicketCode && isValidTicketCode(existingTicketCode)
@@ -101,8 +104,30 @@ const publicOnly = (tips: Tip[]) =>
 const DAILY_ANALYSES_COLLECTION = 'dailyAnalyses';
 const getDailyAnalysesCollection = () => collection(db, DAILY_ANALYSES_COLLECTION);
 
+const toStoredDateString = (value: unknown) => {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return undefined;
+};
+
 const normalizeDailyAnalysisDoc = (analysisDoc: any): DailyAnalysisItem => {
   const data = analysisDoc.data() as Record<string, unknown>;
+  const date = typeof data.date === 'string' ? data.date : new Date().toISOString().split('T')[0];
+  const time = typeof data.kickoffTime === 'string'
+    ? data.kickoffTime
+    : typeof data.matchTime === 'string'
+      ? data.matchTime
+      : typeof data.time === 'string' ? data.time : '12:00';
+  const publicationMeta = getDailyPublicationMeta({
+    date,
+    publishedAt: toStoredDateString(data.publishedAt),
+    publishedDate: typeof data.publishedDate === 'string' ? data.publishedDate : undefined,
+    publishedTime: typeof data.publishedTime === 'string' ? data.publishedTime : undefined,
+    publishTime: typeof data.publishTime === 'string' ? data.publishTime : undefined,
+    createdAt: toStoredDateString(data.createdAt),
+  });
 
   return {
     id: analysisDoc.id,
@@ -110,10 +135,14 @@ const normalizeDailyAnalysisDoc = (analysisDoc: any): DailyAnalysisItem => {
     sport: typeof data.sport === 'string' && data.sport === 'basketball' ? 'basketball' : 'football',
     status: typeof data.status === 'string' ? data.status as DailyAnalysisItem['status'] : 'ACTIVE',
     manualOverride: data.manualOverride === true,
+    resultManualOverride: data.resultManualOverride === true,
     topPick: data.topPick === true,
     units: Number.isFinite(Number(data.units)) ? Number(data.units) : undefined,
-    date: typeof data.date === 'string' ? data.date : new Date().toISOString().split('T')[0],
-    time: typeof data.time === 'string' ? data.time : '12:00',
+    date,
+    time,
+    matchTime: time,
+    kickoffTime: time,
+    ...publicationMeta,
     league: typeof data.league === 'string' ? data.league : '',
     leagueId: Number.isFinite(Number(data.leagueId)) ? Number(data.leagueId) : undefined,
     homeTeam: typeof data.homeTeam === 'string' ? data.homeTeam : '',
@@ -168,14 +197,16 @@ const mapDailyAnalysisToTip = (analysis: DailyAnalysisItem): Tip => {
       ? `${analysis.homeScore}:${analysis.awayScore}`
       : undefined
   );
+  const publicationMeta = getDailyPublicationMeta(analysis);
 
   return normalizeTip({
     id: `daily-${analysis.id}`,
     source: 'admin',
     publicationStatus: TipPublicationStatus.PUBLISHED,
     date: analysis.date,
-    publishedDate: analysis.date,
-    publishedTime: analysis.time,
+    publishedDate: publicationMeta.publishedDate,
+    publishedTime: publicationMeta.publishedTime,
+    publishedAt: publicationMeta.publishedAt,
     ticketType: 'SINGL',
     matches: [{
       id: `${analysis.id}-match`,
@@ -185,7 +216,7 @@ const mapDailyAnalysisToTip = (analysis: DailyAnalysisItem): Tip => {
       league: analysis.league,
       prediction: analysis.prediction,
       odds: analysis.odds,
-      time: analysis.time,
+      time: getKickoffTime(analysis),
       result,
       status,
       analysis: analysis.reasoning,
