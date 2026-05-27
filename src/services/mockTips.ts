@@ -48,6 +48,9 @@ const cleanAnalysis = (analysis?: string) => {
 
 const isValidTicketCode = (value?: string) => /^[FV]\d{12}$/.test((value || '').trim());
 
+const isAdminActiveTicketStatus = (status?: TicketStatus) =>
+  status === TicketStatus.PENDING || status === TicketStatus.POSTPONED;
+
 const normalizeTip = (tip: Tip): Tip => {
   const matches = Array.isArray(tip.matches)
     ? tip.matches.map((match) => ({
@@ -230,6 +233,16 @@ const mapDailyAnalysisToTip = (analysis: DailyAnalysisItem): Tip => {
   });
 };
 
+const readAdminActiveDailyAnalysisTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(getDailyAnalysesCollection()));
+  const analysisTips = snapshot.docs
+    .map(normalizeDailyAnalysisDoc)
+    .filter((analysis) => analysis.status === 'ACTIVE' || analysis.status === 'HIDDEN')
+    .map(mapDailyAnalysisToTip);
+
+  return sortTicketsByDate(analysisTips);
+};
+
 const readFinishedDailyAnalysisTips = async (): Promise<Tip[]> => {
   const snapshot = await getDocs(query(getDailyAnalysesCollection()));
   const analysisTips = snapshot.docs
@@ -240,8 +253,13 @@ const readFinishedDailyAnalysisTips = async (): Promise<Tip[]> => {
   return sortTicketsByDate(analysisTips);
 };
 
+const readAdminActiveTips = async (): Promise<Tip[]> => {
+  return (await readAllTips()).filter((tip) => isAdminActiveTicketStatus(tip.status));
+};
+
 const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
+const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
 const getPublicStatsTicketsCollection = () => collection(db, PUBLIC_STATS_TICKETS_COLLECTION);
 
 const getTicketDoc = (id: string) => doc(db, TICKETS_COLLECTION, id);
@@ -359,6 +377,18 @@ const mergeTips = (...groups: Tip[][]) => {
   return sortTicketsByDate(Array.from(byId.values()));
 };
 
+const readFinishedPublishedTips = async (): Promise<Tip[]> => {
+  const snapshot = await getDocs(query(
+    getTicketsCollection(),
+    where('publicationStatus', '==', TipPublicationStatus.PUBLISHED),
+    where('status', 'in', [...FINISHED_TICKET_STATUSES]),
+  ));
+  return sortTicketsByDate(snapshot.docs.map((ticketDoc) => mapTicketForVip(normalizeTip({
+    ...ticketDoc.data(),
+    id: ticketDoc.id,
+  } as Tip))));
+};
+
 const readPublishedTips = async (): Promise<Tip[]> => {
   const snapshot = await getDocs(query(
     getTicketsCollection(),
@@ -375,8 +405,8 @@ const readPublishedTips = async (): Promise<Tip[]> => {
 export const mockTipsService = {
   getAllTips: async (): Promise<Tip[]> => {
     const [tickets, dailyTips] = await Promise.all([
-      readAllTips(),
-      readFinishedDailyAnalysisTips(),
+      readAdminActiveTips(),
+      readAdminActiveDailyAnalysisTips(),
     ]);
     return sortTicketsByDate(mergeTips(dailyTips, tickets));
   },
@@ -419,7 +449,11 @@ export const mockTipsService = {
   },
 
   getStats: async (): Promise<GlobalStats> => {
-    return calculateStats(await mockTipsService.getPublishedTips());
+    const [tickets, dailyTips] = await Promise.all([
+      readFinishedPublishedTips(),
+      readFinishedDailyAnalysisTips(),
+    ]);
+    return calculateStats(sortTicketsByDate(mergeTips(dailyTips, tickets)));
   },
 
   getVisibleStats: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<GlobalStats> => {

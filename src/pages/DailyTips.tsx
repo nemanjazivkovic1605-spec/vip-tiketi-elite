@@ -120,7 +120,7 @@ const LockedPanel = () => (
   </button>
 );
 
-const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, generatingAiType, onResultSaved }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void; onGenerateAi: (analysis: DailyAnalysisItem, analysisType: 'FREE' | 'VIP') => Promise<void>; generatingAiType?: 'FREE' | 'VIP'; onResultSaved: () => Promise<void> }) => {
+const AnalysisCard = React.memo(function AnalysisCard({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, generatingAiType, onResultSaved }: { key?: React.Key; item: DailyAnalysisItem; canAccessVip: boolean; isAdmin: boolean; onEdit: (analysis: DailyAnalysisItem) => void; onGenerateAi: (analysis: DailyAnalysisItem, analysisType: 'FREE' | 'VIP') => Promise<void>; generatingAiType?: 'FREE' | 'VIP'; onResultSaved: () => Promise<void> }) {
   const access = item.type || item.access;
   const isVipLocked = item.locked === true || (access === 'VIP' && !canAccessVip);
   const hasOdds = Number.isFinite(Number(item.odds)) && Number(item.odds) > 1;
@@ -132,6 +132,7 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, gener
   const [homeScore, setHomeScore] = useState<number | ''>(item.homeScore ?? '');
   const [awayScore, setAwayScore] = useState<number | ''>(item.awayScore ?? '');
   const [manualStatus, setManualStatus] = useState<DailyAnalysisStatus>(item.status || 'ACTIVE');
+  const [expandedAnalysis, setExpandedAnalysis] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshingResult, setIsRefreshingResult] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -147,11 +148,16 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, gener
   const analysisText = access === 'VIP'
     ? item.vipAnalysis || item.analysis || item.reasoning
     : item.freeAnalysis || item.analysis || item.reasoning;
+  const shouldClampAnalysis = (analysisText || '').length > 280;
+  const visibleAnalysisText = expandedAnalysis || !shouldClampAnalysis
+    ? analysisText
+    : `${(analysisText || '').slice(0, 280)}…`;
 
   useEffect(() => {
     setHomeScore(item.homeScore ?? '');
     setAwayScore(item.awayScore ?? '');
     setManualStatus(item.status || 'ACTIVE');
+    setExpandedAnalysis(false);
     setErrorMessage(null);
     setApiResultMessage(null);
   }, [item.id, item.homeScore, item.awayScore, item.status]);
@@ -345,9 +351,23 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, gener
           {isVipLocked ? (
             <LockedPanel />
           ) : (
-            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-neutral-300">
-              {analysisText}
-            </p>
+            <>
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-neutral-300">
+                {visibleAnalysisText}
+              </p>
+              {shouldClampAnalysis && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setExpandedAnalysis((prev) => !prev);
+                  }}
+                  className="mt-3 inline-flex items-center rounded-full border border-gold-500/20 bg-gold-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gold-300"
+                >
+                  {expandedAnalysis ? 'Smanji tekst' : 'Prikaži više'}
+                </button>
+              )}
+            </>
           )}
         </div>}
       </div>
@@ -438,7 +458,7 @@ const AnalysisCard = ({ item, canAccessVip, isAdmin, onEdit, onGenerateAi, gener
       </div>}
     </motion.article>
   );
-};
+});
 
 export default function DailyTips() {
   const { canAccessFree, canAccessVip, isAdmin } = useAuth();

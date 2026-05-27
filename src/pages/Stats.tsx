@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, Award, BarChart3, ChevronRight, Lock, PieChart, Target, TrendingUp, Zap } from 'lucide-react';
+import { Activity, Award, BarChart3, ChevronLeft, ChevronRight, Lock, Target, TrendingUp, Zap } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
 import { GlobalStats, MonthlyStats, TicketStatus, Tip } from '../types';
 import { getTicketUnitsStake, isPredictionLockedForUser } from '../utils/tickets';
@@ -70,6 +70,21 @@ export default function Stats() {
 
   const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
 
+  const monthOptions = stats?.monthlyBreakdown || [];
+  const selectedMonthIndex = monthOptions.findIndex((month) => month.key === selectedMonth?.key);
+  const canGoPrevMonth = selectedMonthIndex > 0;
+  const canGoNextMonth = selectedMonthIndex >= 0 && selectedMonthIndex < monthOptions.length - 1;
+
+  const goToMonth = (direction: -1 | 1) => {
+    if (!monthOptions.length) return;
+    const nextIndex = Math.max(0, Math.min(monthOptions.length - 1, selectedMonthIndex + direction));
+    setSelectedMonth(monthOptions[nextIndex]);
+  };
+
+  const selectedMonthHitRate = selectedMonth && selectedMonth.totalTickets > 0
+    ? (selectedMonth.wins / selectedMonth.totalTickets) * 100
+    : 0;
+
   if (loading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
@@ -88,7 +103,6 @@ export default function Stats() {
 
   const overviewCards = [
     { label: 'Yield', value: formatPercent(stats?.yield ?? 0), desc: 'Čist profit / ukupne units', icon: <TrendingUp className="text-gold-500" /> },
-    { label: 'ROI banke', value: formatPercent(stats?.roi ?? 0), desc: 'Povraćaj investicije', icon: <PieChart className="text-gold-500" /> },
     { label: 'Hit Rate', value: `${stats?.hitRate ?? 0}%`, desc: 'Pogođeni / završeni', icon: <Target className="text-gold-500" /> },
     { label: 'Average Odds', value: (stats?.averageOdds ?? 0).toFixed(2), desc: 'Prosek završenih tiketa', icon: <BarChart3 className="text-gold-500" /> },
     { label: 'Units Profit', value: formatUnits(stats?.unitsProfit ?? 0), desc: 'Profit u jedinicama', icon: <Award className="text-gold-500" /> },
@@ -103,30 +117,126 @@ export default function Stats() {
         <p className="text-neutral-400">Profesionalni tipsterski pregled kroz yield, ROI, hit rate i units profit.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-12">
         {overviewCards.map((card, index) => (
           <motion.div
             key={card.label}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className="glass p-7 rounded-[2rem] relative overflow-hidden group hover:border-gold-500/30 transition-all"
+            className="glass p-4 md:p-5 rounded-[1.6rem] relative overflow-hidden group hover:border-gold-500/30 transition-all"
           >
-            <div className="flex items-center justify-between mb-5">
-              <div className="p-3 bg-gold-500/10 rounded-2xl group-hover:scale-110 transition-transform">{card.icon}</div>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="p-2.5 bg-gold-500/10 rounded-2xl group-hover:scale-110 transition-transform">{card.icon}</div>
             </div>
-            <div className="text-4xl font-display font-black mb-1">{card.value}</div>
-            <div className="text-sm font-bold text-neutral-200 mb-2">{card.label}</div>
-            <p className="text-xs text-neutral-500">{card.desc}</p>
+            <div className="text-2xl md:text-3xl font-display font-black mb-1">{card.value}</div>
+            <div className="text-xs md:text-sm font-bold text-neutral-200 mb-1">{card.label}</div>
+            <p className="text-[11px] text-neutral-500">{card.desc}</p>
           </motion.div>
         ))}
       </div>
 
       <div className="grid xl:grid-cols-[1fr_1.25fr] gap-8">
-        <div className="glass p-6 md:p-8 rounded-[2.5rem]">
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-            <Activity className="text-gold-500" /> Mesečni zbirni pregled
-          </h2>
+        <div className="glass p-5 md:p-6 rounded-[2rem]">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h2 className="text-xl md:text-2xl font-bold flex items-center gap-3">
+              <Activity className="text-gold-500" /> Mesečna statistika
+            </h2>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => goToMonth(-1)} disabled={!canGoPrevMonth} className="rounded-xl border border-white/10 bg-white/5 p-2 text-neutral-300 disabled:cursor-not-allowed disabled:opacity-40"> <ChevronLeft size={16} /> </button>
+              <button type="button" onClick={() => goToMonth(1)} disabled={!canGoNextMonth} className="rounded-xl border border-white/10 bg-white/5 p-2 text-neutral-300 disabled:cursor-not-allowed disabled:opacity-40"> <ChevronRight size={16} /> </button>
+            </div>
+          </div>
+
+          <label className="mb-4 block text-[10px] font-black uppercase tracking-widest text-neutral-500">
+            <span>Izaberi mesec</span>
+            <select
+              value={selectedMonth?.key || ''}
+              onChange={(event) => setSelectedMonth(monthOptions.find((month) => month.key === event.target.value) || null)}
+              className="mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-neutral-100 outline-none focus:border-gold-500/50"
+            >
+              {monthOptions.map((month) => (
+                <option key={month.key} value={month.key}>{month.month}</option>
+              ))}
+            </select>
+          </label>
+
+          {selectedMonth ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-widest text-neutral-500">Yield</div>
+                <div className="mt-1 text-xl font-display font-black text-gold-300">{formatPercent(selectedMonth.yield)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-widest text-neutral-500">Hit Rate</div>
+                <div className="mt-1 text-xl font-display font-black text-gold-300">{selectedMonthHitRate.toFixed(1)}%</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-widest text-neutral-500">Average Odds</div>
+                <div className="mt-1 text-xl font-display font-black text-gold-300">{selectedMonth.averageOdds.toFixed(2)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-widest text-neutral-500">Units Profit</div>
+                <div className="mt-1 text-xl font-display font-black text-gold-300">{formatUnits(selectedMonth.profitUnits)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-widest text-neutral-500">Profit RSD</div>
+                <div className="mt-1 text-xl font-display font-black text-gold-300">{formatRsd(selectedMonth.profitRsd)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-widest text-neutral-500">Pogođeno / ukupno</div>
+                <div className="mt-1 text-xl font-display font-black text-gold-300">{selectedMonth.wins} / {selectedMonth.totalTickets}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-neutral-500">Nema dostupnih meseci za prikaz.</div>
+          )}
+
+          <div className="mt-6 space-y-3">
+            {(stats?.monthlyBreakdown || []).map((month) => (
+              <button
+                key={month.key}
+                onClick={() => setSelectedMonth(month)}
+                className={`w-full text-left rounded-2xl border p-3 transition-all ${
+                  selectedMonth?.key === month.key
+                    ? 'bg-gold-500/10 border-gold-500/40 shadow-[0_0_24px_rgba(245,124,0,0.12)]'
+                    : 'bg-white/[0.03] border-white/10 hover:border-gold-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="font-display font-bold text-base capitalize">{month.month}</div>
+                  <ChevronRight size={16} className="text-gold-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-neutral-300">
+                  <div><span className="block text-[9px] uppercase tracking-widest text-neutral-500">Tiketa</span>{month.totalTickets}</div>
+                  <div><span className="block text-[9px] uppercase tracking-widest text-neutral-500">Hit Rate</span>{((month.wins / Math.max(month.totalTickets, 1)) * 100).toFixed(1)}%</div>
+                  <div><span className="block text-[9px] uppercase tracking-widest text-neutral-500">Avg kvota</span>{month.averageOdds.toFixed(2)}</div>
+                  <div><span className="block text-[9px] uppercase tracking-widest text-neutral-500">Profit RSD</span>{formatRsd(month.profitRsd)}</div>
+                </div>
+              </button>
+            ))}
+
+            {(stats?.monthlyBreakdown || []).length === 0 && (
+              <div className="text-center py-10 text-neutral-500 font-bold">Nema završenih tiketa za statistiku.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="glass p-5 md:p-6 rounded-[2rem]">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold">Detaljan pregled</h2>
+              <p className="text-sm text-neutral-500 capitalize">{selectedMonth?.month || 'Izaberi mesec za detalje'}</p>
+            </div>
+            {selectedMonth && (
+              <div className="text-right">
+                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest">Units P/L</div>
+                <div className={`text-2xl font-display font-black ${selectedMonth.profitUnits >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                  {formatUnits(selectedMonth.profitUnits)}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-3">
             {(stats?.monthlyBreakdown || []).map((month) => (

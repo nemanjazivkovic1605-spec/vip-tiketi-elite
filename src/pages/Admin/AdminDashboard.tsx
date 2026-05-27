@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect } from 'react';
+﻿import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { 
@@ -138,6 +138,7 @@ export default function AdminDashboard() {
   const [settings, setSettings] = useState<AppSettings>(() => mockSettingsService.getSettings());
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [tipPageSize, setTipPageSize] = useState(8);
 
   const availableLeagues = useMemo(() => {
     return Array.from(new Set(availableMatches.map((match) => match.league).filter(Boolean))).sort();
@@ -222,38 +223,77 @@ export default function AdminDashboard() {
     return tips;
   }, [tips, tipPublicationFilter]);
 
-  useEffect(() => {
-    refreshData();
-    const unsubscribeTips = mockTipsService.subscribe(refreshData);
-    const unsubscribeMatches = importedMatchesService.subscribe(refreshData);
-    const unsubscribeDailyAnalyses = dailyAnalysesService.subscribeAdmin(refreshData);
-    const unsubscribeNotifications = authService.subscribeAdminNotifications(setNotifications);
-    return () => {
-      unsubscribeTips();
-      unsubscribeMatches();
-      unsubscribeDailyAnalyses();
-      unsubscribeNotifications();
-    };
-  }, []);
+  const visibleTips = useMemo(() => filteredTips.slice(0, tipPageSize), [filteredTips, tipPageSize]);
+  const hasMoreTips = filteredTips.length > visibleTips.length;
+  const unreadNotifications = useMemo(() => notifications.filter((notification) => !notification.read), [notifications]);
+  const notificationsRef = useRef(notifications);
 
-  const refreshData = async () => {
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
+
+  const refreshData = useCallback(async (options: { includeUsers?: boolean; includeNotifications?: boolean } = {}) => {
+    const includeUsers = options.includeUsers ?? true;
+    const includeNotifications = options.includeNotifications ?? true;
+
     const [fetchedTips, fetchedMatches, fetchedStats, fetchedDailyAnalyses] = await Promise.all([
       mockTipsService.getAllTips(),
       importedMatchesService.getMatches(),
       mockTipsService.getStats(),
       dailyAnalysesService.getAdminAnalyses(),
     ]);
-    const fetchedUsers = await authService.getUsers();
-    const fetchedNotifications = await authService.getAdminNotifications();
+
+    const fetchedUsers = includeUsers ? await authService.getUsers() : userList;
+    const fetchedNotifications = includeNotifications
+      ? await authService.getAdminNotifications()
+      : notificationsRef.current;
+
+    const existingNotificationMap = new Map(notificationsRef.current.map((notification) => [notification.id, notification]));
+    const mergedNotifications = fetchedNotifications.map((notification) => {
+      const previous = existingNotificationMap.get(notification.id);
+      return previous && (previous.read || previous.isRead)
+        ? {
+          ...notification,
+          read: previous.read,
+          isRead: previous.isRead,
+          readAt: previous.readAt || notification.readAt,
+          readBy: previous.readBy || notification.readBy,
+        }
+        : notification;
+    });
+
     await mockTipsService.syncTicketMetadata(fetchedTips);
     await mockTipsService.syncPublicTickets(fetchedTips);
+
     setTips(fetchedTips);
     setAvailableMatches(fetchedMatches);
     setStats(fetchedStats);
     setDailyAnalyses(fetchedDailyAnalyses);
-    setUserList(fetchedUsers);
-    setNotifications(fetchedNotifications);
-  };
+    if (includeUsers) setUserList(fetchedUsers);
+    if (includeNotifications) setNotifications(mergedNotifications);
+  }, [userList]);
+
+  useEffect(() => {
+    void refreshData({ includeUsers: true, includeNotifications: true });
+
+    const unsubscribeTips = mockTipsService.subscribe(() => {
+      void refreshData({ includeUsers: false, includeNotifications: false });
+    });
+    const unsubscribeMatches = importedMatchesService.subscribe(() => {
+      void refreshData({ includeUsers: false, includeNotifications: false });
+    });
+    const unsubscribeDailyAnalyses = dailyAnalysesService.subscribeAdmin(() => {
+      void refreshData({ includeUsers: false, includeNotifications: false });
+    });
+    const unsubscribeNotifications = authService.subscribeAdminNotifications(setNotifications);
+
+    return () => {
+      unsubscribeTips();
+      unsubscribeMatches();
+      unsubscribeDailyAnalyses();
+      unsubscribeNotifications();
+    };
+  }, [refreshData]);
 
   const handleCreateTip = async (newTip: Tip) => {
     if (editingTip) {
@@ -1336,8 +1376,6 @@ export default function AdminDashboard() {
     { id: 'settings', label: 'Podešavanja', icon: <Settings size={20} /> },
   ];
 
-  const unreadNotifications = notifications.filter((notification) => !notification.read);
-
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.06),transparent_34%),#0a0a0a] flex flex-col md:flex-row">
       {/* Sidebar */}
@@ -2103,7 +2141,7 @@ export default function AdminDashboard() {
                     )}
 
                     <div className="grid gap-6">
-                       {filteredTips.map(tip => (
+                       {visibleTips.map(tip => (
                          <div
                            key={tip.id}
                            onClick={() => handleOpenEditModal(tip)}
@@ -2251,7 +2289,7 @@ export default function AdminDashboard() {
                                     </div>
                          </div>
                         ))}
-                       {filteredTips.length === 0 && (
+                       {visibleTips.length === 0 && (
                          <div className="glass p-8 rounded-[2rem] border-white/5 text-center">
                            <p className="text-neutral-500 font-bold">Nema tiketa za izabrani filter.</p>
                          </div>
@@ -2259,6 +2297,15 @@ export default function AdminDashboard() {
                      </div>
                          </div>
                        ))}
+                       {hasMoreTips && (
+                         <button
+                           type="button"
+                           onClick={() => setTipPageSize((prev) => prev + 8)}
+                           className="mt-4 inline-flex items-center justify-center rounded-2xl border border-gold-500/25 bg-gold-500/10 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gold-300 transition hover:bg-gold-500/20"
+                         >
+                           Prikaži još tiketa
+                         </button>
+                       )}
                     </div>
                  </motion.div>
               )}

@@ -11,9 +11,8 @@ export default function LiveResults() {
 
   const fetchData = async () => {
     setLoading(true);
-    const allMatches = await resultsProvider.getAllMatches();
-    const filtered = allMatches.filter(m => m.date === selectedDate);
-    setMatches(filtered);
+    const matchesForDate = await resultsProvider.getMatchesForDate(selectedDate);
+    setMatches(matchesForDate);
     setLoading(false);
   };
 
