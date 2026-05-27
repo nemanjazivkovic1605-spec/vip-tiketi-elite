@@ -31,6 +31,7 @@ import { withTimeout } from '../utils/async';
 
 const TRUSTED_ADMIN_EMAILS = ['nemanjazivkovic1605@gmail.com'];
 const AUTH_REQUEST_TIMEOUT_MS = 12000;
+const ADMIN_NOTIFICATION_READ_STORAGE_PREFIX = 'elite-admin-notification-reads';
 
 export type RegisterPayload = {
   email: string;
@@ -90,6 +91,27 @@ const createDetailedError = (stage: string, error: unknown) => {
 
 const normalizeEmail = (email?: string | null) => (email || '').trim().toLowerCase();
 
+type NotificationReadReceipt = { readAt: string; readBy: string | null };
+
+const getNotificationReadStorageKey = () =>
+  `${ADMIN_NOTIFICATION_READ_STORAGE_PREFIX}:${auth.currentUser?.uid || 'admin'}`;
+
+const getStoredNotificationReadReceipts = (): Record<string, NotificationReadReceipt> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(getNotificationReadStorageKey()) || '{}') as Record<string, NotificationReadReceipt>;
+  } catch {
+    return {};
+  }
+};
+
+const storeNotificationReadReceipt = (notificationId: string, receipt: NotificationReadReceipt) => {
+  if (typeof window === 'undefined') return;
+  const receipts = getStoredNotificationReadReceipts();
+  receipts[notificationId] = receipt;
+  window.localStorage.setItem(getNotificationReadStorageKey(), JSON.stringify(receipts));
+};
+
 export const isTrustedAdminEmail = (email?: string | null) =>
   TRUSTED_ADMIN_EMAILS.includes(normalizeEmail(email));
 
@@ -122,6 +144,23 @@ const getExpiryDate = (durationDays: number, fromDate = new Date()) => {
 
 const getVipExpiresAt = (data: DocumentData) =>
   toIsoString(data.vipExpiresAt) || toIsoString(data.vip_expires_at);
+
+const mapAdminNotification = (notificationId: string, data: DocumentData): AdminNotification => {
+  const localReceipt = getStoredNotificationReadReceipts()[notificationId];
+  const read = data.read === true || data.isRead === true || Boolean(localReceipt);
+  return {
+    id: notificationId,
+    type: data.type || 'new_user_registration',
+    userEmail: data.userEmail || '',
+    username: data.username || '',
+    selectedPlan: data.selectedPlan || 'free',
+    createdAt: toIsoString(data.createdAt) || new Date().toISOString(),
+    read,
+    isRead: read,
+    readAt: toIsoString(data.readAt) || localReceipt?.readAt || null,
+    readBy: data.readBy || localReceipt?.readBy || null,
+  } as AdminNotification;
+};
 
 const isMembershipValue = (value: unknown): value is MembershipStatus =>
   typeof value === 'string' && Object.values(MembershipStatus).includes(value as MembershipStatus);
@@ -477,6 +516,9 @@ export const authService = {
         selectedPlan: activePlan.id,
         createdAt: serverTimestamp(),
         read: false,
+        isRead: false,
+        readAt: null,
+        readBy: null,
       });
       await batch.commit();
     })();
@@ -584,6 +626,9 @@ export const authService = {
       selectedPlan: plan.id,
       createdAt: serverTimestamp(),
       read: false,
+      isRead: false,
+      readAt: null,
+      readBy: null,
     });
     await batch.commit();
   },
@@ -726,45 +771,33 @@ export const authService = {
   getAdminNotifications: async (): Promise<AdminNotification[]> => {
     const snapshot = await getDocs(collection(db, 'adminNotifications'));
     return snapshot.docs
-      .map((notificationDoc) => {
-        const data = notificationDoc.data();
-        return {
-          id: notificationDoc.id,
-          type: data.type || 'new_user_registration',
-          userEmail: data.userEmail || '',
-          username: data.username || '',
-          selectedPlan: data.selectedPlan || 'free',
-          createdAt: toIsoString(data.createdAt) || new Date().toISOString(),
-          read: data.read === true,
-        } as AdminNotification;
-      })
+      .map((notificationDoc) => mapAdminNotification(notificationDoc.id, notificationDoc.data()))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
   subscribeAdminNotifications: (callback: (notifications: AdminNotification[]) => void) => {
     return onSnapshot(collection(db, 'adminNotifications'), (snapshot) => {
       callback(snapshot.docs
-        .map((notificationDoc) => {
-          const data = notificationDoc.data();
-          return {
-            id: notificationDoc.id,
-            type: data.type || 'new_user_registration',
-            userEmail: data.userEmail || '',
-            username: data.username || '',
-            selectedPlan: data.selectedPlan || 'free',
-            createdAt: toIsoString(data.createdAt) || new Date().toISOString(),
-            read: data.read === true,
-          } as AdminNotification;
-        })
+        .map((notificationDoc) => mapAdminNotification(notificationDoc.id, notificationDoc.data()))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     });
   },
 
   markNotificationRead: async (notificationId: string) => {
-    await updateDoc(doc(db, 'adminNotifications', notificationId), {
-      read: true,
-      updatedAt: serverTimestamp(),
-    });
+    const readBy = auth.currentUser?.uid || null;
+    const readAt = new Date().toISOString();
+    storeNotificationReadReceipt(notificationId, { readAt, readBy });
+    try {
+      await updateDoc(doc(db, 'adminNotifications', notificationId), {
+        read: true,
+        isRead: true,
+        readAt: serverTimestamp(),
+        readBy,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.warn('Notification read status is stored locally until Firestore update is available.', error);
+    }
   },
 
   deleteUser: async (user: User) => {

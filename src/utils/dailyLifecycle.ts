@@ -14,3 +14,7 @@ export const isVisibleInDailyFeed = (
 ) =>
   analysis.status === 'ACTIVE'
   || (analysis.status === 'WON' && getDailyPublicationMeta(analysis).publishedDate === todayInDailyTimezone());
+
+export const isVisibleInAdminActiveDailyList = (
+  analysis: Pick<DailyAnalysisItem, 'status' | 'enabled' | 'hidden'>,
+) => analysis.enabled && !analysis.hidden && analysis.status === 'ACTIVE';

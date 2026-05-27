@@ -19,7 +19,7 @@ import AdminOverview from '../../components/admin/AdminOverview';
 import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 import { evaluateImportedMatchPrediction } from '../../utils/predictionResults';
 import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyPublishedAt, getDailyPublicationInputValue, getKickoffTime } from '../../utils/dailyPublication';
-import { isFinishedDailyAnalysisStatus, isVisibleInDailyFeed } from '../../utils/dailyLifecycle';
+import { isFinishedDailyAnalysisStatus, isVisibleInAdminActiveDailyList } from '../../utils/dailyLifecycle';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
 const dailyPredictionOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5', 'Over poeni', 'Handicap favorit'];
@@ -159,7 +159,7 @@ export default function AdminDashboard() {
 
   const filteredDailyAnalyses = useMemo(() => dailyAnalyses.filter((analysis) => (
     dailyLifecycleFilter === 'active'
-      ? analysis.enabled && !analysis.hidden && isVisibleInDailyFeed(analysis)
+      ? isVisibleInAdminActiveDailyList(analysis)
       : isFinishedDailyAnalysisStatus(analysis.status)
   )), [dailyAnalyses, dailyLifecycleFilter]);
 
@@ -826,8 +826,17 @@ export default function AdminDashboard() {
   };
 
   const handleMarkNotificationRead = async (notificationId: string) => {
-    await authService.markNotificationRead(notificationId);
-    await refreshData();
+    setNotifications((current) => current.map((notification) => (
+      notification.id === notificationId
+        ? { ...notification, read: true, isRead: true, readAt: new Date().toISOString(), readBy: user?.id || null }
+        : notification
+    )));
+    try {
+      await authService.markNotificationRead(notificationId);
+    } catch (error) {
+      console.error('Mark notification read failed:', error);
+      await refreshData();
+    }
   };
 
   const handleDeleteUser = async (userId: string) => {

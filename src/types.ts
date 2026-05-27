@@ -156,6 +156,9 @@ export interface AdminNotification {
   selectedPlan: string;
   createdAt: string;
   read: boolean;
+  isRead?: boolean;
+  readAt?: string | null;
+  readBy?: string | null;
 }
 
 export interface GlobalStats {
