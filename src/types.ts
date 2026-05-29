@@ -99,6 +99,8 @@ export interface FootballStanding {
 export interface Tip {
   id: string;
   source?: 'admin' | 'demo';
+  sourceProvider?: 'api-football' | 'football-data.org';
+  fixtureId?: string;
   publicationStatus?: TipPublicationStatus;
   publishedDate?: string;
   publishedTime?: string;

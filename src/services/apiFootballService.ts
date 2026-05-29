@@ -1,13 +1,19 @@
 import { DailyAnalysisAccess, DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisSport } from '../types';
+import { auth } from '../lib/firebase';
 import { createDailyPublicationMeta } from '../utils/dailyPublication';
 
-const FOOTBALL_API_BASE_URL = 'https://v3.football.api-sports.io';
-const BASKETBALL_API_BASE_URL = 'https://v1.basketball.api-sports.io';
 const TIMEZONE = 'Europe/Belgrade';
 const FOOTBALL_CANDIDATE_LIMIT = 40;
 const BASKETBALL_CANDIDATE_LIMIT = 30;
 const DISPLAY_LIMIT = 10;
 const MIN_QUALITY_SCORE = 58;
+const SPORTS_API_TIMEOUT_MS = 12000;
+
+const dailyApiDebug = (event: string, details: Record<string, unknown>) => {
+  if (import.meta.env.DEV) {
+    console.log(`[daily-api-debug] ${event}`, details);
+  }
+};
 
 type ApiFixture = {
   fixture: {
@@ -55,40 +61,40 @@ type RankedAnalysis = DailyAnalysisItem & {
   qualityScore: number;
 };
 
-const getApiKey = (sport: DailyAnalysisSport) => {
-  if (sport === 'basketball') {
-    return import.meta.env.VITE_BASKETBALL_API_KEY?.trim() || import.meta.env.VITE_FOOTBALL_API_KEY?.trim();
-  }
-
-  return import.meta.env.VITE_FOOTBALL_API_KEY?.trim();
-};
-
 const requestSportsApi = async <T>(
   sport: DailyAnalysisSport,
   path: string,
   params: Record<string, string | number>,
   signal?: AbortSignal,
 ) => {
-  const apiKey = getApiKey(sport);
-  if (!apiKey) return null;
-
-  const baseUrl = sport === 'basketball' ? BASKETBALL_API_BASE_URL : FOOTBALL_API_BASE_URL;
-  const url = new URL(`${baseUrl}${path}`);
+  const url = new URL('/api/fetch-daily-sports', window.location.origin);
+  url.searchParams.set('sport', sport);
+  url.searchParams.set('endpoint', path);
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, String(value)));
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), SPORTS_API_TIMEOUT_MS);
+  const abortFromParent = () => controller.abort();
+  signal?.addEventListener('abort', abortFromParent, { once: true });
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'x-apisports-key': apiKey,
-    },
-    signal,
-  });
+  try {
+    const token = await auth.currentUser?.getIdToken().catch(() => undefined);
+    const response = await fetch(url.toString(), {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: controller.signal,
+    });
 
-  if (!response.ok) {
-    throw new Error(`${sport} request failed: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`${sport} request failed: ${response.status}`);
+    }
+
+    const payload = await response.json() as { response?: T; errors?: unknown };
+    return payload.response || null;
+  } finally {
+    window.clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortFromParent);
   }
-
-  const payload = await response.json() as { response?: T; errors?: unknown };
-  return payload.response || null;
 };
 
 const stableNumber = (seed: string, min: number, max: number) => {
@@ -390,6 +396,7 @@ const basketballCandidateScore = (game: BasketballGame) => {
 const fetchFootballAnalyses = async (date: string, signal?: AbortSignal): Promise<RankedAnalysis[]> => {
   try {
     const fixtures = await requestSportsApi<ApiFixture[]>('football', '/fixtures', { date, timezone: TIMEZONE }, signal);
+    dailyApiDebug('football fixtures returned', { date, count: fixtures?.length || 0 });
     if (!fixtures?.length) return [];
 
     const candidates = fixtures
@@ -397,8 +404,10 @@ const fetchFootballAnalyses = async (date: string, signal?: AbortSignal): Promis
       .sort((a, b) => footballCandidateScore(b) - footballCandidateScore(a))
       .slice(0, FOOTBALL_CANDIDATE_LIMIT);
 
+    dailyApiDebug('football candidates selected', { date, count: candidates.length });
     return Promise.all(candidates.map((fixture, index) => mapFootballFixture(fixture, index)));
-  } catch {
+  } catch (error) {
+    dailyApiDebug('football fixtures failed', { date, error: error instanceof Error ? error.message : String(error) });
     return [];
   }
 };
@@ -406,14 +415,18 @@ const fetchFootballAnalyses = async (date: string, signal?: AbortSignal): Promis
 const fetchBasketballAnalyses = async (date: string, signal?: AbortSignal): Promise<RankedAnalysis[]> => {
   try {
     const games = await requestSportsApi<BasketballGame[]>('basketball', '/games', { date, timezone: TIMEZONE }, signal);
+    dailyApiDebug('basketball games returned', { date, count: games?.length || 0 });
     if (!games?.length) return [];
 
-    return games
+    const candidates = games
       .filter((game) => game.id && game.teams.home.name && game.teams.away.name)
       .sort((a, b) => basketballCandidateScore(b) - basketballCandidateScore(a))
-      .slice(0, BASKETBALL_CANDIDATE_LIMIT)
-      .map((game, index) => mapBasketballGame(game, index));
-  } catch {
+      .slice(0, BASKETBALL_CANDIDATE_LIMIT);
+
+    dailyApiDebug('basketball candidates selected', { date, count: candidates.length });
+    return candidates.map((game, index) => mapBasketballGame(game, index));
+  } catch (error) {
+    dailyApiDebug('basketball games failed', { date, error: error instanceof Error ? error.message : String(error) });
     return [];
   }
 };
@@ -425,8 +438,18 @@ export const apiFootballService = {
       fetchBasketballAnalyses(date, signal),
     ]);
 
-    return [...football, ...basketball]
-      .filter((item) => item.qualityScore >= MIN_QUALITY_SCORE)
+    const allCandidates = [...football, ...basketball];
+    const qualityCandidates = allCandidates.filter((item) => item.qualityScore >= MIN_QUALITY_SCORE);
+    const pool = qualityCandidates.length > 0 ? qualityCandidates : allCandidates;
+
+    dailyApiDebug('daily selection pool', {
+      date,
+      returnedByProviders: allCandidates.length,
+      passedQuality: qualityCandidates.length,
+      selectedPool: pool.length,
+    });
+
+    return pool
       .sort((a, b) => {
         const tierCompare = leagueTier(b.league, b.sport || 'football') - leagueTier(a.league, a.sport || 'football');
         if (tierCompare !== 0) return tierCompare;

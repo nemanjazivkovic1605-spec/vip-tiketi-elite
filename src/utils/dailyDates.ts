@@ -1,20 +1,22 @@
-const formatIsoDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+const DAILY_TIMEZONE = 'Europe/Belgrade';
+
+const formatIsoDate = (date: Date) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: DAILY_TIMEZONE }).format(date);
+
+const addDaysToIsoDate = (isoDate: string, days: number) => {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days, 12));
+  return formatIsoDate(date);
 };
 
 export const getDailyAnalysisDates = () => {
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  const dayAfterTomorrow = new Date(today);
-  dayAfterTomorrow.setDate(today.getDate() + 2);
+  const today = formatIsoDate(new Date());
+  const tomorrow = addDaysToIsoDate(today, 1);
+  const dayAfterTomorrow = addDaysToIsoDate(today, 2);
 
   return [
-    { key: 'today', label: 'Danas', date: formatIsoDate(today) },
-    { key: 'tomorrow', label: 'Sutra', date: formatIsoDate(tomorrow) },
-    { key: 'dayAfterTomorrow', label: 'Prekosutra', date: formatIsoDate(dayAfterTomorrow) },
+    { key: 'today', label: 'Danas', date: today },
+    { key: 'tomorrow', label: 'Sutra', date: tomorrow },
+    { key: 'dayAfterTomorrow', label: 'Prekosutra', date: dayAfterTomorrow },
   ] as const;
 };

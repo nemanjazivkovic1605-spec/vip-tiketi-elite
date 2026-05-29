@@ -8,7 +8,17 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "import:history:feb-2026": "tsx scripts/import-february-2026-history.ts",
+    "import:history:feb-2026:write": "tsx scripts/import-february-2026-history.ts --write",
+    "rebalance:history:feb-2026": "tsx scripts/rebalance-february-2026-history.ts",
+    "rebalance:history:feb-2026:write": "tsx scripts/rebalance-february-2026-history.ts --write",
+    "reshape:history:feb-2026": "tsx scripts/reshape-february-2026-history.ts",
+    "reshape:history:feb-2026:write": "tsx scripts/reshape-february-2026-history.ts --write",
+    "realize:history:feb-2026": "tsx scripts/realize-february-2026-history.ts",
+    "realize:history:feb-2026:write": "tsx scripts/realize-february-2026-history.ts --write",
+    "realize:history:mar-2026": "tsx scripts/realize-march-2026-history.ts",
+    "realize:history:mar-2026:write": "tsx scripts/realize-march-2026-history.ts --write"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

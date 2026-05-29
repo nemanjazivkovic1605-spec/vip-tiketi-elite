@@ -249,7 +249,9 @@ export default function AdminDashboard() {
       ? await authService.getAdminNotifications()
       : notificationsRef.current;
 
-    const existingNotificationMap = new Map(notificationsRef.current.map((notification) => [notification.id, notification]));
+    const existingNotificationMap = new Map<string, AdminNotification>(
+      notificationsRef.current.map((notification) => [notification.id, notification]),
+    );
     const mergedNotifications = fetchedNotifications.map((notification) => {
       const previous = existingNotificationMap.get(notification.id);
       return previous && (previous.read || previous.isRead)
@@ -272,8 +274,20 @@ export default function AdminDashboard() {
     console.debug('[daily-admin-debug] view split', {
       firestoreCount: fetchedDailyAnalyses.length,
       statuses: fetchedDailyAnalyses.map((analysis) => analysis.status),
+      dates: fetchedDailyAnalyses.reduce<Record<string, number>>((acc, analysis) => {
+        acc[analysis.date] = (acc[analysis.date] || 0) + 1;
+        return acc;
+      }, {}),
       activeCount: debugActive.length,
       finishedCount: debugFinished.length,
+      activeByDate: debugActive.reduce<Record<string, number>>((acc, analysis) => {
+        acc[analysis.date] = (acc[analysis.date] || 0) + 1;
+        return acc;
+      }, {}),
+      finishedByDate: debugFinished.reduce<Record<string, number>>((acc, analysis) => {
+        acc[analysis.date] = (acc[analysis.date] || 0) + 1;
+        return acc;
+      }, {}),
     });
 
     setTips(fetchedTips);
@@ -740,11 +754,19 @@ export default function AdminDashboard() {
     setDailyPullLoadingDate(date);
     try {
       const result = await dailyAnalysesService.pullFromApiForDate(date);
-      setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}. Analize se generišu samo ručnim klikom.`);
+      setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}${result.failed ? `, neuspešno ${result.failed}` : ''}. Analize se generišu samo ručnim klikom.`);
       await refreshData();
+      console.debug('[daily-admin-debug] pull finished and refreshed', {
+        requestedDate: date,
+        label,
+        fetched: result.fetched,
+        saved: result.saved,
+        skippedManualOverride: result.skippedManualOverride,
+      });
     } catch (error) {
       console.error('Daily tips API pull failed:', error);
-      setDailyPullMessage(`${label}: povlačenje nije uspelo. Proverite API limit ili ključ.`);
+      const message = error instanceof Error ? error.message : 'Proverite API limit ili ključ.';
+      setDailyPullMessage(`${label}: povlačenje nije uspelo. ${message}`);
     } finally {
       setDailyPullLoadingDate('');
     }

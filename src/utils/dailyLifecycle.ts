@@ -37,5 +37,7 @@ export const isVisibleInAdminActiveDailyList = (
   analysis: Pick<DailyAnalysisItem, 'status' | 'enabled' | 'hidden'>,
 ) => {
   const normalizedStatus = normalizeDailyAnalysisStatus(analysis.status as string | undefined);
-  return analysis.enabled && !analysis.hidden && (normalizedStatus === 'ACTIVE' || normalizedStatus === 'POSTPONED');
+  const enabled = analysis.enabled !== false;
+  const hidden = analysis.hidden === true;
+  return enabled && !hidden && (normalizedStatus === 'ACTIVE' || normalizedStatus === 'POSTPONED');
 };

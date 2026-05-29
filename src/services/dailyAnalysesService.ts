@@ -27,6 +27,33 @@ const DAILY_PUBLIC_CACHE_KEY = 'daily-analyses:public';
 const DAILY_FREE_CACHE_KEY = 'daily-analyses:free';
 const invalidateDailyIndexCache = () => invalidateCachedQueries(DAILY_PUBLIC_CACHE_KEY, DAILY_FREE_CACHE_KEY);
 
+const dailyAdminDebug = (event: string, details: Record<string, unknown>) => {
+  if (import.meta.env.DEV) {
+    console.log(`[daily-admin-debug] ${event}`, details);
+  }
+};
+
+const withPullTimeout = async <T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+  onTimeout?: () => void,
+): Promise<T> => {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(message));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+};
+
 type DailyAnalysesAccess = {
   canAccessFree: boolean;
   canAccessVip: boolean;
@@ -293,12 +320,6 @@ const sanitizeLockedVipAnalysis = (analysis: DailyAnalysisItem): DailyAnalysisIt
   league: analysis.league,
   date: analysis.date,
   time: analysis.time,
-  matchTime: analysis.matchTime,
-  kickoffTime: analysis.kickoffTime,
-  publishedDate: analysis.publishedDate,
-  publishedTime: analysis.publishedTime,
-  publishTime: analysis.publishTime,
-  publishedAt: analysis.publishedAt,
   type: 'VIP',
   status: analysis.status,
   locked: true,
@@ -470,7 +491,6 @@ const saveApiAnalysisIfAllowed = async (analysis: DailyAnalysisItem) => {
     updatedAt: serverTimestamp(),
     createdAt: existingSnapshot.exists() ? existingSnapshot.data().createdAt : serverTimestamp(),
   }), { merge: true });
-  await syncLifecycleFromDoc(id);
 
   return { saved: true, skippedManualOverride: false };
 };
@@ -502,12 +522,18 @@ export const dailyAnalysesService = {
       return acc;
     }, {});
 
-    console.debug('[daily-admin-debug] fetched analyses', {
+    dailyAdminDebug('fetched analyses', {
       count: analyses.length,
       statuses: statusMap,
+      dates: analyses.reduce<Record<string, number>>((acc, analysis) => {
+        acc[analysis.date] = (acc[analysis.date] || 0) + 1;
+        return acc;
+      }, {}),
     });
 
-    await Promise.all(analyses.map((analysis) => syncReadIndexes(analysis)));
+    await Promise.all(analyses
+      .filter((analysis) => analysis.manualOverride || isFinishedDailyAnalysisStatus(analysis.status))
+      .map((analysis) => syncReadIndexes(analysis)));
     return analyses;
   },
 
@@ -658,7 +684,7 @@ export const dailyAnalysesService = {
     return { updated: true, result, status, message };
   },
 
-  pullFromApiForDate: async (date: string): Promise<{ saved: number; skippedManualOverride: number; fetched: number }> => {
+  pullFromApiForDate: async (date: string): Promise<{ saved: number; skippedManualOverride: number; fetched: number; failed: number }> => {
     const previous = inFlightPulls.get(date);
     if (previous) previous.abort();
 
@@ -666,17 +692,67 @@ export const dailyAnalysesService = {
     inFlightPulls.set(date, controller);
 
     try {
+      dailyAdminDebug('api pull started', { requestedDate: date });
       const { apiFootballService } = await import('./apiFootballService');
-      const analyses = await apiFootballService.fetchDailyAnalysesForDate(date, controller.signal);
-      let saved = 0;
-      let skippedManualOverride = 0;
-      for (const analysis of analyses) {
-        const result = await saveApiAnalysisIfAllowed(analysis);
-        if (result.saved) saved += 1;
-        if (result.skippedManualOverride) skippedManualOverride += 1;
+      const analyses = await withPullTimeout(
+        apiFootballService.fetchDailyAnalysesForDate(date, controller.signal),
+        25000,
+        'Povlačenje API tipova je isteklo. Pokušajte ponovo za par minuta.',
+        () => controller.abort(),
+      );
+      dailyAdminDebug('api pull returned analyses', {
+        requestedDate: date,
+        fetched: analyses.length,
+        dates: analyses.map((analysis) => analysis.date),
+        statuses: analyses.map((analysis) => analysis.status || 'ACTIVE'),
+      });
+      const saveResults = await Promise.all(analyses.map(async (analysis) => {
+        try {
+          const result = await withPullTimeout(
+            saveApiAnalysisIfAllowed(analysis),
+            30000,
+            `Upis dnevnog tipa je istekao: ${analysis.homeTeam} - ${analysis.awayTeam}`,
+          );
+          dailyAdminDebug('api pull saved item', {
+            requestedDate: date,
+            id: analysis.id,
+            date: analysis.date,
+            status: analysis.status || 'ACTIVE',
+            saved: result.saved,
+            skippedManualOverride: result.skippedManualOverride,
+          });
+          return { ...result, failed: false, error: '' };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          dailyAdminDebug('api pull save item failed', {
+            requestedDate: date,
+            id: analysis.id,
+            date: analysis.date,
+            status: analysis.status || 'ACTIVE',
+            error: message,
+          });
+          return { saved: false, skippedManualOverride: false, failed: true, error: message };
+        }
+      }));
+
+      const saved = saveResults.filter((result) => result.saved).length;
+      const skippedManualOverride = saveResults.filter((result) => result.skippedManualOverride).length;
+      const failed = saveResults.filter((result) => result.failed).length;
+      const firstError = saveResults.find((result) => result.failed)?.error;
+
+      if (saved === 0 && skippedManualOverride === 0 && firstError) {
+        throw new Error(firstError);
       }
 
-      return { saved, skippedManualOverride, fetched: analyses.length };
+      dailyAdminDebug('api pull saved analyses', {
+        requestedDate: date,
+        fetched: analyses.length,
+        saved,
+        skippedManualOverride,
+        failed,
+      });
+
+      return { saved, skippedManualOverride, fetched: analyses.length, failed };
     } finally {
       if (inFlightPulls.get(date) === controller) {
         inFlightPulls.delete(date);
