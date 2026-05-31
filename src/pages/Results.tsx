@@ -4,6 +4,7 @@ import { AlertCircle, Calendar, CheckCircle2, Clock, Search, XCircle } from 'luc
 import { mockTipsService } from '../services/mockTips';
 import { Match, TicketStatus, Tip } from '../types';
 import { formatTicketPublishedAt, isPublicFinishedTicket } from '../utils/tickets';
+import { useAuth } from '../hooks/useAuth';
 
 type PublishedResult = {
   tip: Tip;
@@ -53,6 +54,7 @@ const getStatusMeta = (status: TicketStatus) => {
 };
 
 export default function Results() {
+  const { canAccessFree, canAccessVip } = useAuth();
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -63,16 +65,18 @@ export default function Results() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const publishedTips = await mockTipsService.getPublishedTips();
+        const publishedTips = await mockTipsService.getVisibleHistoryTips({ canAccessVip });
         setTips(publishedTips);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-    return mockTipsService.subscribe(fetchData);
-  }, []);
+    void fetchData();
+    return canAccessVip
+      ? mockTipsService.subscribe(() => void fetchData(), { canAccessFree, canAccessVip })
+      : mockTipsService.subscribePublicStats(() => void fetchData());
+  }, [canAccessFree, canAccessVip]);
 
   const results = useMemo<PublishedResult[]>(() => {
     return tips

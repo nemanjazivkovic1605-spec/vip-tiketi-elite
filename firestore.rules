@@ -104,6 +104,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Optional precomputed public aggregates. These collections contain no
+    // private ticket payloads and remain readable without authentication.
+    match /publicStats/{statId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /publicMonthlyStats/{statId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Full daily analysis data is limited to VIP/admin clients.
     match /dailyAnalyses/{analysisId} {
       allow read: if isAdmin() || hasVipAccess();
