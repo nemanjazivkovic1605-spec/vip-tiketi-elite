@@ -120,7 +120,7 @@ export default function Home() {
     <div className="overflow-hidden bg-[#050505]">
       <section className="relative overflow-hidden border-b border-white/10 bg-[#050505] px-5 py-9 md:px-6 md:py-14">
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,transparent,rgba(245,124,0,0.06))]" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-full overflow-hidden md:w-[76%] lg:w-[68%]">
+        <div className="pointer-events-none absolute right-0 top-0 h-[390px] w-full overflow-hidden md:h-[430px] md:w-[76%] lg:h-[470px] lg:w-[68%]">
           <motion.div
             initial={{ opacity: 0, x: 24 }}
             animate={{ opacity: 1, x: 0 }}
@@ -132,7 +132,7 @@ export default function Home() {
               <img
                 src="/elite-football-hero.png"
                 alt="Fudbalska lopta sa narandžastim svetlosnim efektom na stadionu"
-                className="absolute inset-0 z-[1] h-full w-full object-cover object-[67%_center] opacity-80 md:opacity-100 lg:object-center"
+                className="absolute inset-0 z-[1] h-full w-full object-cover object-[67%_center] opacity-[0.85] md:opacity-100 lg:object-center"
                 onError={() => setHeroImageFailed(true)}
               />
             ) : (
