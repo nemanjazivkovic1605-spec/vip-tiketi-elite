@@ -144,8 +144,14 @@ export default function Home() {
               </div>
             )}
           </motion.div>
-          <div className="absolute inset-0 z-[2] bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.72)_26%,rgba(5,5,5,0.34)_52%,rgba(5,5,5,0.02)_100%)] md:bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.82)_12%,rgba(5,5,5,0.38)_34%,rgba(5,5,5,0.00)_78%)]" />
-          <div className="absolute inset-x-0 bottom-0 z-[2] h-24 bg-[linear-gradient(180deg,transparent,rgba(5,5,5,0.84))]" />
+          <div
+            className="absolute inset-0 z-[2] bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.72)_26%,rgba(5,5,5,0.34)_52%,rgba(5,5,5,0.02)_100%)] md:bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.82)_12%,rgba(5,5,5,0.38)_34%,rgba(5,5,5,0.00)_78%)]"
+            style={{ backgroundColor: 'transparent' }}
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 z-[2] h-24 bg-[linear-gradient(180deg,transparent,rgba(5,5,5,0.84))]"
+            style={{ backgroundColor: 'transparent' }}
+          />
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl">
