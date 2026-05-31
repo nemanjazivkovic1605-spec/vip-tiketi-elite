@@ -23,35 +23,60 @@ const signedUnits = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(
 
 export function TopNoticeBar({
   latestMonthProfitUnits,
-  yesterdayWonOdds,
+  roi,
   completedCount,
   hitRate,
 }: {
   latestMonthProfitUnits: number | null;
-  yesterdayWonOdds: number | null;
+  roi: number | null;
   completedCount: number | null;
   hitRate: number | null;
 }) {
-  const items = [
-    { label: 'Poslednji mesec', value: latestMonthProfitUnits === null ? 'Uskoro' : signedUnits(latestMonthProfitUnits) },
-    { label: 'Juče pogođena kvota', value: yesterdayWonOdds === null ? 'Nema podataka' : yesterdayWonOdds.toFixed(2) },
-    { label: 'Završeni tiketi', value: completedCount === null ? 'Uskoro' : `+${completedCount}` },
-    { label: 'Prolaznost', value: hitRate === null ? 'Uskoro' : `${hitRate.toFixed(1)}%` },
+  const offerItems = [
+    { label: 'VIP TIKET DANA', value: '15€ • Kvota 2.50+', target: '/#vip-ticket-day' },
+    { label: 'SAFE PICK DANA', value: '10€ • Kvota 1.50–3.00', target: '/#safe-pick-day' },
+    { label: 'SILVER 7 DANA', value: '15€', target: '/#pricing' },
+    { label: 'GOLD 30 DANA', value: '40€', target: '/#pricing' },
+    { label: 'ELITE 90 DANA', value: '100€', target: '/#pricing' },
   ];
+  const statsItems = [
+    latestMonthProfitUnits === null ? null : { label: 'POSLEDNJI MESEC PROFIT', value: signedUnits(latestMonthProfitUnits), target: '/stats' },
+    roi === null ? null : { label: 'ROI', value: `${roi.toFixed(1)}%`, target: '/stats' },
+    hitRate === null ? null : { label: 'PROLAZNOST', value: `${hitRate.toFixed(1)}%`, target: '/stats' },
+    completedCount === null ? null : { label: 'ZAVRŠENI TIKETI', value: `${completedCount}`, target: '/stats' },
+  ].filter((item): item is { label: string; value: string; target: string } => Boolean(item));
+  const items = [...offerItems, ...statsItems];
+
+  const tickerGroup = (hidden = false) => (
+    <div className="elite-ticker-group" aria-hidden={hidden || undefined}>
+      {items.map((item) => (
+        <React.Fragment key={`${item.label}-${item.value}`}>
+          <Link
+            to={item.target}
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-neutral-300 transition-colors hover:text-gold-300 md:px-5 md:text-[11px]"
+          >
+            <span>{item.label}</span>
+            <strong className="text-gold-400">{item.value}</strong>
+          </Link>
+          <span className="text-gold-500" aria-hidden="true">•</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
 
   return (
-    <div className="border-b border-gold-500/20 bg-black/80">
-      <div className="mx-auto flex max-w-7xl items-center gap-5 overflow-x-auto px-5 py-2.5 text-[10px] font-black uppercase tracking-wider [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:justify-between md:px-6">
-        <div className="flex shrink-0 items-center gap-2 text-gold-300">
+    <div className="elite-ticker border-b border-gold-500/20 bg-black/90" aria-label="Ponude i statistika">
+      <div className="flex overflow-hidden">
+        <div className="relative z-10 flex shrink-0 items-center gap-2 border-r border-gold-500/25 bg-black px-3 text-[10px] font-black uppercase tracking-wider text-gold-300 shadow-[8px_0_18px_rgba(0,0,0,0.65)] md:px-5">
           <BellRing size={14} />
-          Obaveštenje
+          <span className="hidden sm:inline">Elite info</span>
         </div>
-        {items.map((item) => (
-          <div key={item.label} className="flex shrink-0 items-center gap-2 border-l border-white/10 pl-5 text-neutral-400">
-            <span>{item.label}:</span>
-            <strong className="text-green-400">{item.value}</strong>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="elite-ticker-track">
+            {tickerGroup()}
+            {tickerGroup(true)}
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );
@@ -92,6 +117,7 @@ export function DailyPickCard({
   badge,
   buttonLabel,
   target,
+  sectionId,
 }: {
   title: string;
   description: string;
@@ -101,10 +127,11 @@ export function DailyPickCard({
   badge?: string;
   buttonLabel: string;
   target: string;
+  sectionId?: string;
 }) {
   const isVip = tone === 'vip';
   return (
-    <article className={`group relative overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:-translate-y-0.5 ${
+    <article id={sectionId} className={`scroll-mt-28 group relative overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:-translate-y-0.5 ${
       isVip
         ? 'border-rose-500/65 bg-[linear-gradient(135deg,rgba(84,0,27,0.92),rgba(12,3,8,0.96))] shadow-[0_0_30px_rgba(225,29,72,0.15)] hover:border-rose-400/80 hover:shadow-[0_0_36px_rgba(225,29,72,0.2)]'
         : 'border-blue-500/60 bg-[linear-gradient(135deg,rgba(0,41,105,0.92),rgba(2,10,26,0.96))] shadow-[0_0_30px_rgba(37,99,235,0.14)] hover:border-blue-400/80 hover:shadow-[0_0_36px_rgba(37,99,235,0.2)]'

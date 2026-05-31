@@ -68,6 +68,39 @@
   box-shadow: 0 0 40px rgba(255, 157, 26, 0.4);
 }
 
+@keyframes elite-ticker-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.elite-ticker-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: elite-ticker-scroll 34s linear infinite;
+}
+
+.elite-ticker-group {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.elite-ticker:hover .elite-ticker-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .elite-ticker-track {
+    animation-duration: 80s;
+  }
+}
+
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {

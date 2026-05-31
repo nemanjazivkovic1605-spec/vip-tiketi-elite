@@ -110,7 +110,7 @@ export default function Home() {
     <div className="overflow-hidden bg-[#050505]">
       <TopNoticeBar
         latestMonthProfitUnits={homepageData?.latestMonthProfitUnits ?? null}
-        yesterdayWonOdds={homepageData?.yesterdayWonOdds ?? null}
+        roi={hasPublicStats ? stats?.roi ?? null : null}
         completedCount={hasPublicStats ? stats?.completedCount ?? null : null}
         hitRate={hasPublicStats ? stats?.hitRate ?? null : null}
       />
@@ -175,6 +175,7 @@ export default function Home() {
             features={['2–6 mečeva (dubl, tripl ili kombo)', 'Kvota 2.50+', 'Objava svaki dan']}
             buttonLabel="Kupi tiket"
             target={getCheckoutPath('vip-ticket-day')}
+            sectionId="vip-ticket-day"
           />
           <DailyPickCard
             title="Safe pick dana"
@@ -185,6 +186,7 @@ export default function Home() {
             features={['1–3 meča (singl, dubl ili kombo)', 'Kvota 1.50–3.00', 'Objava svaki dan']}
             buttonLabel="Kupi pick"
             target={getCheckoutPath('safe-pick-day')}
+            sectionId="safe-pick-day"
           />
           <aside className="grid content-center gap-6 rounded-xl border border-white/10 bg-black/55 p-5">
             <CompactInfoCard icon={ShoppingCart} title="Kupovina bez pretplate" text="Odmah dobijaš tiket" />
