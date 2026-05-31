@@ -26,6 +26,7 @@ import {
 import { calculateStats } from '../utils/ticketStats';
 import { getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublication';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
+import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
 import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
 
 const TICKETS_COLLECTION = 'tickets';
@@ -34,6 +35,7 @@ const PUBLIC_STATS_TICKETS_COLLECTION = 'publicStatsTickets';
 const PUBLIC_TICKETS_CACHE_KEY = 'tickets:public:all';
 const PUBLIC_VIP_TICKETS_CACHE_KEY = 'tickets:public:vip';
 const PUBLIC_STATS_CACHE_KEY = 'tickets:public:stats';
+const MAX_FRONTEND_BULK_WRITES = 500;
 const invalidatePublicTicketCache = () => invalidateCachedQueries(
   PUBLIC_TICKETS_CACHE_KEY,
   PUBLIC_VIP_TICKETS_CACHE_KEY,
@@ -301,19 +303,19 @@ const syncPublicTicket = async (tip: Tip) => {
 
   if (normalized.publicationStatus !== TipPublicationStatus.PUBLISHED) {
     await Promise.all([
-      deleteDoc(getPublicTicketDoc(normalized.id)).catch(() => undefined),
-      deleteDoc(getPublicStatsTicketDoc(normalized.id)).catch(() => undefined),
+      deleteDocIfExists(getPublicTicketDoc(normalized.id)),
+      deleteDocIfExists(getPublicStatsTicketDoc(normalized.id)),
     ]);
     invalidatePublicTicketCache();
     return;
   }
 
-  await setDoc(getPublicTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
+  await setDocIfChanged(getPublicTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
 
   if (isFinishedForStats(normalized.status)) {
-    await setDoc(getPublicStatsTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
+    await setDocIfChanged(getPublicStatsTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
   } else {
-    await deleteDoc(getPublicStatsTicketDoc(normalized.id)).catch(() => undefined);
+    await deleteDocIfExists(getPublicStatsTicketDoc(normalized.id));
   }
   invalidatePublicTicketCache();
 };
@@ -495,6 +497,11 @@ export const mockTipsService = {
     const tips = await readAllTips();
     const publicTips = await getDocs(query(getPublicTicketsCollection()));
     const publicStatsTips = await getDocs(query(getPublicStatsTicketsCollection()));
+    const plannedDeletes = tips.length + publicTips.size + publicStatsTips.size;
+    if (plannedDeletes > MAX_FRONTEND_BULK_WRITES) {
+      throw new Error(`Reset je prekinut: planirano je ${plannedDeletes} Firestore brisanja. Za masovno odrzavanje koristite rucnu skriptu.`);
+    }
+
     await Promise.all([
       ...tips.map((tip) => deleteDoc(getTicketDoc(tip.id))),
       ...publicTips.docs.map((ticketDoc) => deleteDoc(getPublicTicketDoc(ticketDoc.id))),
@@ -517,6 +524,13 @@ export const mockTipsService = {
     const existingTips = await readAllTips();
     const existingIds = new Set(existingTips.map((tip) => tip.id));
     const uniqueTips = newTips.filter((tip) => !existingIds.has(tip.id));
+    const plannedWrites = uniqueTips.reduce((total, tip) => {
+      const published = tip.publicationStatus === TipPublicationStatus.PUBLISHED;
+      return total + 1 + (published ? 1 : 0) + (published && isFinishedForStats(tip.status) ? 1 : 0);
+    }, 0);
+    if (plannedWrites > MAX_FRONTEND_BULK_WRITES) {
+      throw new Error(`Masovni upis je prekinut: planirano je do ${plannedWrites} Firestore upisa. Koristite rucnu import skriptu sa dry-run proverom.`);
+    }
 
     await Promise.all(uniqueTips.map(async (tip) => {
       const normalized = normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT });
@@ -534,8 +548,8 @@ export const mockTipsService = {
   deleteTip: async (id: string): Promise<void> => {
     await Promise.all([
       deleteDoc(getTicketDoc(id)),
-      deleteDoc(getPublicTicketDoc(id)).catch(() => undefined),
-      deleteDoc(getPublicStatsTicketDoc(id)).catch(() => undefined),
+      deleteDocIfExists(getPublicTicketDoc(id)),
+      deleteDocIfExists(getPublicStatsTicketDoc(id)),
     ]);
     invalidatePublicTicketCache();
   },
@@ -560,8 +574,8 @@ export const mockTipsService = {
       publishedAt: '',
     });
     await Promise.all([
-      deleteDoc(getPublicTicketDoc(id)).catch(() => undefined),
-      deleteDoc(getPublicStatsTicketDoc(id)).catch(() => undefined),
+      deleteDocIfExists(getPublicTicketDoc(id)),
+      deleteDocIfExists(getPublicStatsTicketDoc(id)),
     ]);
     invalidatePublicTicketCache();
   },

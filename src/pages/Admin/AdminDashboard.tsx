@@ -227,7 +227,12 @@ export default function AdminDashboard() {
   const visibleTips = useMemo(() => filteredTips.slice(0, tipPageSize), [filteredTips, tipPageSize]);
   const hasMoreTips = filteredTips.length > visibleTips.length;
   const unreadNotifications = useMemo(() => notifications.filter((notification) => !notification.read), [notifications]);
+  const userListRef = useRef(userList);
   const notificationsRef = useRef(notifications);
+
+  useEffect(() => {
+    userListRef.current = userList;
+  }, [userList]);
 
   useEffect(() => {
     notificationsRef.current = notifications;
@@ -244,7 +249,7 @@ export default function AdminDashboard() {
       dailyAnalysesService.getAdminAnalyses(),
     ]);
 
-    const fetchedUsers = includeUsers ? await authService.getUsers() : userList;
+    const fetchedUsers = includeUsers ? await authService.getUsers() : userListRef.current;
     const fetchedNotifications = includeNotifications
       ? await authService.getAdminNotifications()
       : notificationsRef.current;
@@ -293,7 +298,7 @@ export default function AdminDashboard() {
     setDailyAnalyses(fetchedDailyAnalyses);
     if (includeUsers) setUserList(fetchedUsers);
     if (includeNotifications) setNotifications(mergedNotifications);
-  }, [userList]);
+  }, []);
 
   useEffect(() => {
     void refreshData({ includeUsers: true, includeNotifications: true });

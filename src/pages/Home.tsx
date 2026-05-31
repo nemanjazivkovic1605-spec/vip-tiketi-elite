@@ -120,10 +120,37 @@ export default function Home() {
     <div className="overflow-hidden bg-[#050505]">
       <section className="relative overflow-hidden border-b border-white/10 bg-[#050505] px-5 py-9 md:px-6 md:py-14">
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,transparent,rgba(245,124,0,0.06))]" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-full overflow-hidden md:w-[76%] lg:w-[68%]">
+          <motion.div
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.08 }}
+            className="absolute inset-0"
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_52%,rgba(245,124,0,0.3),transparent_34%)] blur-[34px] md:blur-[48px]" />
+            {!heroImageFailed ? (
+              <img
+                src="/elite-football-hero.png"
+                alt="Fudbalska lopta sa narandžastim svetlosnim efektom na stadionu"
+                className="absolute inset-0 h-full w-full object-cover object-[67%_center] opacity-55 md:opacity-90 lg:object-center"
+                onError={() => setHeroImageFailed(true)}
+              />
+            ) : (
+              <div className="absolute inset-y-0 right-0 flex w-[72%] items-center justify-center">
+                <div className="absolute h-64 w-64 rounded-full bg-gold-500/30 blur-[76px] md:h-96 md:w-96" />
+                <div className="relative flex h-44 w-44 items-center justify-center rounded-full border-4 border-gold-300/65 bg-black/75 text-center font-display text-xl font-black uppercase tracking-[0.2em] text-gold-200 shadow-[0_0_68px_rgba(245,124,0,0.6)] md:h-64 md:w-64 md:text-3xl">
+                  Elite<br />Tips
+                </div>
+              </div>
+            )}
+          </motion.div>
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.88)_28%,rgba(5,5,5,0.68)_47%,rgba(5,5,5,0.16)_100%)] md:bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.88)_18%,rgba(5,5,5,0.68)_40%,rgba(5,5,5,0.08)_100%)]" />
+          <div className="absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,#050505)]" />
+        </div>
 
-        <div className="relative mx-auto max-w-7xl">
-          <div className="grid items-center gap-7 lg:grid-cols-[0.95fr_1.05fr] lg:gap-4">
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="relative z-10 max-w-2xl">
+        <div className="relative z-10 mx-auto max-w-7xl">
+          <div className="min-h-[390px] md:min-h-[430px] lg:min-h-[470px]">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="relative z-10 max-w-2xl pt-4 md:pt-10 lg:pt-14">
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <p className="text-xs font-black uppercase tracking-[0.28em] text-gold-400">Elite sports analytics</p>
               <span className="rounded border border-gold-500/25 bg-black/45 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gold-200">18+ odgovorno</span>
@@ -145,34 +172,9 @@ export default function Home() {
             </div>
             </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.08 }}
-              className="relative z-10 mx-auto w-full max-w-3xl lg:ml-auto"
-            >
-              <div className="pointer-events-none absolute inset-10 rounded-full bg-gold-500/25 blur-3xl" />
-              <div className="relative aspect-[16/9] overflow-hidden rounded-2xl border border-gold-500/25 bg-[#0c0803] shadow-[0_0_56px_rgba(245,124,0,0.24),0_24px_70px_rgba(0,0,0,0.42)]">
-                {!heroImageFailed ? (
-                  <img
-                    src="/elite-football-hero.png"
-                    alt="Fudbalska lopta sa narandžastim svetlosnim efektom na stadionu"
-                    className="relative z-10 h-full w-full object-cover object-center"
-                    onError={() => setHeroImageFailed(true)}
-                  />
-                ) : (
-                  <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-[#100800]">
-                    <div className="absolute h-52 w-52 rounded-full bg-gold-500/25 blur-3xl md:h-72 md:w-72" />
-                    <div className="relative flex h-36 w-36 items-center justify-center rounded-full border-4 border-gold-300/75 bg-black/80 text-center font-display text-lg font-black uppercase tracking-[0.2em] text-gold-200 shadow-[0_0_54px_rgba(245,124,0,0.55)] md:h-52 md:w-52 md:text-2xl">
-                      Elite<br />Tips
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
           </div>
 
-          <div className="mt-12 overflow-hidden rounded-xl border border-white/15 bg-black/65 backdrop-blur-md">
+          <div className="overflow-hidden rounded-xl border border-white/15 bg-black/65 backdrop-blur-md">
             <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4">
               <StatCard icon={Target} label="Prolaznost" value={loading ? '...' : hasPublicStats ? formatPercent(stats?.hitRate) : '—'} />
               <StatCard icon={Coins} label="Profit (jedinice)" value={loading ? '...' : hasPublicStats ? formatUnits(stats?.unitsProfit) : '—'} />

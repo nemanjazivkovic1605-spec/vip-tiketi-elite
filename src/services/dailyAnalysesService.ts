@@ -18,6 +18,7 @@ import { createDailyPublicationMeta, getDailyPublicationMeta, getKickoffTime } f
 import { isFinishedDailyAnalysisStatus, isVisibleInDailyFeed, normalizeDailyAnalysisStatus } from '../utils/dailyLifecycle';
 import { dailyAnalysisAiService, type AiAnalysisResult, type AnalysisGenerationType } from './dailyAnalysisAiService';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
+import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
 
 const COLLECTION = 'dailyAnalyses';
 const PUBLIC_COLLECTION = 'publicDailyAnalyses';
@@ -330,8 +331,8 @@ const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
 
   if (!visible) {
     await Promise.all([
-      deleteDoc(publicRef).catch(() => undefined),
-      deleteDoc(freeRef).catch(() => undefined),
+      deleteDocIfExists(publicRef),
+      deleteDocIfExists(freeRef),
     ]);
     invalidateDailyIndexCache();
     return;
@@ -339,16 +340,16 @@ const syncReadIndexes = async (analysis: DailyAnalysisItem) => {
 
   if (analysis.access === 'VIP') {
     await Promise.all([
-      setDoc(publicRef, removeUndefined(sanitizeLockedVipAnalysis(analysis))),
-      deleteDoc(freeRef).catch(() => undefined),
+      setDocIfChanged(publicRef, removeUndefined(sanitizeLockedVipAnalysis(analysis))),
+      deleteDocIfExists(freeRef),
     ]);
     invalidateDailyIndexCache();
     return;
   }
 
   await Promise.all([
-    setDoc(freeRef, removeUndefined(sanitizeFreeAnalysis(analysis))),
-    deleteDoc(publicRef).catch(() => undefined),
+    setDocIfChanged(freeRef, removeUndefined(sanitizeFreeAnalysis(analysis))),
+    deleteDocIfExists(publicRef),
   ]);
   invalidateDailyIndexCache();
 };
@@ -746,8 +747,8 @@ export const dailyAnalysesService = {
   deleteManualAnalysis: async (id: string): Promise<void> => {
     await Promise.all([
       deleteDoc(doc(db, COLLECTION, id)),
-      deleteDoc(doc(db, PUBLIC_COLLECTION, id)).catch(() => undefined),
-      deleteDoc(doc(db, FREE_COLLECTION, id)).catch(() => undefined),
+      deleteDocIfExists(doc(db, PUBLIC_COLLECTION, id)),
+      deleteDocIfExists(doc(db, FREE_COLLECTION, id)),
     ]);
     invalidateDailyIndexCache();
   },
