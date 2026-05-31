@@ -6,8 +6,14 @@ export default function ScrollToTop() {
 
   useEffect(() => {
     if (hash) {
-      requestAnimationFrame(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-      return;
+      const scrollToHash = () => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const animationFrame = requestAnimationFrame(scrollToHash);
+      const retries = [120, 360, 800].map((delay) => window.setTimeout(scrollToHash, delay));
+
+      return () => {
+        cancelAnimationFrame(animationFrame);
+        retries.forEach((retry) => window.clearTimeout(retry));
+      };
     }
 
     window.scrollTo(0, 0);

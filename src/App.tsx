@@ -5,6 +5,7 @@ import { AnimatePresence } from 'motion/react';
 import { useAuth } from './hooks/useAuth';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
+import GlobalTicker from './components/layout/GlobalTicker';
 import ScrollToTop from './components/utils/ScrollToTop';
 import MembershipGuard from './components/MembershipGuard';
 import EmailVerificationGate from './components/EmailVerificationGate';
@@ -63,6 +64,7 @@ export default function App() {
         <ScrollToTop />
         {!isAdminPath && <Navbar />}
         <main className={!isAdminPath ? "pt-20" : ""}>
+          {!isAdminPath && <GlobalTicker />}
           <AppErrorBoundary key={location.pathname}>
             <Suspense fallback={<PageLoader />}>
               <AnimatePresence mode="wait">

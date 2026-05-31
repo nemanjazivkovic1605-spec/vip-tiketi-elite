@@ -16,7 +16,7 @@ import {
   UsersRound,
   Zap,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   CompactInfoCard,
   DailyPickCard,
@@ -26,7 +26,6 @@ import {
   RecentTicketsTable,
   SecondaryCta,
   StatCard,
-  TopNoticeBar,
   type PricingCardProps,
 } from '../components/home/HomeLandingComponents';
 import { useAuth } from '../hooks/useAuth';
@@ -41,6 +40,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const { user, isVerified } = useAuth();
+  const { hash } = useLocation();
 
   useEffect(() => {
     const fetchHomepageData = async () => {
@@ -58,6 +58,15 @@ export default function Home() {
     void fetchHomepageData();
     return mockTipsService.subscribePublicStats(() => void fetchHomepageData());
   }, []);
+
+  useEffect(() => {
+    if (!hash) return;
+    const animationFrame = requestAnimationFrame(() => {
+      document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [hash]);
 
   const stats = homepageData?.stats;
   const hasPublicStats = Boolean(stats?.completedCount);
@@ -108,13 +117,6 @@ export default function Home() {
 
   return (
     <div className="overflow-hidden bg-[#050505]">
-      <TopNoticeBar
-        latestMonthProfitUnits={homepageData?.latestMonthProfitUnits ?? null}
-        roi={hasPublicStats ? stats?.roi ?? null : null}
-        completedCount={hasPublicStats ? stats?.completedCount ?? null : null}
-        hitRate={hasPublicStats ? stats?.hitRate ?? null : null}
-      />
-
       <section
         className="relative min-h-[560px] overflow-hidden border-b border-white/10 bg-cover bg-right px-5 py-11 md:min-h-[610px] md:px-6 md:py-16"
         style={{ backgroundImage: "url('/elite-football-hero.png')" }}

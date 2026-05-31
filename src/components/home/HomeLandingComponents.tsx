@@ -45,7 +45,10 @@ export function TopNoticeBar({
     hitRate === null ? null : { label: 'PROLAZNOST', value: `${hitRate.toFixed(1)}%`, target: '/stats' },
     completedCount === null ? null : { label: 'ZAVRŠENI TIKETI', value: `${completedCount}`, target: '/stats' },
   ].filter((item): item is { label: string; value: string; target: string } => Boolean(item));
-  const items = [...offerItems, ...statsItems];
+  const items = [
+    ...offerItems,
+    ...(statsItems.length ? statsItems : [{ label: 'STATISTIKA', value: 'Uskoro', target: '/stats' }]),
+  ];
 
   const tickerGroup = (hidden = false) => (
     <div className="elite-ticker-group" aria-hidden={hidden || undefined}>
@@ -133,10 +136,10 @@ export function DailyPickCard({
   return (
     <article id={sectionId} className={`scroll-mt-28 group relative overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:-translate-y-0.5 ${
       isVip
-        ? 'border-rose-500/65 bg-[linear-gradient(135deg,rgba(84,0,27,0.92),rgba(12,3,8,0.96))] shadow-[0_0_30px_rgba(225,29,72,0.15)] hover:border-rose-400/80 hover:shadow-[0_0_36px_rgba(225,29,72,0.2)]'
-        : 'border-blue-500/60 bg-[linear-gradient(135deg,rgba(0,41,105,0.92),rgba(2,10,26,0.96))] shadow-[0_0_30px_rgba(37,99,235,0.14)] hover:border-blue-400/80 hover:shadow-[0_0_36px_rgba(37,99,235,0.2)]'
+        ? 'border-gold-400/80 bg-[linear-gradient(135deg,rgba(100,34,0,0.94),rgba(22,7,0,0.98))] shadow-[0_0_34px_rgba(245,124,0,0.25)] hover:border-gold-300 hover:shadow-[0_0_46px_rgba(245,124,0,0.38)]'
+        : 'border-blue-400/80 bg-[linear-gradient(135deg,rgba(0,50,135,0.94),rgba(2,10,32,0.98))] shadow-[0_0_34px_rgba(37,99,235,0.25)] hover:border-cyan-300 hover:shadow-[0_0_46px_rgba(37,99,235,0.38)]'
     }`}>
-      <div className={`pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full blur-3xl ${isVip ? 'bg-rose-500/20' : 'bg-blue-500/20'}`} />
+      <div className={`pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full blur-3xl ${isVip ? 'bg-gold-500/30' : 'bg-blue-500/30'}`} />
       <div className="relative">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
@@ -154,13 +157,15 @@ export function DailyPickCard({
           ))}
         </ul>
         <div className="mt-5 flex items-stretch">
-          <div className={`flex items-center rounded-l-lg border px-4 font-display text-2xl font-black ${isVip ? 'border-rose-400/70 bg-rose-700 text-white' : 'border-blue-400/70 bg-blue-700 text-white'}`}>
+          <div className={`flex items-center rounded-l-lg border px-4 font-display text-2xl font-black ${isVip ? 'border-gold-300/80 bg-gold-700 text-white' : 'border-cyan-300/70 bg-blue-700 text-white'}`}>
             {price}
           </div>
           <Link
             to={target}
             className={`inline-flex flex-1 items-center justify-center gap-2 rounded-r-lg px-4 py-3 text-xs font-black uppercase tracking-wide transition-all ${
-              isVip ? 'bg-gold-400 text-black hover:bg-gold-300' : 'bg-blue-600 text-white hover:bg-blue-500'
+              isVip
+                ? 'bg-gold-400 text-black shadow-[0_0_24px_rgba(245,124,0,0.42)] hover:bg-gold-300 hover:shadow-[0_0_34px_rgba(245,124,0,0.58)]'
+                : 'bg-blue-500 text-white shadow-[0_0_24px_rgba(37,99,235,0.42)] hover:bg-blue-400 hover:shadow-[0_0_34px_rgba(37,99,235,0.58)]'
             }`}
           >
             <ShoppingCart size={16} /> {buttonLabel}
