@@ -265,8 +265,6 @@ export default function AdminDashboard() {
         : notification;
     });
 
-    await mockTipsService.syncTicketMetadata(fetchedTips);
-
     const debugActive = fetchedDailyAnalyses.filter((analysis) => isVisibleInAdminActiveDailyList(analysis));
     const debugFinished = fetchedDailyAnalyses.filter((analysis) => isFinishedDailyAnalysisStatus(analysis.status));
 

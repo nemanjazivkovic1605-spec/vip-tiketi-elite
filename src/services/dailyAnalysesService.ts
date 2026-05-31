@@ -264,19 +264,6 @@ const readManual = async () => {
   return snapshot.docs.map((analysisDoc) => normalizeManual(analysisDoc.data(), analysisDoc.id));
 };
 
-const clearLegacyApiPlaceholders = async () => {
-  const snapshot = await getDocs(query(collection(db, COLLECTION)));
-  await Promise.all(snapshot.docs
-    .filter((analysisDoc) => hasLegacyApiPlaceholder(analysisDoc.data()))
-    .map((analysisDoc) => updateDoc(analysisDoc.ref, {
-      reasoning: '',
-      analysis: '',
-      freeAnalysis: '',
-      vipAnalysis: '',
-      updatedAt: serverTimestamp(),
-    })));
-};
-
 const publicManualForDate = (items: DailyAnalysisItem[], date: string) =>
   sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && isVisibleInDailyFeed(item))).slice(0, 5);
 
@@ -514,7 +501,6 @@ export const dailyAnalysesService = {
   },
 
   getAdminAnalyses: async (): Promise<DailyAnalysisItem[]> => {
-    await clearLegacyApiPlaceholders();
     const analyses = sortAnalyses(await readManual());
     const statusMap = analyses.reduce<Record<string, number>>((acc, analysis) => {
       const status = normalizeDailyAnalysisStatus(String(analysis.status || 'ACTIVE'));
@@ -531,9 +517,6 @@ export const dailyAnalysesService = {
       }, {}),
     });
 
-    await Promise.all(analyses
-      .filter((analysis) => analysis.manualOverride || isFinishedDailyAnalysisStatus(analysis.status))
-      .map((analysis) => syncReadIndexes(analysis)));
     return analyses;
   },
 

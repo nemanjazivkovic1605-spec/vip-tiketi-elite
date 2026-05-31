@@ -44,8 +44,10 @@ const BATCH_PAUSE_MS = getPositiveInteger('PUBLIC_INDEX_SYNC_BATCH_PAUSE_MS', 10
 const MAX_RETRIES = getPositiveInteger('PUBLIC_INDEX_SYNC_MAX_RETRIES', 5);
 const RETRY_BASE_MS = getPositiveInteger('PUBLIC_INDEX_SYNC_RETRY_BASE_MS', 2500);
 const REQUEST_TIMEOUT_MS = getPositiveInteger('PUBLIC_INDEX_SYNC_REQUEST_TIMEOUT_MS', 30000);
+const MAX_PLANNED_WRITES = getPositiveInteger('PUBLIC_INDEX_SYNC_MAX_PLANNED_WRITES', 500);
 const SHOULD_CLEANUP = process.argv.includes('--cleanup');
-const SHOULD_WRITE = !process.argv.includes('--dry-run');
+const SHOULD_WRITE = process.argv.includes('--write');
+const LARGE_SYNC_CONFIRMED = process.argv.includes('--confirm-large-sync');
 
 const initializeFirebaseAdmin = () => {
   if (admin.apps.length) return;
@@ -184,7 +186,7 @@ const writeWithRetry = async (
       return;
     } catch (error) {
       if (isDailyWriteQuotaError(error)) {
-        throw new Error('Firestore dnevna write kvota je iscrpljena. Sačekajte reset kvote, zatim ponovo pokrenite npm run sync:public-ticket-indexes.');
+        throw new Error('Firestore dnevna write kvota je iscrpljena. Sacekajte reset kvote, prvo proverite dry-run, zatim eksplicitno pokrenite npm run sync:public-ticket-indexes:write.');
       }
       const status = Number((error as { status?: number }).status);
       const retryable = error instanceof Error && error.name === 'AbortError'
@@ -257,6 +259,8 @@ const main = async () => {
     cleanupEnabled: SHOULD_CLEANUP,
     batchLimit: BATCH_LIMIT,
     batchPauseMs: BATCH_PAUSE_MS,
+    maxPlannedWrites: MAX_PLANNED_WRITES,
+    largeSyncConfirmed: LARGE_SYNC_CONFIRMED,
     source: {
       tickets: ticketSnapshot.size,
       publishedTickets: publishedTips.length,
@@ -272,11 +276,22 @@ const main = async () => {
       publicStatsTicketsUpserts: upserts.filter((operation) => operation.collection === 'publicStatsTickets').length,
       staleDocuments: staleDocuments.length,
       cleanupDeletes: SHOULD_CLEANUP ? staleDocuments.length : 0,
+      plannedWrites: upserts.length + (SHOULD_CLEANUP ? staleDocuments.length : 0),
     },
   };
   console.log(JSON.stringify(summary, null, 2));
 
-  if (!SHOULD_WRITE) return;
+  const plannedWrites = upserts.length + (SHOULD_CLEANUP ? staleDocuments.length : 0);
+  if (!SHOULD_WRITE) {
+    console.log('Dry-run zavrsen. Za eksplicitni upis koristite npm run sync:public-ticket-indexes:write.');
+    return;
+  }
+  if (plannedWrites > MAX_PLANNED_WRITES && !LARGE_SYNC_CONFIRMED) {
+    throw new Error(
+      `Planirano je ${plannedWrites} Firestore write operacija. Limit je ${MAX_PLANNED_WRITES}. `
+      + 'Sync je prekinut. Pregledajte dry-run i tek zatim eksplicitno dodajte --confirm-large-sync ako je veci upis nameran.',
+    );
+  }
   const credential = admin.app().options.credential;
   if (!credential) throw new Error('Firebase Admin credential nije dostupan.');
   const accessToken = (await credential.getAccessToken()).access_token;

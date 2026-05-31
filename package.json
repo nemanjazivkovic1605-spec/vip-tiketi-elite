@@ -20,8 +20,9 @@
     "realize:history:mar-2026": "tsx scripts/realize-march-2026-history.ts",
     "realize:history:mar-2026:write": "tsx scripts/realize-march-2026-history.ts --write",
     "sync:public-ticket-indexes": "tsx scripts/sync-public-ticket-indexes.ts",
-    "sync:public-ticket-indexes:dry-run": "tsx scripts/sync-public-ticket-indexes.ts --dry-run",
-    "sync:public-ticket-indexes:cleanup": "tsx scripts/sync-public-ticket-indexes.ts --cleanup"
+    "sync:public-ticket-indexes:dry-run": "tsx scripts/sync-public-ticket-indexes.ts",
+    "sync:public-ticket-indexes:write": "tsx scripts/sync-public-ticket-indexes.ts --write",
+    "sync:public-ticket-indexes:cleanup": "tsx scripts/sync-public-ticket-indexes.ts --write --cleanup"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

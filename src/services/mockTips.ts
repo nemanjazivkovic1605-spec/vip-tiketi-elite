@@ -102,9 +102,6 @@ const normalizeTip = (tip: Tip): Tip => {
   };
 };
 
-const publicOnly = (tips: Tip[]) =>
-  tips.filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED);
-
 const DAILY_ANALYSES_COLLECTION = 'dailyAnalyses';
 const getDailyAnalysesCollection = () => collection(db, DAILY_ANALYSES_COLLECTION);
 
@@ -321,12 +318,6 @@ const syncPublicTicket = async (tip: Tip) => {
   invalidatePublicTicketCache();
 };
 
-const needsTicketMetadataRepair = (original: Tip, normalized: Tip) =>
-  original.publishedDate !== normalized.publishedDate
-  || original.publishedTime !== normalized.publishedTime
-  || original.publishedAt !== normalized.publishedAt
-  || original.ticketCode !== normalized.ticketCode;
-
 const readAllTips = async (): Promise<Tip[]> => {
   const snapshot = await getDocs(query(getTicketsCollection()));
   return sortTicketsByDate(snapshot.docs.map((ticketDoc) => mapTicketForAdmin(normalizeTip({
@@ -498,37 +489,6 @@ export const mockTipsService = {
       latestMonthProfitUnits: stats.monthlyBreakdown[0]?.profitUnits ?? null,
       yesterdayWonOdds: yesterdayWinner?.totalOdds ?? null,
     };
-  },
-
-  syncPublicTickets: async (): Promise<void> => {
-    const sourceTips = await readAllTips();
-    const publishedIds = new Set(publicOnly(sourceTips).map((tip) => tip.id));
-    const publicSnapshot = await getDocs(query(getPublicTicketsCollection()));
-    const publicStatsSnapshot = await getDocs(query(getPublicStatsTicketsCollection()));
-
-    await Promise.all([
-      ...sourceTips.map((tip) => syncPublicTicket(tip)),
-      ...publicSnapshot.docs
-        .filter((ticketDoc) => !publishedIds.has(ticketDoc.id))
-        .map((ticketDoc) => deleteDoc(getPublicTicketDoc(ticketDoc.id))),
-      ...publicStatsSnapshot.docs
-        .filter((ticketDoc) => !publishedIds.has(ticketDoc.id))
-        .map((ticketDoc) => deleteDoc(getPublicStatsTicketDoc(ticketDoc.id))),
-    ]);
-  },
-
-  syncTicketMetadata: async (tips?: Tip[]): Promise<void> => {
-    const sourceTips = tips || await readAllTips();
-    await Promise.all(sourceTips.map(async (tip) => {
-      const normalized = normalizeTip(tip);
-      if (!needsTicketMetadataRepair(tip, normalized)) return;
-      await setDoc(getTicketDoc(normalized.id), removeUndefined({
-        publishedDate: normalized.publishedDate,
-        publishedTime: normalized.publishedTime,
-        publishedAt: normalized.publishedAt,
-        ticketCode: normalized.ticketCode,
-      }), { merge: true });
-    }));
   },
 
   resetTips: async (): Promise<void> => {
