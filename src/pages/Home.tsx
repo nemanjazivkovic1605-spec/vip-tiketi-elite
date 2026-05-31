@@ -127,12 +127,12 @@ export default function Home() {
             transition={{ delay: 0.08 }}
             className="absolute inset-0"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_52%,rgba(245,124,0,0.3),transparent_34%)] blur-[34px] md:blur-[48px]" />
+            <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_76%_52%,rgba(245,124,0,0.48),transparent_38%)] blur-[30px] md:blur-[44px]" />
             {!heroImageFailed ? (
               <img
                 src="/elite-football-hero.png"
                 alt="Fudbalska lopta sa narandžastim svetlosnim efektom na stadionu"
-                className="absolute inset-0 h-full w-full object-cover object-[67%_center] opacity-55 md:opacity-90 lg:object-center"
+                className="absolute inset-0 z-[1] h-full w-full object-cover object-[67%_center] opacity-80 md:opacity-100 lg:object-center"
                 onError={() => setHeroImageFailed(true)}
               />
             ) : (
@@ -144,8 +144,8 @@ export default function Home() {
               </div>
             )}
           </motion.div>
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.88)_28%,rgba(5,5,5,0.68)_47%,rgba(5,5,5,0.16)_100%)] md:bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.88)_18%,rgba(5,5,5,0.68)_40%,rgba(5,5,5,0.08)_100%)]" />
-          <div className="absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(180deg,transparent,#050505)]" />
+          <div className="absolute inset-0 z-[2] bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.72)_26%,rgba(5,5,5,0.34)_52%,rgba(5,5,5,0.02)_100%)] md:bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.82)_12%,rgba(5,5,5,0.38)_34%,rgba(5,5,5,0.00)_78%)]" />
+          <div className="absolute inset-x-0 bottom-0 z-[2] h-24 bg-[linear-gradient(180deg,transparent,rgba(5,5,5,0.84))]" />
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl">
