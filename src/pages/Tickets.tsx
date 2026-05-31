@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, TrendingUp, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, X, XCircle } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
 import { Tip, TicketStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
@@ -19,60 +19,50 @@ import {
 const getTicketVisuals = (status: TicketStatus) => {
   if (status === TicketStatus.WON) {
     return {
-      card: 'border-green-400/35 bg-[#090d0b] shadow-[0_12px_34px_rgba(0,0,0,0.3)] hover:border-green-400/55 hover:shadow-[0_0_24px_rgba(34,197,94,0.1),0_14px_36px_rgba(0,0,0,0.34)]',
-      glow: 'bg-green-400/[0.08] blur-2xl opacity-40',
+      card: 'border-[#262626] bg-[#141414] shadow-[0_12px_34px_rgba(0,0,0,0.24)] hover:border-[#343434]',
       badge: 'bg-green-400/10 text-green-300 border-green-400/25',
       label: '✓ PROŠAO',
       icon: <CheckCircle2 size={16} />,
-      odds: 'text-green-300',
-      totalBox: 'bg-green-400/[0.06] border-green-400/15',
+      odds: 'text-neutral-100',
     };
   }
 
   if (status === TicketStatus.LOST) {
     return {
-      card: 'border-red-400/35 bg-[#0e090a] shadow-[0_12px_34px_rgba(0,0,0,0.3)] hover:border-red-400/55',
-      glow: 'bg-red-500/[0.06] blur-2xl opacity-35',
+      card: 'border-[#262626] bg-[#141414] shadow-[0_12px_34px_rgba(0,0,0,0.24)] hover:border-[#343434]',
       badge: 'bg-red-500/10 text-red-300 border-red-500/25',
       label: '✕ PAO',
       icon: <XCircle size={16} />,
       odds: 'text-neutral-300',
-      totalBox: 'bg-white/[0.03] border-white/10',
     };
   }
 
   if (status === TicketStatus.POSTPONED) {
     return {
-      card: 'border-orange-300/35 bg-[#100c08] shadow-[0_12px_34px_rgba(0,0,0,0.3)] hover:border-orange-300/55',
-      glow: 'bg-orange-300/[0.06] blur-2xl opacity-35',
+      card: 'border-[#262626] bg-[#141414] shadow-[0_12px_34px_rgba(0,0,0,0.24)] hover:border-[#343434]',
       badge: 'bg-orange-300/10 text-orange-200 border-orange-300/25',
       label: 'ODLOŽENO',
       icon: <AlertCircle size={16} />,
-      odds: 'text-orange-200',
-      totalBox: 'bg-orange-300/[0.05] border-orange-300/15',
+      odds: 'text-neutral-100',
     };
   }
 
   if (status === TicketStatus.REFUND) {
     return {
-      card: 'border-sky-300/30 bg-[#080d11] shadow-[0_12px_34px_rgba(0,0,0,0.3)] hover:border-sky-300/50',
-      glow: 'bg-sky-300/[0.05] blur-2xl opacity-30',
+      card: 'border-[#262626] bg-[#141414] shadow-[0_12px_34px_rgba(0,0,0,0.24)] hover:border-[#343434]',
       badge: 'bg-sky-300/10 text-sky-100 border-sky-300/25',
       label: 'KVOTA 1 / POVRAT',
       icon: <AlertCircle size={16} />,
-      odds: 'text-sky-200',
-      totalBox: 'bg-sky-300/[0.05] border-sky-300/15',
+      odds: 'text-neutral-100',
     };
   }
 
   return {
-    card: 'border-orange-400/35 bg-[#100c08] shadow-[0_12px_34px_rgba(0,0,0,0.3)] hover:border-orange-300/55 hover:shadow-[0_0_22px_rgba(249,115,22,0.09),0_14px_36px_rgba(0,0,0,0.34)]',
-    glow: 'bg-orange-400/[0.07] blur-2xl opacity-35',
+    card: 'border-[#262626] bg-[#141414] shadow-[0_12px_34px_rgba(0,0,0,0.24)] hover:border-[#343434]',
     badge: 'bg-orange-400/12 text-orange-300 border-orange-400/30',
     label: '⏳ AKTIVAN',
     icon: <Clock size={16} />,
-    odds: 'text-gold-300',
-    totalBox: 'bg-gold-500/10 border-gold-400/20',
+    odds: 'text-neutral-100',
   };
 };
 
@@ -152,7 +142,7 @@ export default function Tickets() {
 
     if (!locked) {
       return (
-        <span className="rounded-xl bg-gold-500/12 border border-gold-400/20 px-3 py-1.5 text-sm font-black text-gold-300">
+        <span className="text-sm font-bold text-neutral-100">
           {prediction}
         </span>
       );
@@ -250,7 +240,7 @@ export default function Tickets() {
           const sport = getSportMeta(match.league);
 
           return (
-          <div key={match.id || index} className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-black/20 px-3.5 py-3 transition-colors hover:border-white/15">
+          <div key={match.id || index} className="relative border-t border-[#262626] py-3 first:border-t-0">
             <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-widest">
                 <span className="text-gold-300">{sport.icon} {sport.label}</span>
@@ -258,24 +248,24 @@ export default function Tickets() {
                 <span className="truncate text-neutral-400">{match.league || 'Liga'}</span>
               </div>
               {match.result && (
-                <span className="rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] font-display font-black tabular-nums text-neutral-200">
+                <span className="text-xs font-display font-black tabular-nums text-neutral-300">
                   {match.result.replace(':', ' - ')}
                 </span>
               )}
             </div>
 
-            <div className="font-display text-base font-bold leading-tight text-neutral-100">
+            <div className="font-display text-lg font-bold leading-tight text-neutral-100">
               {match.homeTeam && match.awayTeam ? `${match.homeTeam} vs ${match.awayTeam}` : match.teams}
             </div>
 
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] text-neutral-500 font-black uppercase tracking-widest">Tip</span>
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#222] pt-2.5">
+              <div className="flex items-center gap-1.5 text-sm">
+                <span className="text-neutral-500">Tip:</span>
                 {renderPrediction(tip, match.prediction)}
               </div>
-              <div className="text-right">
-                <div className="text-[9px] text-neutral-500 font-black uppercase tracking-widest mb-1">Kvota</div>
-                <div className={`text-2xl font-display font-black leading-none ${visuals.odds}`}>{match.odds.toFixed(2)}</div>
+              <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="text-neutral-500">Kvota:</span>
+                <span className={`font-display text-base font-black ${visuals.odds}`}>{match.odds.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -304,8 +294,8 @@ export default function Tickets() {
               onClick={() => setFilter(statusFilter as 'all' | TicketStatus)}
               className={`rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                 filter === statusFilter
-                  ? 'border-gold-500 bg-gold-500 text-black shadow-[0_0_16px_rgba(245,124,0,0.14)]'
-                  : 'border-white/10 bg-white/[0.04] text-neutral-400 hover:border-gold-500/30 hover:text-neutral-200'
+                  ? 'border-[#f59e0b] bg-[#f59e0b] text-black'
+                  : 'border-[#2a2a2a] bg-[#181818] text-neutral-400 hover:border-[#3a3a3a] hover:text-neutral-200'
               }`}
             >
               {statusFilter === 'all'
@@ -331,8 +321,8 @@ export default function Tickets() {
               onClick={() => setTypeFilter(ticketType as 'all' | 'vip' | 'free')}
               className={`rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                 typeFilter === ticketType
-                  ? 'bg-white text-black border-white'
-                  : 'bg-white/5 text-neutral-400 border-white/10 hover:border-gold-500/30'
+                  ? 'border-[#f59e0b] bg-[#f59e0b] text-black'
+                  : 'border-[#2a2a2a] bg-[#181818] text-neutral-400 hover:border-[#3a3a3a] hover:text-neutral-200'
               }`}
             >
               {ticketType === 'all' ? 'Svi' : ticketType.toUpperCase()}
@@ -383,7 +373,6 @@ export default function Tickets() {
                   }}
                   className={`relative cursor-pointer overflow-hidden rounded-xl border text-left transition-all duration-300 ${visuals.card}`}
                 >
-                  <div className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full ${visuals.glow}`}></div>
                   <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
 
                   <div className="relative">
@@ -391,7 +380,7 @@ export default function Tickets() {
                       <div className="min-w-0">
                         <div className="mb-2 flex flex-wrap items-center gap-1.5">
                           <div className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${
-                            tip.isVip ? 'bg-gold-500 text-black border-gold-300/70 shadow-[0_0_18px_rgba(245,124,0,0.28)]' : 'bg-white/5 text-neutral-300 border-white/10'
+                            tip.isVip ? 'border-gold-500/40 bg-gold-500/12 text-gold-200' : 'border-white/10 bg-white/5 text-neutral-300'
                           }`}>
                             {tip.isVip ? 'VIP' : 'FREE'}
                           </div>
@@ -399,7 +388,7 @@ export default function Tickets() {
                             {visuals.icon}
                             {visuals.label}
                           </div>
-                          <div className="rounded-full border border-gold-500/20 bg-black/30 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-gold-300">
+                          <div className="px-1 text-[8px] font-black uppercase tracking-widest text-neutral-500">
                             {isActiveLockedTicket(tip) ? 'TIP OBJAVLJEN' : getTicketKind(tip.matches.length)}
                           </div>
                         </div>
@@ -408,17 +397,12 @@ export default function Tickets() {
                         </span>
                       </div>
 
-                      {tip.status === TicketStatus.WON && (
-                        <div className="hidden sm:flex h-11 w-11 items-center justify-center rounded-2xl bg-green-400/10 text-green-300 border border-green-400/20">
-                          <TrendingUp size={21} />
-                        </div>
-                      )}
                     </div>
 
                     {renderTicketBody(tip)}
 
                     <div className="relative px-4 pb-4">
-                      <div className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-3 ${visuals.totalBox}`}>
+                      <div className="flex items-center justify-between gap-3 border-t border-[#262626] px-0 pt-3">
                         <div className="flex flex-col">
                           <span className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</span>
                           <span className={`text-2xl font-display font-black ${visuals.odds}`}>{isActiveLockedTicket(tip) ? '—' : tip.totalOdds.toFixed(2)}</span>
@@ -482,7 +466,6 @@ export default function Tickets() {
                 <X size={18} />
               </button>
 
-              <div className={`pointer-events-none absolute -top-16 -right-14 h-52 w-52 rounded-full ${selectedVisuals.glow}`}></div>
               <div className="relative pr-12">
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                   <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
@@ -494,7 +477,7 @@ export default function Tickets() {
                     {selectedVisuals.icon}
                     {selectedVisuals.label}
                   </span>
-                  <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-black/30 text-gold-300 border-gold-500/20">
+                  <span className="px-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">
                     {isActiveLockedTicket(selectedTip) ? 'TIP OBJAVLJEN' : getTicketKind(selectedTip.matches.length)}
                   </span>
                 </div>
@@ -506,7 +489,7 @@ export default function Tickets() {
 
                 {renderTicketBody(selectedTip, true)}
 
-                <div className={`mt-6 rounded-2xl border px-5 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 ${selectedVisuals.totalBox}`}>
+                <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[#262626] pt-4 md:grid-cols-4">
                   <div>
                     <div className="text-[8px] text-neutral-500 font-black uppercase tracking-[0.2em]">Ukupna kvota</div>
                     <div className={`text-3xl font-display font-black ${selectedVisuals.odds}`}>{isActiveLockedTicket(selectedTip) ? '—' : selectedTip.totalOdds.toFixed(2)}</div>
