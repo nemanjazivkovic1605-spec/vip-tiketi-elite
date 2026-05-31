@@ -191,7 +191,7 @@ export const isPredictionLockedForUser = (
   canAccessVip: boolean,
 ) => {
   if (tip.locked) return true;
-  if (tip.isVip && !canAccessVip) return true;
+  if (tip.isVip && !canAccessVip && !isPublicFinishedTicket(tip.status)) return true;
   if (!user || (!user.isAdmin && !user.emailVerified)) {
     return !isPublicFinishedTicket(tip.status);
   }

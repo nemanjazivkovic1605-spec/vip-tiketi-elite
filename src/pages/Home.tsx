@@ -1,182 +1,226 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowRight, CheckCircle2, Lock, ShieldCheck, Star, TrendingUp, Trophy, Users, Zap } from 'lucide-react';
+import {
+  ArrowRight,
+  BarChart3,
+  Clock3,
+  Coins,
+  Headphones,
+  LockKeyhole,
+  ReceiptText,
+  ShieldCheck,
+  ShoppingCart,
+  Target,
+  TrendingUp,
+  UserRound,
+  UsersRound,
+  Zap,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  CompactInfoCard,
+  DailyPickCard,
+  FeatureCard,
+  HistoryLink,
+  PricingCard,
+  RecentTicketsTable,
+  SecondaryCta,
+  StatCard,
+  TopNoticeBar,
+  type PricingCardProps,
+} from '../components/home/HomeLandingComponents';
 import { useAuth } from '../hooks/useAuth';
-import { mockTipsService } from '../services/mockTips';
-import { GlobalStats } from '../types';
+import { mockTipsService, type PublicHomepageData } from '../services/mockTips';
+
+const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
+const formatPercent = (value = 0) => `${value.toFixed(1)}%`;
 
 export default function Home() {
-  const [stats, setStats] = useState<GlobalStats | null>(null);
+  const [homepageData, setHomepageData] = useState<PublicHomepageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const { user, isVerified } = useAuth();
 
   useEffect(() => {
-    const fetchStats = async () => {
-      setStats(await mockTipsService.getPublicStats());
+    const fetchHomepageData = async () => {
+      try {
+        setHomepageData(await mockTipsService.getPublicHomepageData());
+        setLoadError('');
+      } catch (error) {
+        console.error('Homepage public data load failed:', error);
+        setLoadError('Statistika trenutno nije dostupna.');
+      } finally {
+        setLoading(false);
+      }
     };
 
-    fetchStats();
-    return mockTipsService.subscribePublicStats(fetchStats);
+    void fetchHomepageData();
+    return mockTipsService.subscribePublicStats(() => void fetchHomepageData());
   }, []);
 
-  const statsCards = [
-    { label: 'Hit rate', value: `${stats?.hitRate ?? 0}%`, icon: <Trophy className="text-gold-500" /> },
-    { label: 'ROI', value: `${(stats?.roi ?? 0) >= 0 ? '+' : ''}${stats?.roi ?? 0}%`, icon: <TrendingUp className="text-gold-500" /> },
-    { label: 'Units profit', value: `${(stats?.unitsProfit ?? 0) >= 0 ? '+' : ''}${stats?.unitsProfit ?? 0}u`, icon: <Zap className="text-gold-500" /> },
-    { label: 'Završeni tiketi', value: stats?.completedCount ?? 0, icon: <Users className="text-gold-500" /> },
+  const stats = homepageData?.stats;
+  const unlockTarget = user && isVerified ? '/daily-tips' : '/register';
+  const pricingTarget = user && isVerified ? '/pricing' : '/register';
+  const pricingCards: PricingCardProps[] = [
+    {
+      name: 'FREE',
+      description: 'Free tipovi za verifikovane korisnike',
+      price: 'BESPLATNO',
+      features: ['Pristup FREE tipovima'],
+      tone: 'free',
+      buttonLabel: 'Registruj se',
+      target: '/register',
+    },
+    {
+      name: 'SILVER',
+      description: 'Osnovni VIP pristup',
+      price: '15€',
+      duration: '7 dana',
+      features: ['VIP tipovi', 'Pristup istoriji', 'Podrška'],
+      tone: 'silver',
+      buttonLabel: 'Izaberi paket',
+      target: pricingTarget,
+    },
+    {
+      name: 'GOLD',
+      description: 'Najbolji odnos cene i kvaliteta',
+      price: '40€',
+      duration: '30 dana',
+      features: ['VIP tipovi', 'Pristup istoriji', 'Prioritetna podrška', 'Dodatni saveti'],
+      tone: 'gold',
+      buttonLabel: 'Izaberi paket',
+      target: pricingTarget,
+      popular: true,
+    },
+    {
+      name: 'ELITE',
+      description: 'Najisplativiji paket',
+      price: '100€',
+      duration: '90 dana',
+      features: ['VIP tipovi', 'Pristup istoriji', 'Prioritetna podrška', 'Dodatni saveti', 'Ekskluzivni tipovi'],
+      tone: 'elite',
+      buttonLabel: 'Izaberi paket',
+      target: pricingTarget,
+    },
   ];
 
   return (
-    <div className="overflow-hidden">
-      <section className="relative px-6 pb-24 pt-24 md:pb-28 md:pt-28">
-        <div className="absolute inset-x-0 top-0 -z-10 mx-auto h-[520px] max-w-6xl bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.13),transparent_58%)]" />
+    <div className="overflow-hidden bg-[#050505]">
+      <TopNoticeBar
+        latestMonthProfitUnits={homepageData?.latestMonthProfitUnits ?? null}
+        yesterdayWonOdds={homepageData?.yesterdayWonOdds ?? null}
+        completedCount={stats?.completedCount ?? null}
+        hitRate={stats?.hitRate ?? null}
+      />
 
-        <div className="mx-auto max-w-7xl text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-7 inline-flex items-center gap-2 rounded-full border border-gold-500/20 bg-gold-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-gold-300"
-          >
-            <span className="h-2 w-2 rounded-full bg-gold-500" />
-            Elite VIP Tips
-          </motion.div>
+      <section
+        className="relative min-h-[560px] overflow-hidden border-b border-white/10 bg-cover bg-right px-5 py-12 md:min-h-[610px] md:px-6 md:py-16"
+        style={{ backgroundImage: "url('/elite-football-hero.png')" }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.98)_0%,rgba(0,0,0,0.92)_34%,rgba(0,0,0,0.28)_56%,rgba(0,0,0,0)_82%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.18))]" />
 
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="mx-auto max-w-4xl font-display text-5xl font-black leading-[0.95] tracking-tight md:text-7xl"
-          >
-            Dominiraj <span className="gold-text">sportskim kladionicama</span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="mx-auto mt-6 max-w-2xl text-base leading-8 text-neutral-400 md:text-lg"
-          >
-            Free tipovi za verifikovane korisnike, VIP analize za aktivne članove i javna istorija završenih tiketa.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="mt-10 flex flex-wrap items-center justify-center gap-4"
-          >
-            <Link
-              to={user && isVerified ? '/pricing' : '/register'}
-              className="inline-flex items-center gap-2 rounded-2xl bg-gold-500 px-8 py-4 font-black text-black shadow-xl shadow-gold-500/25 transition-all hover:bg-gold-400"
-            >
-              Otključaj tipove <ArrowRight size={20} />
-            </Link>
-            <Link
-              to="/tickets"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-8 py-4 font-bold text-neutral-200 transition-all hover:border-gold-500/35 hover:text-gold-300"
-            >
-              Pogledaj istoriju <TrendingUp size={20} />
-            </Link>
-          </motion.div>
-        </div>
-      </section>
-
-      <section className="border-y border-white/5 bg-white/[0.015] px-6 py-14">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-5 md:grid-cols-4">
-          {statsCards.map((stat) => (
-            <div key={stat.label} className="rounded-3xl border border-white/5 bg-black/20 p-5 text-center">
-              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5">{stat.icon}</div>
-              <div className="font-display text-2xl font-black md:text-3xl">{stat.value}</div>
-              <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="px-6 py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
-            <h2 className="font-display text-3xl font-black md:text-5xl">Kako funkcioniše</h2>
-            <p className="mx-auto mt-3 max-w-2xl text-neutral-400">Jednostavan pristup sadržaju, bez konfuzije oko toga šta je javno, free ili VIP.</p>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-3">
-            {[
-              { step: '01', title: 'Registrujete nalog', text: 'Kreirate nalog i potvrđujete email adresu.' },
-              { step: '02', title: 'Dobijate FREE tipove', text: 'Verifikovani korisnici vide aktivne FREE tipove.' },
-              { step: '03', title: 'VIP otključava premium', text: 'Aktivni VIP članovi vide VIP tipove, prognoze i analize.' },
-            ].map((item) => (
-              <div key={item.step} className="glass rounded-[2rem] border-white/5 p-7">
-                <div className="mb-5 inline-flex rounded-2xl border border-gold-500/20 bg-gold-500/10 px-4 py-2 font-display text-xl font-black text-gold-300">{item.step}</div>
-                <h3 className="mb-3 text-xl font-black">{item.title}</h3>
-                <p className="leading-7 text-neutral-400">{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="px-6 pb-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-7">
-              <CheckCircle2 className="mb-5 text-green-400" size={30} />
-              <h3 className="mb-3 text-2xl font-black">FREE tipovi</h3>
-              <p className="text-sm leading-7 text-neutral-400">Dostupni registrovanim i email-verifikovanim korisnicima. Neregistrovani posetioci vide zaključane kartice.</p>
-            </div>
-            <div className="rounded-[2rem] border border-gold-500/25 bg-gold-500/[0.06] p-7">
-              <Star className="mb-5 text-gold-400" size={30} />
-              <h3 className="mb-3 text-2xl font-black">VIP tipovi</h3>
-              <p className="text-sm leading-7 text-neutral-400">Dostupni samo odobrenim VIP članovima sa aktivnom članarinom. VIP analiza ostaje zaključana za non-VIP korisnike.</p>
-            </div>
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-7">
-              <Lock className="mb-5 text-blue-300" size={30} />
-              <h3 className="mb-3 text-2xl font-black">Završeni tiketi</h3>
-              <p className="text-sm leading-7 text-neutral-400">Istorija i rezultati su javni. Ako je tiket VIP, tačan VIP tip i analiza ostaju zaključani za korisnike bez VIP pristupa.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="px-6 pb-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
-            <h2 className="font-display text-3xl font-black md:text-5xl">Zašto Elite Tips?</h2>
-            <p className="mt-3 text-neutral-400">Analitika, disciplina i upravljanje rizikom umesto nasumičnih tiketa.</p>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            {[
-              { title: 'Rane Informacije', desc: 'Praćenje povreda, rotacija, tržišta kvota i smart money signala.', icon: <ShieldCheck size={30} />, path: '/early-information' },
-              { title: 'Dnevna Analiza', desc: 'Profesionalan proces selekcije tipova kroz statistiku, value i rizik.', icon: <Star size={30} />, path: '/daily-analysis' },
-              { title: 'Bankroll Management', desc: 'Unit sistem i kontrola uloga za dugoročniji pristup igri.', icon: <Zap size={30} />, path: '/bankroll-management' },
-            ].map((feature) => (
-              <Link key={feature.title} to={feature.path} className="group block h-full">
-                <div className="glass h-full rounded-[2rem] border-white/5 p-7 transition-all group-hover:-translate-y-1 group-hover:border-gold-500/25">
-                  <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gold-500/10 text-gold-500">{feature.icon}</div>
-                  <h3 className="mb-3 text-2xl font-black">{feature.title}</h3>
-                  <p className="text-sm leading-7 text-neutral-400">{feature.desc}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="pricing" className="bg-white/[0.015] px-6 py-24">
-        <div className="mx-auto max-w-3xl text-center">
-          <div className="mb-9">
-            <h2 className="font-display text-3xl font-black md:text-5xl">VIP pristup</h2>
-            <p className="mx-auto mt-4 max-w-xl leading-7 text-neutral-400">
-              Registracija je besplatna. Kada potvrdite email i ulogujete se, možete izabrati VIP paket i poslati zahtev za aktivaciju.
+        <div className="relative mx-auto max-w-7xl">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
+            <p className="mb-4 text-xs font-black uppercase tracking-[0.28em] text-gold-400">Elite sports analytics</p>
+            <h1 className="max-w-xl font-display text-5xl font-black leading-[0.95] text-white md:text-7xl">
+              Dominiraj <span className="text-gold-400">sportskim kladionicama</span>
+            </h1>
+            <p className="mt-5 max-w-xl text-sm leading-7 text-neutral-300 md:text-base">
+              Free tipovi za verifikovane korisnike i VIP tipovi za ozbiljne igrače koji žele dugoročan profit.
             </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link
+                to={unlockTarget}
+                className="inline-flex items-center gap-2 rounded-lg bg-gold-500 px-5 py-3 text-xs font-black uppercase tracking-wide text-black shadow-[0_0_22px_rgba(245,124,0,0.3)] transition-all hover:bg-gold-400"
+              >
+                Otključaj tipove <ArrowRight size={17} />
+              </Link>
+              <SecondaryCta to="/stats">Pogledaj statistiku</SecondaryCta>
+            </div>
+          </motion.div>
+
+          <div className="mt-12 overflow-hidden rounded-xl border border-white/15 bg-black/65 backdrop-blur-md">
+            <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4">
+              <StatCard icon={Target} label="Prolaznost" value={loading ? '...' : formatPercent(stats?.hitRate)} />
+              <StatCard icon={Coins} label="Profit (jedinice)" value={loading ? '...' : formatUnits(stats?.unitsProfit)} />
+              <StatCard icon={BarChart3} label="ROI" value={loading ? '...' : formatPercent(stats?.roi)} />
+              <StatCard icon={ReceiptText} label="Završeni tiketi" value={loading ? '...' : `+${stats?.completedCount ?? 0}`} />
+            </div>
           </div>
-          <Link
-            to={user && isVerified ? '/pricing' : '/register'}
-            className="inline-flex items-center gap-2 rounded-2xl bg-gold-500 px-8 py-4 font-black text-black shadow-xl shadow-gold-500/20 transition-all hover:bg-gold-400"
-          >
-            {user && isVerified ? 'Pogledaj VIP pakete' : 'Kreiraj FREE nalog'} <ArrowRight size={20} />
-          </Link>
+        </div>
+      </section>
+
+      <section className="px-5 py-4 md:px-6">
+        <div className="mx-auto grid max-w-7xl overflow-hidden rounded-xl border border-white/10 bg-black/55 sm:grid-cols-2 lg:grid-cols-4">
+          <FeatureCard icon={ShieldCheck} title="Provereni tipovi" text="Visoka prolaznost na duge staze" />
+          <FeatureCard icon={ReceiptText} title="Transparentnost" text="Javna istorija svih završenih tiketa" />
+          <FeatureCard icon={UserRound} title="Stručne analize" text="Analize mečeva od našeg tima" />
+          <FeatureCard icon={LockKeyhole} title="Sigurno i fer" text="Zaštita korisnika na prvom mestu" />
+        </div>
+      </section>
+
+      <section className="px-5 py-4 md:px-6">
+        <div className="mx-auto grid max-w-7xl gap-3 lg:grid-cols-[1fr_1fr_0.62fr]">
+          <DailyPickCard
+            title="VIP tiket dana"
+            description="Pažljivo odabran tiket sa većom kvotom."
+            price="15€"
+            tone="vip"
+            features={['2–6 mečeva (dubl, tripl ili kombo)', 'Kvota 2.50+', 'Objava svaki dan']}
+            buttonLabel="Kupi tiket"
+          />
+          <DailyPickCard
+            title="Safe pick dana"
+            description="Najsigurniji dnevni predlog."
+            price="10€"
+            tone="safe"
+            badge="Popularno"
+            features={['1–3 meča (singl, dubl ili kombo)', 'Kvota 1.50–3.00', 'Objava svaki dan']}
+            buttonLabel="Kupi pick"
+          />
+          <aside className="grid content-center gap-6 rounded-xl border border-white/10 bg-black/55 p-5">
+            <CompactInfoCard icon={ShoppingCart} title="Kupovina bez pretplate" text="Odmah dobijaš tiket" />
+            <CompactInfoCard icon={Clock3} title="Dostupno svakog dana" text="Objava ujutru" />
+            <CompactInfoCard icon={UserRound} title="Pogodno za sve igrače" text="Početnike i iskusne" />
+          </aside>
+        </div>
+      </section>
+
+      <section id="pricing" className="scroll-mt-28 px-5 py-7 md:px-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-5 text-center">
+            <h2 className="font-display text-3xl font-black uppercase text-neutral-100">Paketi pretplate</h2>
+            <p className="mt-1 text-sm text-neutral-400">Izaberi paket koji odgovara tvojim ciljevima.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {pricingCards.map((card) => <PricingCard key={card.name} {...card} />)}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 pb-5 md:px-6">
+        <div className="mx-auto max-w-7xl rounded-xl border border-white/10 bg-black/45 p-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
+            <h2 className="font-display text-xl font-black uppercase text-neutral-100">Poslednjih 5 završenih tiketa</h2>
+            <HistoryLink />
+          </div>
+          {loadError && !homepageData ? (
+            <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-8 text-center text-sm text-neutral-500">{loadError}</div>
+          ) : loading ? (
+            <div className="h-52 animate-pulse rounded-xl border border-white/10 bg-white/[0.035]" />
+          ) : (
+            <RecentTicketsTable tips={homepageData?.recentTips ?? []} />
+          )}
+        </div>
+      </section>
+
+      <section className="px-5 pb-8 md:px-6">
+        <div className="mx-auto grid max-w-7xl overflow-hidden rounded-xl border border-white/10 bg-black/55 sm:grid-cols-2 lg:grid-cols-4">
+          <FeatureCard icon={Zap} title="Pravovremeni tipovi" text="Tipovi objavljeni na vreme, svaki dan" />
+          <FeatureCard icon={ShieldCheck} title="100% transparentno" text="Nema skrivanja, svi rezultati su javni" />
+          <FeatureCard icon={Headphones} title="Brza podrška" text="Tu smo za tebe kada je važno" />
+          <FeatureCard icon={UsersRound} title="Zajednica igrača" text="Pridruži se hiljadama zadovoljnih korisnika" />
         </div>
       </section>
     </div>

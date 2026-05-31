@@ -14,6 +14,7 @@ import { db } from '../lib/firebase';
 import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, DailyAnalysisItem } from '../types';
 import {
   calculateTotalOdds,
+  formatLocalIsoDate,
   getTicketPublicationMeta,
   getTicketStake,
   getTicketUnitsStake,
@@ -263,6 +264,13 @@ const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketSta
 
 type StatsFilter = 'all' | 'free' | 'vip';
 
+export type PublicHomepageData = {
+  stats: GlobalStats;
+  recentTips: Tip[];
+  latestMonthProfitUnits: number | null;
+  yesterdayWonOdds: number | null;
+};
+
 const filterTipsByType = (tips: Tip[], filter: StatsFilter) => {
   if (filter === 'all') return tips;
   const wantVip = filter === 'vip';
@@ -439,6 +447,11 @@ export const mockTipsService = {
     return readPublishedSafeTips();
   },
 
+  getVisibleHistoryTips: async (access: { canAccessVip: boolean }): Promise<Tip[]> => {
+    if (access.canAccessVip) return readFinishedPublishedTips();
+    return readPublicStatsTips();
+  },
+
   getPublishedTips: async (): Promise<Tip[]> => {
     return readPublishedTips();
   },
@@ -472,8 +485,25 @@ export const mockTipsService = {
     return calculateStats(filterTipsByType(await readPublicStatsTips(), filter));
   },
 
-  syncPublicTickets: async (tips?: Tip[]): Promise<void> => {
-    const sourceTips = tips || await readAllTips();
+  getPublicHomepageData: async (): Promise<PublicHomepageData> => {
+    const tips = await readPublicStatsTips();
+    const stats = calculateStats(tips);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayDate = formatLocalIsoDate(yesterday);
+    const yesterdayWinner = sortTicketsByDate(tips)
+      .find((tip) => tip.date === yesterdayDate && tip.status === TicketStatus.WON);
+
+    return {
+      stats,
+      recentTips: sortTicketsByDate(tips).slice(0, 5),
+      latestMonthProfitUnits: stats.monthlyBreakdown[0]?.profitUnits ?? null,
+      yesterdayWonOdds: yesterdayWinner?.totalOdds ?? null,
+    };
+  },
+
+  syncPublicTickets: async (): Promise<void> => {
+    const sourceTips = await readAllTips();
     const publishedIds = new Set(publicOnly(sourceTips).map((tip) => tip.id));
     const publicSnapshot = await getDocs(query(getPublicTicketsCollection()));
     const publicStatsSnapshot = await getDocs(query(getPublicStatsTicketsCollection()));

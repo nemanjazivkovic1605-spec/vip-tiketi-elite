@@ -99,7 +99,9 @@ export default function Tickets() {
 
   useEffect(() => {
     void fetchData(true);
-    return mockTipsService.subscribe(() => void fetchData(), { canAccessFree, canAccessVip });
+    return canAccessVip
+      ? mockTipsService.subscribe(() => void fetchData(), { canAccessFree, canAccessVip })
+      : mockTipsService.subscribePublicStats(() => void fetchData());
   }, [canAccessFree, canAccessVip]);
 
   const fetchData = async (showLoading = false) => {
@@ -107,7 +109,7 @@ export default function Tickets() {
     setLoadError('');
     try {
       const allTips = await withTimeout(
-        mockTipsService.getVisibleTips({ canAccessFree, canAccessVip }),
+        mockTipsService.getVisibleHistoryTips({ canAccessVip }),
         'Istorija se učitava predugo. Pokušajte ponovo.',
       );
       setTips(allTips);
@@ -271,7 +273,7 @@ export default function Tickets() {
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="text-center mb-16">
         <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">ISTORIJA <span className="gold-text">TIKETA</span></h1>
-        <p className="text-neutral-400">Pregled svih aktivnih i završenih tiketa iz naše baze.</p>
+        <p className="text-neutral-400">Javni pregled svih završenih tiketa iz naše baze.</p>
       </div>
 
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-12">

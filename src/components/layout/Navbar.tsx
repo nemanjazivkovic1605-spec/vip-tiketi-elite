@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { LogOut, Menu, Trophy, X } from 'lucide-react';
+import { LogOut, Menu, Trophy, UserRound, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 export default function Navbar() {
@@ -16,11 +16,17 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (location.hash !== '#pricing') return;
+    requestAnimationFrame(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }, [location.hash, location.pathname]);
+
   const navLinks = [
     { label: 'Početna', path: '/' },
-    { label: 'Aktivni tipovi', path: '/daily-tips' },
-    { label: 'Istorija', path: '/tickets' },
     { label: 'Statistika', path: '/stats' },
+    { label: 'Paketi', path: '/#pricing' },
+    { label: 'Dnevni tipovi', path: '/daily-tips' },
+    { label: 'Istorija', path: '/history' },
     { label: 'Kontakt', path: '/contact' },
   ];
 
@@ -32,8 +38,6 @@ export default function Navbar() {
     : [];
 
   const isHome = location.pathname === '/';
-  const vipCtaPath = user ? '/pricing' : '/register';
-
   return (
     <nav className={`fixed left-0 top-0 z-50 w-full transition-all duration-300 ${
       scrolled || !isHome ? 'border-b border-white/5 bg-neutral-950/92 py-3 backdrop-blur-xl' : 'bg-transparent py-5'
@@ -70,12 +74,6 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link
-            to={vipCtaPath}
-            className="rounded-2xl bg-gold-500 px-5 py-2.5 text-[12px] font-black uppercase tracking-widest text-black shadow-lg shadow-gold-500/20 transition-all hover:bg-gold-400"
-          >
-            VIP pristup
-          </Link>
           {user ? (
             <>
               <span className="max-w-[180px] truncate text-xs font-bold text-neutral-500">{user.email}</span>
@@ -88,8 +86,8 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <Link to="/login" className="text-[12px] font-black uppercase tracking-widest text-neutral-400 transition-colors hover:text-gold-500">
-              Prijava
+            <Link to="/login" className="inline-flex items-center gap-2 rounded-xl border border-gold-500/75 px-5 py-2.5 text-[12px] font-black uppercase tracking-widest text-neutral-200 transition-colors hover:bg-gold-500/10 hover:text-gold-300">
+              <UserRound size={17} /> Prijava
             </Link>
           )}
         </div>
@@ -120,13 +118,6 @@ export default function Navbar() {
                   {link.label}
                 </Link>
               ))}
-              <Link
-                to={vipCtaPath}
-                onClick={() => setIsOpen(false)}
-                className="rounded-2xl bg-gold-500 px-4 py-4 text-center text-sm font-black uppercase tracking-widest text-black"
-              >
-                VIP pristup
-              </Link>
               <div className="my-2 h-px bg-white/5" />
               {user ? (
                 <div className="flex flex-col gap-4">

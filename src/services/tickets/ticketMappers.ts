@@ -32,7 +32,6 @@ export const mapTicketForPublic = (tip: Tip): Tip => {
     analysis: '',
     matches: tip.matches.map((match) => ({
       ...match,
-      prediction: tip.isVip ? 'VIP TIP' : match.prediction,
       analysis: '',
     })),
   };

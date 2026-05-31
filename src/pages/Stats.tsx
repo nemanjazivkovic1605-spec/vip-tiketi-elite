@@ -44,7 +44,7 @@ export default function Stats() {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
-      const statsLoader = isAdmin || canAccessVip
+      const statsLoader = isAdmin
         ? mockTipsService.getStats
         : mockTipsService.getPublicStats;
 
@@ -70,10 +70,10 @@ export default function Stats() {
 
   useEffect(() => {
     void fetchData(true, statsFilter);
-    return isAdmin || canAccessVip
+    return isAdmin
       ? mockTipsService.subscribe(() => void fetchData(false, statsFilter))
       : mockTipsService.subscribePublicStats(() => void fetchData(false, statsFilter));
-  }, [isAdmin, canAccessVip, statsFilter]);
+  }, [isAdmin, statsFilter]);
 
   const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
 

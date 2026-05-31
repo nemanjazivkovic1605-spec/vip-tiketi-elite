@@ -18,7 +18,8 @@
     "realize:history:feb-2026": "tsx scripts/realize-february-2026-history.ts",
     "realize:history:feb-2026:write": "tsx scripts/realize-february-2026-history.ts --write",
     "realize:history:mar-2026": "tsx scripts/realize-march-2026-history.ts",
-    "realize:history:mar-2026:write": "tsx scripts/realize-march-2026-history.ts --write"
+    "realize:history:mar-2026:write": "tsx scripts/realize-march-2026-history.ts --write",
+    "sync:public-ticket-indexes": "tsx scripts/sync-public-ticket-indexes.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
