@@ -31,6 +31,7 @@ import {
 } from '../components/home/HomeLandingComponents';
 import { useAuth } from '../hooks/useAuth';
 import { mockTipsService, type PublicHomepageData } from '../services/mockTips';
+import { getCheckoutPath } from '../lib/paymentProducts';
 
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
 const formatPercent = (value = 0) => `${value.toFixed(1)}%`;
@@ -59,8 +60,9 @@ export default function Home() {
   }, []);
 
   const stats = homepageData?.stats;
+  const hasPublicStats = Boolean(stats?.completedCount);
   const unlockTarget = user && isVerified ? '/daily-tips' : '/register';
-  const pricingTarget = user && isVerified ? '/pricing' : '/register';
+  const hasVerifiedAccount = Boolean(user && isVerified);
   const pricingCards: PricingCardProps[] = [
     {
       name: 'FREE',
@@ -68,8 +70,8 @@ export default function Home() {
       price: 'BESPLATNO',
       features: ['Pristup FREE tipovima'],
       tone: 'free',
-      buttonLabel: 'Registruj se',
-      target: '/register',
+      buttonLabel: hasVerifiedAccount ? 'Pogledaj tipove' : 'Registruj se',
+      target: hasVerifiedAccount ? '/daily-tips' : '/register',
     },
     {
       name: 'SILVER',
@@ -79,7 +81,7 @@ export default function Home() {
       features: ['VIP tipovi', 'Pristup istoriji', 'Podrška'],
       tone: 'silver',
       buttonLabel: 'Izaberi paket',
-      target: pricingTarget,
+      target: getCheckoutPath('silver-7'),
     },
     {
       name: 'GOLD',
@@ -89,7 +91,7 @@ export default function Home() {
       features: ['VIP tipovi', 'Pristup istoriji', 'Prioritetna podrška', 'Dodatni saveti'],
       tone: 'gold',
       buttonLabel: 'Izaberi paket',
-      target: pricingTarget,
+      target: getCheckoutPath('gold-30'),
       popular: true,
     },
     {
@@ -100,7 +102,7 @@ export default function Home() {
       features: ['VIP tipovi', 'Pristup istoriji', 'Prioritetna podrška', 'Dodatni saveti', 'Ekskluzivni tipovi'],
       tone: 'elite',
       buttonLabel: 'Izaberi paket',
-      target: pricingTarget,
+      target: getCheckoutPath('elite-90'),
     },
   ];
 
@@ -109,20 +111,23 @@ export default function Home() {
       <TopNoticeBar
         latestMonthProfitUnits={homepageData?.latestMonthProfitUnits ?? null}
         yesterdayWonOdds={homepageData?.yesterdayWonOdds ?? null}
-        completedCount={stats?.completedCount ?? null}
-        hitRate={stats?.hitRate ?? null}
+        completedCount={hasPublicStats ? stats?.completedCount ?? null : null}
+        hitRate={hasPublicStats ? stats?.hitRate ?? null : null}
       />
 
       <section
-        className="relative min-h-[560px] overflow-hidden border-b border-white/10 bg-cover bg-right px-5 py-12 md:min-h-[610px] md:px-6 md:py-16"
+        className="relative min-h-[560px] overflow-hidden border-b border-white/10 bg-cover bg-right px-5 py-11 md:min-h-[610px] md:px-6 md:py-16"
         style={{ backgroundImage: "url('/elite-football-hero.png')" }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.98)_0%,rgba(0,0,0,0.92)_34%,rgba(0,0,0,0.28)_56%,rgba(0,0,0,0)_82%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.18))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.98)_0%,rgba(0,0,0,0.9)_58%,rgba(0,0,0,0.42)_100%)] md:bg-[linear-gradient(90deg,rgba(0,0,0,0.98)_0%,rgba(0,0,0,0.92)_34%,rgba(0,0,0,0.28)_56%,rgba(0,0,0,0)_82%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.22))]" />
 
         <div className="relative mx-auto max-w-7xl">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
-            <p className="mb-4 text-xs font-black uppercase tracking-[0.28em] text-gold-400">Elite sports analytics</p>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <p className="text-xs font-black uppercase tracking-[0.28em] text-gold-400">Elite sports analytics</p>
+              <span className="rounded border border-gold-500/25 bg-black/45 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gold-200">18+ odgovorno</span>
+            </div>
             <h1 className="max-w-xl font-display text-5xl font-black leading-[0.95] text-white md:text-7xl">
               Dominiraj <span className="text-gold-400">sportskim kladionicama</span>
             </h1>
@@ -142,10 +147,10 @@ export default function Home() {
 
           <div className="mt-12 overflow-hidden rounded-xl border border-white/15 bg-black/65 backdrop-blur-md">
             <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4">
-              <StatCard icon={Target} label="Prolaznost" value={loading ? '...' : formatPercent(stats?.hitRate)} />
-              <StatCard icon={Coins} label="Profit (jedinice)" value={loading ? '...' : formatUnits(stats?.unitsProfit)} />
-              <StatCard icon={BarChart3} label="ROI" value={loading ? '...' : formatPercent(stats?.roi)} />
-              <StatCard icon={ReceiptText} label="Završeni tiketi" value={loading ? '...' : `+${stats?.completedCount ?? 0}`} />
+              <StatCard icon={Target} label="Prolaznost" value={loading ? '...' : hasPublicStats ? formatPercent(stats?.hitRate) : '—'} />
+              <StatCard icon={Coins} label="Profit (jedinice)" value={loading ? '...' : hasPublicStats ? formatUnits(stats?.unitsProfit) : '—'} />
+              <StatCard icon={BarChart3} label="ROI" value={loading ? '...' : hasPublicStats ? formatPercent(stats?.roi) : '—'} />
+              <StatCard icon={ReceiptText} label="Završeni tiketi" value={loading ? '...' : hasPublicStats ? `+${stats?.completedCount ?? 0}` : '—'} />
             </div>
           </div>
         </div>
@@ -169,6 +174,7 @@ export default function Home() {
             tone="vip"
             features={['2–6 mečeva (dubl, tripl ili kombo)', 'Kvota 2.50+', 'Objava svaki dan']}
             buttonLabel="Kupi tiket"
+            target={getCheckoutPath('vip-ticket-day')}
           />
           <DailyPickCard
             title="Safe pick dana"
@@ -178,6 +184,7 @@ export default function Home() {
             badge="Popularno"
             features={['1–3 meča (singl, dubl ili kombo)', 'Kvota 1.50–3.00', 'Objava svaki dan']}
             buttonLabel="Kupi pick"
+            target={getCheckoutPath('safe-pick-day')}
           />
           <aside className="grid content-center gap-6 rounded-xl border border-white/10 bg-black/55 p-5">
             <CompactInfoCard icon={ShoppingCart} title="Kupovina bez pretplate" text="Odmah dobijaš tiket" />

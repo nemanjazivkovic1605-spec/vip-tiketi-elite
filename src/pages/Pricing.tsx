@@ -1,36 +1,19 @@
-import React, { useState } from 'react';
-import { ArrowRight, CheckCircle2, Crown, Loader2, ShieldCheck } from 'lucide-react';
+import React from 'react';
+import { ArrowRight, Crown, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { VIP_PACKAGES } from '../lib/demoData';
 import { useAuth } from '../hooks/useAuth';
-import { authService, getFirebaseErrorDetails, type PlanId } from '../services/authService';
-import { MembershipStatus } from '../types';
+import { getCheckoutPath, type PaymentProductId } from '../lib/paymentProducts';
 
 const vipPackages = VIP_PACKAGES.filter((plan) => plan.id !== 'free');
+const checkoutProducts: Record<string, PaymentProductId> = {
+  silver_7: 'silver-7',
+  gold_30: 'gold-30',
+  elite_90: 'elite-90',
+};
 
 export default function Pricing() {
-  const { user, isApproved, refreshUser } = useAuth();
-  const [submittingPlan, setSubmittingPlan] = useState<string | null>(null);
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
-
-  const requestPlan = async (planId: Exclude<PlanId, 'free'>, planName: string) => {
-    if (!user || isApproved) return;
-    setError('');
-    setSuccess('');
-    setSubmittingPlan(planId);
-
-    try {
-      await authService.requestVipPlan(user, planId);
-      await refreshUser();
-      setSuccess(`Zahtev za ${planName} je poslat. VIP se aktivira nakon potvrde administratora.`);
-    } catch (requestError) {
-      const details = getFirebaseErrorDetails(requestError);
-      console.error('VIP plan request error:', details, requestError);
-      setError(`Zahtev nije poslat: ${details.message}`);
-    } finally {
-      setSubmittingPlan(null);
-    }
-  };
+  const { isApproved } = useAuth();
 
   return (
     <div className="px-6 pb-24 pt-10">
@@ -41,7 +24,7 @@ export default function Pricing() {
           </div>
           <h1 className="font-display text-4xl font-black md:text-5xl">Izaberite VIP pristup</h1>
           <p className="mt-4 max-w-2xl leading-7 text-neutral-400">
-            Vaš FREE nalog ostaje aktivan. Izbor paketa šalje zahtev administratoru, a VIP sadržaj se otključava tek nakon potvrde uplate.
+            Vaš FREE nalog ostaje aktivan. Izaberite paket, izvršite uplatu na tekući račun i pošaljite dokaz. VIP sadržaj se otključava nakon ručne potvrde.
           </p>
         </div>
 
@@ -52,18 +35,9 @@ export default function Pricing() {
           </div>
         )}
 
-        {success && (
-          <div className="mb-8 flex items-start gap-3 rounded-2xl border border-green-500/20 bg-green-500/10 p-4 text-sm text-green-300">
-            <CheckCircle2 className="mt-0.5 shrink-0" size={18} />
-            {success}
-          </div>
-        )}
-        {error && <div className="mb-8 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
-
         <div className="grid gap-6 md:grid-cols-3">
           {vipPackages.map((pkg) => {
-            const isPending = user?.membershipStatus === MembershipStatus.PENDING && user.selectedPlan === pkg.id;
-            const isSubmitting = submittingPlan === pkg.id;
+            const checkoutProduct = checkoutProducts[pkg.id];
             return (
               <article
                 key={pkg.id}
@@ -89,18 +63,15 @@ export default function Pricing() {
                     </div>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  disabled={isApproved || isPending || Boolean(submittingPlan)}
-                  onClick={() => requestPlan(pkg.id as Exclude<PlanId, 'free'>, pkg.name)}
-                  className={`flex items-center justify-center gap-2 rounded-2xl py-4 font-black transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+                <Link
+                  to={getCheckoutPath(checkoutProduct)}
+                  className={`flex items-center justify-center gap-2 rounded-2xl py-4 font-black transition-all ${
                     pkg.isPopular ? 'bg-gold-500 text-black hover:bg-gold-400' : 'bg-white/5 hover:bg-white/10'
                   }`}
                 >
-                  {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : null}
-                  {isApproved ? 'VIP aktivan' : isPending ? 'Zahtev poslat' : 'Pošalji zahtev'}
-                  {!isApproved && !isPending && !isSubmitting ? <ArrowRight size={18} /> : null}
-                </button>
+                  {isApproved ? 'Produži članstvo' : 'Podaci za uplatu'}
+                  <ArrowRight size={18} />
+                </Link>
               </article>
             );
           })}

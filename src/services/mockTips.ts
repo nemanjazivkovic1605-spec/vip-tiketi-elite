@@ -371,14 +371,12 @@ const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
     try {
       const snapshot = await getDocs(query(getPublicStatsTicketsCollection()));
-      if (!snapshot.empty) {
-        return sortTicketsByDate(snapshot.docs
-          .map((ticketDoc) => mapTicketForPublic(normalizeTip({
-            ...ticketDoc.data(),
-            id: ticketDoc.id,
-          } as Tip)))
-          .filter((tip) => isFinishedForStats(tip.status)));
-      }
+      return sortTicketsByDate(snapshot.docs
+        .map((ticketDoc) => mapTicketForPublic(normalizeTip({
+          ...ticketDoc.data(),
+          id: ticketDoc.id,
+        } as Tip)))
+        .filter((tip) => isFinishedForStats(tip.status)));
     } catch {
       // Compatibility while newly added public stats rules/index are being deployed.
     }

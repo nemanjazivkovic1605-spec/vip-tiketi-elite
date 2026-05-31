@@ -1,13 +1,23 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Mail, MessageSquare, Trophy, Twitter } from 'lucide-react';
+import { ArrowRight, Mail, MessageSquare, ShieldCheck, Trophy } from 'lucide-react';
 import { CONTACT_DISPLAY_EMAIL } from '../../services/contactService';
 
 export default function Footer() {
   return (
-    <footer className="border-t border-white/5 bg-black px-6 pb-10 pt-16">
+    <footer className="border-t border-white/5 bg-black px-5 pb-8 pt-10 md:px-6 md:pt-12">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-12 grid gap-10 md:grid-cols-4">
+        <div className="mb-10 flex flex-col justify-between gap-4 rounded-xl border border-gold-500/15 bg-gold-500/[0.035] px-5 py-5 md:flex-row md:items-center">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-gold-400">Elite VIP Tips</p>
+            <h3 className="mt-1 font-display text-xl font-black text-white">Spremni za disciplinovan pristup?</h3>
+          </div>
+          <Link to="/#pricing" className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold-500 px-4 py-3 text-xs font-black uppercase tracking-wide text-black transition-colors hover:bg-gold-400">
+            Pogledaj pakete <ArrowRight size={16} />
+          </Link>
+        </div>
+
+        <div className="mb-10 grid gap-9 md:grid-cols-4">
           <div className="md:col-span-2">
             <Link to="/" className="mb-5 flex items-center gap-2 font-display text-3xl font-black tracking-tighter">
               <Trophy className="text-gold-500" size={32} />
@@ -17,11 +27,15 @@ export default function Footer() {
               Sportska analitika, disciplina i transparentna istorija tipova. Klađenje nosi rizik, zato igrajte odgovorno.
             </p>
             <div className="flex gap-3">
-              {[Instagram, Twitter, MessageSquare].map((Icon, index) => (
-                <a key={index} href="#" className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 transition-all hover:bg-gold-500/10 hover:text-gold-500">
-                  <Icon size={20} />
-                </a>
-              ))}
+              <Link to="/contact" aria-label="Kontakt forma" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 transition-all hover:border-gold-500/25 hover:bg-gold-500/10 hover:text-gold-500">
+                <MessageSquare size={19} />
+              </Link>
+              <a href={`mailto:${CONTACT_DISPLAY_EMAIL}`} aria-label="Email podrška" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 transition-all hover:border-gold-500/25 hover:bg-gold-500/10 hover:text-gold-500">
+                <Mail size={19} />
+              </a>
+              <Link to="/terms" aria-label="Pravila korišćenja" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 transition-all hover:border-gold-500/25 hover:bg-gold-500/10 hover:text-gold-500">
+                <ShieldCheck size={19} />
+              </Link>
             </div>
           </div>
 
@@ -52,7 +66,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-between gap-5 border-t border-white/5 pt-8 md:flex-row">
+        <div className="flex flex-col items-center justify-between gap-4 border-t border-white/5 pt-6 md:flex-row">
           <p className="text-center text-xs text-neutral-600 md:text-left">
             © 2025-2026 Elite VIP Tips. Sva prava zadržana. Klađenje je dozvoljeno osobama starijim od 18 godina.
           </p>

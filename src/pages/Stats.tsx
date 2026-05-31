@@ -76,26 +76,27 @@ export default function Stats() {
   }, [isAdmin, statsFilter]);
 
   const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
+  const hasPublicStats = Boolean(stats?.completedCount);
 
   const overviewCards = useMemo(() => [
-    { label: 'Yield', value: formatPercent(stats?.yield ?? 0), desc: 'Čist profit / ukupne units', icon: <TrendingUp className="text-gold-500" /> },
-    { label: 'Hit Rate', value: `${stats?.hitRate ?? 0}%`, desc: 'Pogođeni / završeni tiketi', icon: <Target className="text-gold-500" /> },
-    { label: 'Average Odds', value: (stats?.averageOdds ?? 0).toFixed(2), desc: 'Prosečna kvota završenih tiketa', icon: <BarChart3 className="text-gold-500" /> },
-    { label: 'Units Profit', value: formatUnits(stats?.unitsProfit ?? 0), desc: 'Profit u jedinicama po tipu', icon: <Award className="text-gold-500" /> },
-    { label: 'Profit RSD', value: formatRsd(stats?.monthlyProfit ?? 0), desc: '1 unit = 1000 RSD', icon: <TrendingUp className="text-gold-500" /> },
+    { label: 'Yield', value: hasPublicStats ? formatPercent(stats?.yield ?? 0) : '—', desc: 'Čist profit / ukupne units', icon: <TrendingUp className="text-gold-500" /> },
+    { label: 'Hit Rate', value: hasPublicStats ? `${stats?.hitRate ?? 0}%` : '—', desc: 'Pogođeni / završeni tiketi', icon: <Target className="text-gold-500" /> },
+    { label: 'Average Odds', value: hasPublicStats ? (stats?.averageOdds ?? 0).toFixed(2) : '—', desc: 'Prosečna kvota završenih tiketa', icon: <BarChart3 className="text-gold-500" /> },
+    { label: 'Units Profit', value: hasPublicStats ? formatUnits(stats?.unitsProfit ?? 0) : '—', desc: 'Profit u jedinicama po tipu', icon: <Award className="text-gold-500" /> },
+    { label: 'Profit RSD', value: hasPublicStats ? formatRsd(stats?.monthlyProfit ?? 0) : '—', desc: '1 unit = 1000 RSD', icon: <TrendingUp className="text-gold-500" /> },
     {
       label: 'Završeni Tiketi',
-      value: stats?.completedCount ?? 0,
-      desc: `${stats?.winCount ?? 0}W • ${stats?.lossCount ?? 0}L${stats?.refundCount ? ` • ${stats?.refundCount}V` : ''}`,
+      value: hasPublicStats ? stats?.completedCount ?? 0 : '—',
+      desc: hasPublicStats ? `${stats?.winCount ?? 0}W • ${stats?.lossCount ?? 0}L${stats?.refundCount ? ` • ${stats?.refundCount}V` : ''}` : 'Javni indeks je u pripremi',
       icon: <Zap className="text-gold-500" />,
     },
-  ], [stats]);
+  ], [hasPublicStats, stats]);
 
   const freeVsVipOverview = useMemo(() => {
     const free = comparisonStats.free;
     const vip = comparisonStats.vip;
 
-    if (!free || !vip) return null;
+    if (!free || !vip || (!free.completedCount && !vip.completedCount)) return null;
 
     const vipYield = vip.yield ?? 0;
     const freeYield = free.yield ?? 0;
@@ -175,6 +176,13 @@ export default function Stats() {
           </button>
         ))}
       </div>
+
+      {!hasPublicStats && (
+        <div className="mb-8 rounded-2xl border border-gold-500/20 bg-gold-500/[0.06] px-5 py-4 text-center">
+          <p className="text-sm font-bold text-gold-100">Javna statistika je trenutno u pripremi.</p>
+          <p className="mt-1 text-xs leading-5 text-neutral-500">Rezultati će se prikazati čim javni indeks završenih tiketa bude osvežen.</p>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-12">
         {overviewCards.map((card, index) => (
@@ -290,7 +298,7 @@ export default function Stats() {
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-neutral-500">Nema dostupnih meseci za prikaz.</div>
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-neutral-500">Javni mesečni pregled je trenutno u pripremi.</div>
           )}
 
           <div className="mt-6 space-y-3">
@@ -318,7 +326,7 @@ export default function Stats() {
             ))}
 
             {(stats?.monthlyBreakdown || []).length === 0 && (
-              <div className="text-center py-10 text-neutral-500 font-bold">Nema završenih tiketa za statistiku.</div>
+              <div className="text-center py-10 text-neutral-500 font-bold">Javni mesečni pregled je trenutno u pripremi.</div>
             )}
           </div>
         </div>
@@ -368,7 +376,7 @@ export default function Stats() {
             ))}
 
             {(stats?.monthlyBreakdown || []).length === 0 && (
-              <div className="text-center py-12 text-neutral-500 font-bold">Nema završenih tiketa za statistiku.</div>
+              <div className="text-center py-12 text-neutral-500 font-bold">Javni mesečni pregled je trenutno u pripremi.</div>
             )}
           </div>
         </div>

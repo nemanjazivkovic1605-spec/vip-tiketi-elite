@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, TrendingUp, X, XCircle } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
-import { footballApiService } from '../services/footballApiService';
 import { Tip, TicketStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
@@ -95,7 +94,6 @@ export default function Tickets() {
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
   const [accessMessage, setAccessMessage] = useState('');
   const [loadError, setLoadError] = useState('');
-  const isRealApiMode = footballApiService.isRealApiMode();
 
   useEffect(() => {
     void fetchData(true);
@@ -427,16 +425,13 @@ export default function Tickets() {
 
       {filteredTips.length === 0 && !loading && !loadError && (
         <div className="text-center py-20 glass rounded-[3rem]">
-          <p className="text-neutral-500 font-bold">
-            {tips.length === 0 ? 'Nema objavljenih tiketa' : 'Nema tiketa za izabrani filter.'}
+          <p className="text-neutral-300 font-bold">
+            {tips.length === 0 ? 'Javna istorija je trenutno u pripremi.' : 'Nema tiketa za izabrani filter.'}
           </p>
-          {!user && (
-            <Link to="/register" className="mt-6 inline-flex rounded-2xl bg-gold-500 px-6 py-3 text-sm font-black text-black">
-              Registruj se
-            </Link>
-          )}
-          {isRealApiMode && tips.length === 0 && (
-            <p className="text-neutral-600 text-xs font-bold uppercase tracking-widest mt-3">Trenutno nema dostupnih tiketa.</p>
+          {tips.length === 0 && (
+            <p className="mx-auto mt-3 max-w-xl px-6 text-xs font-medium leading-6 text-neutral-500">
+              Završeni tiketi će se prikazati čim javni indeks bude osvežen. Aktivni VIP sadržaj ostaje zaštićen.
+            </p>
           )}
         </div>
       )}

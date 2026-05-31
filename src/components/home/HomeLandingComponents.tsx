@@ -7,7 +7,11 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleX,
+  Crown,
+  Gift,
+  Medal,
   ShoppingCart,
+  Star,
   TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -87,6 +91,7 @@ export function DailyPickCard({
   tone,
   badge,
   buttonLabel,
+  target,
 }: {
   title: string;
   description: string;
@@ -95,13 +100,14 @@ export function DailyPickCard({
   tone: 'vip' | 'safe';
   badge?: string;
   buttonLabel: string;
+  target: string;
 }) {
   const isVip = tone === 'vip';
   return (
-    <article className={`relative overflow-hidden rounded-xl border p-5 ${
+    <article className={`group relative overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:-translate-y-0.5 ${
       isVip
-        ? 'border-rose-500/65 bg-[linear-gradient(135deg,rgba(84,0,27,0.92),rgba(12,3,8,0.96))] shadow-[0_0_30px_rgba(225,29,72,0.15)]'
-        : 'border-blue-500/60 bg-[linear-gradient(135deg,rgba(0,41,105,0.92),rgba(2,10,26,0.96))] shadow-[0_0_30px_rgba(37,99,235,0.14)]'
+        ? 'border-rose-500/65 bg-[linear-gradient(135deg,rgba(84,0,27,0.92),rgba(12,3,8,0.96))] shadow-[0_0_30px_rgba(225,29,72,0.15)] hover:border-rose-400/80 hover:shadow-[0_0_36px_rgba(225,29,72,0.2)]'
+        : 'border-blue-500/60 bg-[linear-gradient(135deg,rgba(0,41,105,0.92),rgba(2,10,26,0.96))] shadow-[0_0_30px_rgba(37,99,235,0.14)] hover:border-blue-400/80 hover:shadow-[0_0_36px_rgba(37,99,235,0.2)]'
     }`}>
       <div className={`pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full blur-3xl ${isVip ? 'bg-rose-500/20' : 'bg-blue-500/20'}`} />
       <div className="relative">
@@ -125,7 +131,7 @@ export function DailyPickCard({
             {price}
           </div>
           <Link
-            to="/contact"
+            to={target}
             className={`inline-flex flex-1 items-center justify-center gap-2 rounded-r-lg px-4 py-3 text-xs font-black uppercase tracking-wide transition-all ${
               isVip ? 'bg-gold-400 text-black hover:bg-gold-300' : 'bg-blue-600 text-white hover:bg-blue-500'
             }`}
@@ -174,14 +180,21 @@ export function PricingCard({
     : tone === 'elite'
       ? 'bg-purple-700 text-white hover:bg-purple-600'
       : 'border border-white/25 bg-white/5 text-white hover:bg-white/10';
+  const TierIcon = {
+    free: Gift,
+    silver: Medal,
+    gold: Star,
+    elite: Crown,
+  }[tone];
 
   return (
-    <article className={`relative flex min-h-[310px] flex-col rounded-xl border p-5 ${styles}`}>
+    <article className={`group relative flex min-h-[310px] flex-col rounded-xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:border-gold-400/70 hover:shadow-[0_14px_36px_rgba(0,0,0,0.32)] ${styles}`}>
       {popular && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-b-lg rounded-t-md bg-yellow-400 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-black">
           Najpopularniji
         </div>
       )}
+      <TierIcon className={`mx-auto mb-2 transition-transform duration-300 group-hover:scale-110 ${accent}`} size={29} />
       <h3 className={`text-center font-display text-xl font-black uppercase ${accent}`}>{name}</h3>
       <p className="mt-1 text-center text-xs leading-5 text-neutral-400">{description}</p>
       <div className={`mt-4 text-center font-display text-4xl font-black ${accent}`}>{price}</div>
@@ -211,8 +224,39 @@ export function RecentTicketsTable({ tips }: { tips: Tip[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/55">
-      <table className="w-full min-w-[760px] text-xs">
+    <>
+      <div className="grid gap-2 md:hidden">
+        {tips.map((tip) => {
+          const match = tip.matches[0];
+          const won = tip.status === TicketStatus.WON;
+          const profit = calculateTicketUnitsProfit(tip);
+          return (
+            <article key={tip.id} className="rounded-lg border border-white/10 bg-black/55 p-3 transition-colors hover:border-gold-500/25">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-bold text-neutral-500">{tip.date}</span>
+                <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[9px] font-black uppercase tracking-wide ${
+                  won ? 'border-green-500/40 bg-green-500/10 text-green-300' : 'border-red-500/40 bg-red-500/10 text-red-300'
+                }`}>
+                  {won ? <CheckCircle2 size={11} /> : <CircleX size={11} />}
+                  {won ? 'Dobitan' : 'Gubitan'}
+                </span>
+              </div>
+              <div className="mt-2 truncate text-sm font-bold text-neutral-100">
+                {tip.matches.length > 1 ? `${tip.matches.length} para · ${match.homeTeam} - ${match.awayTeam}` : `${match.homeTeam} - ${match.awayTeam}`}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/5 pt-2 text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="font-black text-gold-300">{match.prediction}</span>
+                  <span className="text-neutral-400">{tip.totalOdds.toFixed(2)}</span>
+                </div>
+                <span className={`font-black ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{signedUnits(profit)}</span>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-x-auto rounded-xl border border-white/10 bg-black/55 md:block">
+        <table className="w-full min-w-[760px] text-xs">
         <thead className="border-b border-white/10 text-left text-[9px] font-black uppercase tracking-widest text-neutral-500">
           <tr>
             <th className="px-4 py-3">Datum</th>
@@ -251,8 +295,9 @@ export function RecentTicketsTable({ tips }: { tips: Tip[] }) {
             );
           })}
         </tbody>
-      </table>
-    </div>
+        </table>
+      </div>
+    </>
   );
 }
 

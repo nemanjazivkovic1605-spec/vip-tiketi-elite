@@ -27,6 +27,7 @@ const EarlyInformation = lazy(() => import('./pages/EarlyInformation'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Pricing = lazy(() => import('./pages/Pricing'));
+const Checkout = lazy(() => import('./pages/Checkout'));
 const AuthAction = lazy(() => import('./pages/AuthAction'));
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
 
@@ -89,6 +90,7 @@ export default function App() {
                 <Route path="/pravila-koriscenja" element={<Terms />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/checkout" element={<Checkout />} />
                 <Route path="/auth-action" element={<AuthAction />} />
                 <Route path="/__/auth/action" element={<AuthAction />} />
                 

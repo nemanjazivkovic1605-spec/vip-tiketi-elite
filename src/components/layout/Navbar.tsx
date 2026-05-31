@@ -21,6 +21,10 @@ export default function Navbar() {
     requestAnimationFrame(() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }, [location.hash, location.pathname]);
 
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname, location.hash]);
+
   const navLinks = [
     { label: 'Početna', path: '/' },
     { label: 'Statistika', path: '/stats' },
@@ -92,7 +96,12 @@ export default function Navbar() {
           )}
         </div>
 
-        <button className="text-neutral-100 lg:hidden" onClick={() => setIsOpen(!isOpen)} aria-label="Otvori meni">
+        <button
+          className="rounded-lg border border-white/10 bg-white/[0.035] p-2 text-neutral-100 transition-colors hover:border-gold-500/35 hover:text-gold-300 lg:hidden"
+          onClick={() => setIsOpen(!isOpen)}
+          aria-label="Otvori meni"
+          aria-expanded={isOpen}
+        >
           {isOpen ? <X size={28} /> : <Menu size={28} />}
         </button>
       </div>
