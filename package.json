@@ -21,6 +21,8 @@
     "realize:history:mar-2026:write": "tsx scripts/realize-march-2026-history.ts --write",
     "realize:history:apr-2026": "tsx scripts/realize-april-2026-history.ts",
     "realize:history:apr-2026:write": "tsx scripts/realize-april-2026-history.ts --write",
+    "realize:history:jan-2026": "tsx scripts/realize-january-2026-history.ts",
+    "realize:history:jan-2026:write": "tsx scripts/realize-january-2026-history.ts --write",
     "sync:public-ticket-indexes": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:dry-run": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:write": "tsx scripts/sync-public-ticket-indexes.ts --write",

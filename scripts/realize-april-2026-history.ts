@@ -13,6 +13,7 @@ import {
 } from '../src/utils/tickets';
 import { calculateStats } from '../src/utils/ticketStats';
 import { mapTicketForPublic } from '../src/services/tickets/ticketMappers';
+import { formatLeagueName } from '../src/utils/leagueMapper';
 
 type Market = '1' | 'X' | '2' | 'Over 2.5' | 'Under 2.5';
 
@@ -49,9 +50,11 @@ type WriteOperation = {
   data?: StoredDocument;
 };
 
-const START_DATE = '2026-04-01';
-const END_DATE = '2026-04-30';
-const HISTORY_PREFIX = 'history-april-real-2026-';
+const START_DATE = process.env.HISTORY_START_DATE || '2026-04-01';
+const END_DATE = process.env.HISTORY_END_DATE || '2026-04-30';
+const HISTORY_PREFIX = process.env.HISTORY_PREFIX || 'history-april-real-2026-';
+const HISTORY_DAYS = Number(process.env.HISTORY_DAYS || 30);
+const REPLACE_SETTLED_HISTORY_RANGE = process.env.REPLACE_SETTLED_HISTORY_RANGE === 'true';
 const MAX_TIPS_PER_DAY = 4;
 const MAX_PLANNED_WRITES = 500;
 const WRITE_BATCH_SIZE = 15;
@@ -66,7 +69,10 @@ const FIRESTORE_DATABASE_ID = getEnv('FIRESTORE_DATABASE_ID')
   || firebaseConfig.firestoreDatabaseId;
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
-const datesBetween = () => Array.from({ length: 30 }, (_, index) => `2026-04-${pad2(index + 1)}`);
+const datesBetween = () => Array.from(
+  { length: HISTORY_DAYS },
+  (_, index) => `${START_DATE.slice(0, 8)}${pad2(index + 1)}`,
+);
 const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const initializeFirebaseAdmin = () => {
@@ -172,7 +178,7 @@ const xlsxImportedMatches = async (): Promise<FinishedMatch[]> => {
         id: `xlsx-${sheet}-${date}-${normalizeName(homeTeam)}-${normalizeName(awayTeam)}`,
         date,
         time: normalizeTime(row[index.Time]),
-        league: String(row[index.Div] || sheet || 'Imported League'),
+        league: formatLeagueName(String(row[index.Div] || sheet || 'Imported League')),
         homeTeam,
         awayTeam,
         homeScore,
@@ -197,7 +203,7 @@ const jsonImportedMatches = (): FinishedMatch[] => {
       id: match.id,
       date: match.date,
       time: '',
-      league: match.league,
+      league: formatLeagueName(match.league),
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
       homeScore: match.homeScore,
@@ -343,8 +349,15 @@ const planWriteOperations = async (tips: Tip[]) => {
     desired.forEach((data, id) => {
       if (!sameDocument(existing.get(id), data)) operations.push({ kind: 'set', collectionName, id, data });
     });
-    existing.forEach((_data, id) => {
-      if (id.startsWith(HISTORY_PREFIX) && !desired.has(id)) operations.push({ kind: 'delete', collectionName, id });
+    existing.forEach((data, id) => {
+      const isSettledHistoryDocument = [
+        TicketStatus.WON,
+        TicketStatus.LOST,
+        TicketStatus.REFUND,
+        TicketStatus.POSTPONED,
+      ].includes(String(data.status) as TicketStatus);
+      const shouldReplace = id.startsWith(HISTORY_PREFIX) || (REPLACE_SETTLED_HISTORY_RANGE && isSettledHistoryDocument);
+      if (shouldReplace && !desired.has(id)) operations.push({ kind: 'delete', collectionName, id });
     });
   }
   return operations;
@@ -424,6 +437,8 @@ const main = async () => {
   }));
   const summary = {
     dryRun: !shouldWrite,
+    dateRange: { start: START_DATE, end: END_DATE },
+    replaceSettledHistoryRange: REPLACE_SETTLED_HISTORY_RANGE,
     source: xlsxMatches.length ? 'Excel workbook with bookmaker odds' : 'Imported JSON with bookmaker odds',
     foundFinishedMatches: importedMatches.length,
     validDays: perDay.filter((day) => day.plannedTickets > 0).length,
