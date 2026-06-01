@@ -37,6 +37,8 @@
     "realize:history:aug-2025:write": "tsx scripts/realize-august-2025-history.ts --write",
     "realize:history:jul-2025": "tsx scripts/realize-july-2025-history.ts",
     "realize:history:jul-2025:write": "tsx scripts/realize-july-2025-history.ts --write",
+    "snapshot:public-history": "tsx scripts/generate-local-public-history-snapshot.ts",
+    "snapshot:public-history:from-firestore": "tsx scripts/export-public-history-snapshot.ts",
     "sync:public-ticket-indexes": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:dry-run": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:write": "tsx scripts/sync-public-ticket-indexes.ts --write",

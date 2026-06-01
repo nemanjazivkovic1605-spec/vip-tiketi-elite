@@ -35,6 +35,7 @@ import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache'
 import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
 import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
 import { formatLeagueName } from '../utils/leagueMapper';
+import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot } from './publicHistorySnapshot';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -395,6 +396,13 @@ const readPublishedSafeTips = async (): Promise<Tip[]> => {
 
 const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
+    const snapshotTips = await readPublicHistorySnapshot();
+    if (snapshotTips.length) {
+      return sortTicketsByDate(snapshotTips
+        .map((tip) => mapTicketForPublic(normalizeTip(tip)))
+        .filter((tip) => isFinishedForStats(tip.status)));
+    }
+
     try {
       const documents = await readPublicCollectionInPages(getPublicStatsTicketsCollection);
       const statsTips = sortTicketsByDate(documents
@@ -620,6 +628,8 @@ export const mockTipsService = {
   },
 
   subscribePublicStats: (callback: () => void): (() => void) => {
+    if (isPublicHistorySnapshotEnabled()) return () => undefined;
+
     return onSnapshot(
       query(getPublicStatsTicketsCollection(), orderBy('date', 'desc'), queryLimit(PUBLIC_READ_PAGE_SIZE)),
       () => {
