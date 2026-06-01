@@ -55,6 +55,9 @@ const END_DATE = process.env.HISTORY_END_DATE || '2026-04-30';
 const HISTORY_PREFIX = process.env.HISTORY_PREFIX || 'history-april-real-2026-';
 const HISTORY_DAYS = Number(process.env.HISTORY_DAYS || 30);
 const REPLACE_SETTLED_HISTORY_RANGE = process.env.REPLACE_SETTLED_HISTORY_RANGE === 'true';
+const SKIP_DATES_WITH_EXISTING_PUBLIC_STATS = process.env.SKIP_DATES_WITH_EXISTING_PUBLIC_STATS === 'true';
+const DELETE_STALE_PREFIX_DOCUMENTS = process.env.DELETE_STALE_PREFIX_DOCUMENTS !== 'false';
+const INDEX_PRIVATE_SETTLED_MISSING_PUBLIC_STATS = process.env.INDEX_PRIVATE_SETTLED_MISSING_PUBLIC_STATS === 'true';
 const MAX_TIPS_PER_DAY = 4;
 const MAX_PLANNED_WRITES = 500;
 const WRITE_BATCH_SIZE = 15;
@@ -146,6 +149,17 @@ const sortKeys = (value: unknown): unknown => {
 };
 const sameDocument = (left?: StoredDocument, right?: StoredDocument) =>
   JSON.stringify(sortKeys(left || null)) === JSON.stringify(sortKeys(right || null));
+const isSettledStatus = (status: unknown) =>
+  [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND].includes(String(status) as TicketStatus);
+const isValidHistoricalDocument = (ticket: StoredDocument) =>
+  isSettledStatus(ticket.status)
+  && Number(ticket.totalOdds) > 1
+  && Array.isArray(ticket.matches)
+  && ticket.matches.length > 0
+  && ticket.matches.every((match) => {
+    const storedMatch = match as StoredDocument;
+    return Number(storedMatch.odds) > 1 && Boolean(String(storedMatch.result || ticket.result || '').trim());
+  });
 
 const readRowsFromWorkbook = async () => {
   const candidates = [
@@ -253,7 +267,8 @@ const dedupeMatches = (matches: FinishedMatch[]) => {
   return Array.from(unique.values());
 };
 
-const planPicks = (matches: FinishedMatch[]) => datesBetween().flatMap((date) => {
+const planPicks = (matches: FinishedMatch[], datesToSkip = new Set<string>()) => datesBetween().flatMap((date) => {
+  if (datesToSkip.has(date)) return [];
   const dayMatches = matches
     .filter((match) => match.date === date && availableMarkets(match).length > 0)
     .sort((left, right) => {
@@ -332,6 +347,12 @@ const planWriteOperations = async (tips: Tip[]) => {
     existingByCollection.set(collectionName, await readCollection(collectionName));
   }
 
+  const privateTickets = existingByCollection.get('tickets') || new Map();
+  const publicStatsTickets = existingByCollection.get('publicStatsTickets') || new Map();
+  const privateTicketsToIndex = INDEX_PRIVATE_SETTLED_MISSING_PUBLIC_STATS
+    ? Array.from(privateTickets.entries()).filter(([id, ticket]) => isValidHistoricalDocument(ticket) && !publicStatsTickets.has(id))
+    : [];
+
   const desiredByCollection = new Map<string, Map<string, StoredDocument>>();
   for (const collectionName of COLLECTIONS) {
     const documents = new Map<string, StoredDocument>();
@@ -339,6 +360,11 @@ const planWriteOperations = async (tips: Tip[]) => {
       const data = collectionName === 'tickets' ? tip : mapTicketForPublic(tip);
       documents.set(tip.id, toPlain(data) as StoredDocument);
     });
+    if (collectionName !== 'tickets') {
+      privateTicketsToIndex.forEach(([id, ticket]) => {
+        documents.set(id, toPlain(mapTicketForPublic(ticket as unknown as Tip)) as StoredDocument);
+      });
+    }
     desiredByCollection.set(collectionName, documents);
   }
 
@@ -356,11 +382,12 @@ const planWriteOperations = async (tips: Tip[]) => {
         TicketStatus.REFUND,
         TicketStatus.POSTPONED,
       ].includes(String(data.status) as TicketStatus);
-      const shouldReplace = id.startsWith(HISTORY_PREFIX) || (REPLACE_SETTLED_HISTORY_RANGE && isSettledHistoryDocument);
+      const shouldReplace = (DELETE_STALE_PREFIX_DOCUMENTS && id.startsWith(HISTORY_PREFIX))
+        || (REPLACE_SETTLED_HISTORY_RANGE && isSettledHistoryDocument);
       if (shouldReplace && !desired.has(id)) operations.push({ kind: 'delete', collectionName, id });
     });
   }
-  return operations;
+  return { operations, privateTicketsToIndex };
 };
 
 const isRetryableWriteError = (error: unknown) =>
@@ -427,9 +454,24 @@ const verifyTips = (tips: Tip[]) => {
 const main = async () => {
   const xlsxMatches = await xlsxImportedMatches();
   const importedMatches = dedupeMatches(xlsxMatches.length ? xlsxMatches : jsonImportedMatches());
-  const tips = planPicks(importedMatches).map(toTip);
+  const existingPrivateTickets = await readCollection('tickets');
+  const existingPublicStatsTickets = await readCollection('publicStatsTickets');
+  const occupiedExistingDates = new Set(
+    [...existingPrivateTickets.values(), ...existingPublicStatsTickets.values()]
+      .filter(isValidHistoricalDocument)
+      .map((ticket) => String(ticket.date || ''))
+      .filter(Boolean),
+  );
+  const occupiedPublicStatsDates = new Set(
+    Array.from(existingPublicStatsTickets.values())
+      .filter(isValidHistoricalDocument)
+      .map((ticket) => String(ticket.date || ''))
+      .filter(Boolean),
+  );
+  const datesToSkip = SKIP_DATES_WITH_EXISTING_PUBLIC_STATS ? occupiedExistingDates : new Set<string>();
+  const tips = planPicks(importedMatches, datesToSkip).map(toTip);
   const verification = verifyTips(tips);
-  const operations = await planWriteOperations(tips);
+  const { operations, privateTicketsToIndex } = await planWriteOperations(tips);
   const perDay = datesBetween().map((date) => ({
     date,
     availableMatchesWithRealOdds: importedMatches.filter((match) => match.date === date && availableMarkets(match).length > 0).length,
@@ -439,12 +481,19 @@ const main = async () => {
     dryRun: !shouldWrite,
     dateRange: { start: START_DATE, end: END_DATE },
     replaceSettledHistoryRange: REPLACE_SETTLED_HISTORY_RANGE,
+    skipDatesWithExistingPublicStats: SKIP_DATES_WITH_EXISTING_PUBLIC_STATS,
+    deleteStalePrefixDocuments: DELETE_STALE_PREFIX_DOCUMENTS,
+    indexPrivateSettledMissingPublicStats: INDEX_PRIVATE_SETTLED_MISSING_PUBLIC_STATS,
     source: xlsxMatches.length ? 'Excel workbook with bookmaker odds' : 'Imported JSON with bookmaker odds',
+    existingPublicStatsDays: datesBetween().filter((date) => occupiedPublicStatsDates.has(date)),
+    existingCoveredDays: datesBetween().filter((date) => occupiedExistingDates.has(date)),
+    missingDaysBeforeImport: datesBetween().filter((date) => !occupiedExistingDates.has(date)),
     foundFinishedMatches: importedMatches.length,
     validDays: perDay.filter((day) => day.plannedTickets > 0).length,
     skippedDays: perDay.filter((day) => day.plannedTickets === 0).map((day) => day.date),
     daysWithFewerThanFourTickets: perDay.filter((day) => day.plannedTickets > 0 && day.plannedTickets < MAX_TIPS_PER_DAY),
     plannedTickets: tips.length,
+    existingPrivateTicketsToIndex: privateTicketsToIndex.map(([id, ticket]) => ({ id, date: ticket.date })),
     freeTickets: tips.filter((tip) => !tip.isVip).length,
     vipTickets: tips.filter((tip) => tip.isVip).length,
     invalidOrPlaceholderOdds: verification.invalidOdds.length,
@@ -476,7 +525,12 @@ const main = async () => {
   }
 
   await commitOperations(operations);
-  console.log(JSON.stringify({ writtenOperations: operations.length, importedTickets: tips.length, dryRun: false }, null, 2));
+  console.log(JSON.stringify({
+    writtenOperations: operations.length,
+    importedTickets: tips.length,
+    indexedExistingPrivateTickets: privateTicketsToIndex.length,
+    dryRun: false,
+  }, null, 2));
 };
 
 main().catch((error) => {
