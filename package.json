@@ -25,6 +25,8 @@
     "realize:history:jan-2026:write": "tsx scripts/realize-january-2026-history.ts --write",
     "fill:history:may-2026": "tsx scripts/fill-may-2026-history.ts",
     "fill:history:may-2026:write": "tsx scripts/fill-may-2026-history.ts --write",
+    "realize:history:dec-2025": "tsx scripts/realize-december-2025-history.ts",
+    "realize:history:dec-2025:write": "tsx scripts/realize-december-2025-history.ts --write",
     "sync:public-ticket-indexes": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:dry-run": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:write": "tsx scripts/sync-public-ticket-indexes.ts --write",
