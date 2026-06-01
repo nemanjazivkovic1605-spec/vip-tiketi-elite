@@ -58,6 +58,7 @@ const REPLACE_SETTLED_HISTORY_RANGE = process.env.REPLACE_SETTLED_HISTORY_RANGE 
 const SKIP_DATES_WITH_EXISTING_PUBLIC_STATS = process.env.SKIP_DATES_WITH_EXISTING_PUBLIC_STATS === 'true';
 const DELETE_STALE_PREFIX_DOCUMENTS = process.env.DELETE_STALE_PREFIX_DOCUMENTS !== 'false';
 const INDEX_PRIVATE_SETTLED_MISSING_PUBLIC_STATS = process.env.INDEX_PRIVATE_SETTLED_MISSING_PUBLIC_STATS === 'true';
+const VIP_TARGET_ODDS = Number(process.env.HISTORY_VIP_TARGET_ODDS || 1.9);
 const MAX_TIPS_PER_DAY = 4;
 const MAX_PLANNED_WRITES = 500;
 const WRITE_BATCH_SIZE = 15;
@@ -239,7 +240,7 @@ const availableMarkets = (match: FinishedMatch) => ([
 const chooseMarket = (match: FinishedMatch, slot: number) => {
   const markets = availableMarkets(match);
   if (!markets.length) return null;
-  const targetOdds = slot === 0 ? 1.75 : 1.9;
+  const targetOdds = slot === 0 ? 1.75 : VIP_TARGET_ODDS;
   const offset = stableNumber(`${match.id}-${slot}`) % markets.length;
   return [...markets].sort((left, right) => {
     const leftScore = Math.abs(left.odds - targetOdds) + ((markets.indexOf(left) + offset) % markets.length) * 0.025;
@@ -484,6 +485,7 @@ const main = async () => {
     skipDatesWithExistingPublicStats: SKIP_DATES_WITH_EXISTING_PUBLIC_STATS,
     deleteStalePrefixDocuments: DELETE_STALE_PREFIX_DOCUMENTS,
     indexPrivateSettledMissingPublicStats: INDEX_PRIVATE_SETTLED_MISSING_PUBLIC_STATS,
+    vipTargetOdds: VIP_TARGET_ODDS,
     source: xlsxMatches.length ? 'Excel workbook with bookmaker odds' : 'Imported JSON with bookmaker odds',
     existingPublicStatsDays: datesBetween().filter((date) => occupiedPublicStatsDates.has(date)),
     existingCoveredDays: datesBetween().filter((date) => occupiedExistingDates.has(date)),
