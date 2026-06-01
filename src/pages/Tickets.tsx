@@ -105,9 +105,7 @@ export default function Tickets() {
 
   useEffect(() => {
     void fetchData(true);
-    return canAccessVip
-      ? mockTipsService.subscribe(() => void fetchData(), { canAccessFree, canAccessVip })
-      : mockTipsService.subscribePublicStats(() => void fetchData());
+    return mockTipsService.subscribePublicStats(() => void fetchData());
   }, [canAccessFree, canAccessVip]);
 
   const fetchData = async (showLoading = false) => {
@@ -135,6 +133,15 @@ export default function Tickets() {
 
   const showVipPopup = (message: string) => {
     setAccessMessage(message);
+  };
+
+  const openAdminEditor = async (tip: Tip) => {
+    try {
+      setEditingTip(await mockTipsService.getAdminTipById(tip.id) || tip);
+    } catch (error) {
+      console.error('Admin history ticket load failed:', error);
+      setEditingTip(tip);
+    }
   };
 
   const renderPrediction = (tip: Tip, prediction: string) => {
@@ -357,7 +364,7 @@ export default function Tickets() {
                   transition={{ duration: 0.28, ease: 'easeOut' }}
                   onClick={() => {
                     if (isAdmin) {
-                      setEditingTip(tip);
+                      void openAdminEditor(tip);
                       return;
                     }
                     setSelectedTip(tip);
@@ -365,7 +372,7 @@ export default function Tickets() {
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       if (isAdmin) {
-                        setEditingTip(tip);
+                        void openAdminEditor(tip);
                         return;
                       }
                       setSelectedTip(tip);

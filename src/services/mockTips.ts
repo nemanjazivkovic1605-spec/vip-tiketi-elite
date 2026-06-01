@@ -4,11 +4,17 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit as queryLimit,
   onSnapshot,
+  orderBy,
   query,
   setDoc,
+  startAfter,
   updateDoc,
   where,
+  type DocumentData,
+  type QueryConstraint,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, DailyAnalysisItem } from '../types';
@@ -35,6 +41,8 @@ const PUBLIC_STATS_TICKETS_COLLECTION = 'publicStatsTickets';
 const PUBLIC_TICKETS_CACHE_KEY = 'tickets:public:all';
 const PUBLIC_VIP_TICKETS_CACHE_KEY = 'tickets:public:vip';
 const PUBLIC_STATS_CACHE_KEY = 'tickets:public:stats';
+const PUBLIC_READ_PAGE_SIZE = 100;
+const MAX_PUBLIC_READ_PAGES = 20;
 const MAX_FRONTEND_BULK_WRITES = 500;
 const invalidatePublicTicketCache = () => invalidateCachedQueries(
   PUBLIC_TICKETS_CACHE_KEY,
@@ -281,6 +289,29 @@ const getTicketDoc = (id: string) => doc(db, TICKETS_COLLECTION, id);
 const getPublicTicketDoc = (id: string) => doc(db, PUBLIC_TICKETS_COLLECTION, id);
 const getPublicStatsTicketDoc = (id: string) => doc(db, PUBLIC_STATS_TICKETS_COLLECTION, id);
 
+const readPublicCollectionInPages = async (
+  getCollection: () => ReturnType<typeof collection>,
+): Promise<QueryDocumentSnapshot<DocumentData>[]> => {
+  const documents: QueryDocumentSnapshot<DocumentData>[] = [];
+  let cursor: QueryDocumentSnapshot<DocumentData> | undefined;
+
+  for (let page = 0; page < MAX_PUBLIC_READ_PAGES; page += 1) {
+    const constraints: QueryConstraint[] = [
+      orderBy('date', 'desc'),
+      queryLimit(PUBLIC_READ_PAGE_SIZE),
+    ];
+    if (cursor) constraints.push(startAfter(cursor));
+
+    const snapshot = await getDocs(query(getCollection(), ...constraints));
+    documents.push(...snapshot.docs);
+
+    if (snapshot.size < PUBLIC_READ_PAGE_SIZE) break;
+    cursor = snapshot.docs[snapshot.docs.length - 1];
+  }
+
+  return documents;
+};
+
 const removeUndefined = <T>(value: T): T => {
   if (Array.isArray(value)) {
     return value.map((item) => removeUndefined(item)) as T;
@@ -352,8 +383,8 @@ const readPublishedSafeVipTips = async (): Promise<Tip[]> => {
 
 const readPublishedSafeTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_TICKETS_CACHE_KEY, async () => {
-    const snapshot = await getDocs(query(getPublicTicketsCollection()));
-    return sortTicketsByDate(snapshot.docs.map((ticketDoc) => mapTicketForPublic(normalizeTip({
+    const documents = await readPublicCollectionInPages(getPublicTicketsCollection);
+    return sortTicketsByDate(documents.map((ticketDoc) => mapTicketForPublic(normalizeTip({
       ...ticketDoc.data(),
       id: ticketDoc.id,
     } as Tip))));
@@ -363,8 +394,8 @@ const readPublishedSafeTips = async (): Promise<Tip[]> => {
 const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
     try {
-      const snapshot = await getDocs(query(getPublicStatsTicketsCollection()));
-      const statsTips = sortTicketsByDate(snapshot.docs
+      const documents = await readPublicCollectionInPages(getPublicStatsTicketsCollection);
+      const statsTips = sortTicketsByDate(documents
         .map((ticketDoc) => mapTicketForPublic(normalizeTip({
           ...ticketDoc.data(),
           id: ticketDoc.id,
@@ -411,6 +442,16 @@ const readPublishedTips = async (): Promise<Tip[]> => {
 };
 
 export const mockTipsService = {
+  getAdminTipById: async (id: string): Promise<Tip | null> => {
+    const snapshot = await getDoc(getTicketDoc(id));
+    if (!snapshot.exists()) return null;
+
+    return mapTicketForAdmin(normalizeTip({
+      ...snapshot.data(),
+      id: snapshot.id,
+    } as Tip));
+  },
+
   getAllTips: async (): Promise<Tip[]> => {
     const [tickets, dailyTips] = await Promise.all([
       readAdminActiveTips(),
@@ -439,8 +480,7 @@ export const mockTipsService = {
     return readPublishedSafeTips();
   },
 
-  getVisibleHistoryTips: async (access: { canAccessVip: boolean }): Promise<Tip[]> => {
-    if (access.canAccessVip) return readFinishedPublishedTips();
+  getVisibleHistoryTips: async (_access: { canAccessVip: boolean }): Promise<Tip[]> => {
     return readPublicStatsTips();
   },
 
@@ -462,11 +502,7 @@ export const mockTipsService = {
   },
 
   getStats: async (filter: StatsFilter = 'all'): Promise<GlobalStats> => {
-    const [tickets, dailyTips] = await Promise.all([
-      readFinishedPublishedTips(),
-      readFinishedDailyAnalysisTips(),
-    ]);
-    return calculateStats(filterTipsByType(sortTicketsByDate(mergeTips(dailyTips, tickets)), filter));
+    return calculateStats(filterTipsByType(await readPublicStatsTips(), filter));
   },
 
   getVisibleStats: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<GlobalStats> => {
@@ -583,7 +619,7 @@ export const mockTipsService = {
 
   subscribePublicStats: (callback: () => void): (() => void) => {
     return onSnapshot(
-      query(getPublicStatsTicketsCollection()),
+      query(getPublicStatsTicketsCollection(), orderBy('date', 'desc'), queryLimit(PUBLIC_READ_PAGE_SIZE)),
       () => {
         invalidateCachedQueries(PUBLIC_STATS_CACHE_KEY);
         callback();

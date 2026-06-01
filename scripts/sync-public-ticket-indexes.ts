@@ -48,6 +48,7 @@ const MAX_PLANNED_WRITES = getPositiveInteger('PUBLIC_INDEX_SYNC_MAX_PLANNED_WRI
 const SHOULD_CLEANUP = process.argv.includes('--cleanup');
 const SHOULD_WRITE = process.argv.includes('--write');
 const LARGE_SYNC_CONFIRMED = process.argv.includes('--confirm-large-sync');
+const STATS_ONLY = process.argv.includes('--stats-only');
 
 const initializeFirebaseAdmin = () => {
   if (admin.apps.length) return;
@@ -240,22 +241,27 @@ const main = async () => {
       upserts.push({ collection: 'publicStatsTickets', id, data });
     }
   });
-  publicTips.forEach((data, id) => {
-    if (stableStringify(publicTicketsById.get(id)) !== stableStringify(data)) {
-      upserts.push({ collection: 'publicTickets', id, data });
-    }
-  });
+  if (!STATS_ONLY) {
+    publicTips.forEach((data, id) => {
+      if (stableStringify(publicTicketsById.get(id)) !== stableStringify(data)) {
+        upserts.push({ collection: 'publicTickets', id, data });
+      }
+    });
+  }
 
   const staleDocuments: DeleteOperation[] = [
-    ...publicTicketsSnapshot.docs
-      .filter((ticketDoc) => !publishedIds.has(ticketDoc.id))
-      .map((ticketDoc) => ({ collection: 'publicTickets' as const, id: ticketDoc.id })),
+    ...(STATS_ONLY
+      ? []
+      : publicTicketsSnapshot.docs
+        .filter((ticketDoc) => !publishedIds.has(ticketDoc.id))
+        .map((ticketDoc) => ({ collection: 'publicTickets' as const, id: ticketDoc.id }))),
     ...publicStatsSnapshot.docs
       .filter((ticketDoc) => !settledIds.has(ticketDoc.id))
       .map((ticketDoc) => ({ collection: 'publicStatsTickets' as const, id: ticketDoc.id })),
   ];
   const summary = {
     mode: SHOULD_WRITE ? 'write' : 'dry-run',
+    statsOnly: STATS_ONLY,
     cleanupEnabled: SHOULD_CLEANUP,
     batchLimit: BATCH_LIMIT,
     batchPauseMs: BATCH_PAUSE_MS,

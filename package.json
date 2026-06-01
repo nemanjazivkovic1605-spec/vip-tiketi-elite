@@ -22,7 +22,9 @@
     "sync:public-ticket-indexes": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:dry-run": "tsx scripts/sync-public-ticket-indexes.ts",
     "sync:public-ticket-indexes:write": "tsx scripts/sync-public-ticket-indexes.ts --write",
-    "sync:public-ticket-indexes:cleanup": "tsx scripts/sync-public-ticket-indexes.ts --write --cleanup"
+    "sync:public-ticket-indexes:cleanup": "tsx scripts/sync-public-ticket-indexes.ts --write --cleanup",
+    "sync:public-history-index:dry-run": "tsx scripts/sync-public-ticket-indexes.ts --stats-only",
+    "sync:public-history-index:write": "tsx scripts/sync-public-ticket-indexes.ts --stats-only --write"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

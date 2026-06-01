@@ -54,7 +54,7 @@ const getStatusMeta = (status: TicketStatus) => {
 };
 
 export default function Results() {
-  const { canAccessFree, canAccessVip } = useAuth();
+  const { canAccessVip } = useAuth();
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -73,10 +73,8 @@ export default function Results() {
     };
 
     void fetchData();
-    return canAccessVip
-      ? mockTipsService.subscribe(() => void fetchData(), { canAccessFree, canAccessVip })
-      : mockTipsService.subscribePublicStats(() => void fetchData());
-  }, [canAccessFree, canAccessVip]);
+    return mockTipsService.subscribePublicStats(() => void fetchData());
+  }, [canAccessVip]);
 
   const results = useMemo<PublishedResult[]>(() => {
     return tips

@@ -44,14 +44,10 @@ export default function Stats() {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
-      const statsLoader = isAdmin
-        ? mockTipsService.getStats
-        : mockTipsService.getPublicStats;
-
       const [nextStats, freeStats, vipStats] = await Promise.all([
-        withTimeout(statsLoader(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
-        withTimeout(statsLoader('free'), 'Statistika FREE se učitava predugo.'),
-        withTimeout(statsLoader('vip'), 'Statistika VIP se učitava predugo.'),
+        withTimeout(mockTipsService.getPublicStats(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
+        withTimeout(mockTipsService.getPublicStats('free'), 'Statistika FREE se učitava predugo.'),
+        withTimeout(mockTipsService.getPublicStats('vip'), 'Statistika VIP se učitava predugo.'),
       ]);
 
       setStats(nextStats);
@@ -70,10 +66,17 @@ export default function Stats() {
 
   useEffect(() => {
     void fetchData(true, statsFilter);
-    return isAdmin
-      ? mockTipsService.subscribe(() => void fetchData(false, statsFilter))
-      : mockTipsService.subscribePublicStats(() => void fetchData(false, statsFilter));
-  }, [isAdmin, statsFilter]);
+    return mockTipsService.subscribePublicStats(() => void fetchData(false, statsFilter));
+  }, [statsFilter]);
+
+  const openAdminEditor = async (tip: Tip) => {
+    try {
+      setEditingTip(await mockTipsService.getAdminTipById(tip.id) || tip);
+    } catch (error) {
+      console.error('Admin statistics ticket load failed:', error);
+      setEditingTip(tip);
+    }
+  };
 
   const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
   const hasPublicStats = Boolean(stats?.completedCount);
@@ -300,7 +303,7 @@ export default function Stats() {
                   type="button"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={() => isAdmin && setEditingTip(row.ticket)}
+                  onClick={() => isAdmin && void openAdminEditor(row.ticket)}
                   className={`w-full rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left ${isAdmin ? 'cursor-pointer hover:border-gold-500/30' : ''}`}
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
@@ -356,7 +359,7 @@ export default function Stats() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={() => isAdmin && setEditingTip(row.ticket)}
+                        onClick={() => isAdmin && void openAdminEditor(row.ticket)}
                         className={`hover:bg-white/[0.02] transition-colors ${isAdmin ? 'cursor-pointer' : ''}`}
                       >
                         <td className="py-4 pr-4 text-neutral-300 font-bold">{row.ticket.date}</td>
