@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { mockTipsService } from '../services/mockTips';
 import { Tip, TicketStatus } from '../types';
 import { Zap, ShieldCheck, TrendingUp, Info, BarChart2, Star } from 'lucide-react';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 export default function VipTips() {
   const [tips, setTips] = useState<Tip[]>([]);
@@ -75,7 +76,7 @@ export default function VipTips() {
                       {tip.matches.map((m, i) => (
                         <div key={i} className="relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-gold-500 before:rounded-full">
                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-neutral-500 font-bold uppercase tracking-widest">{m.league} @ {m.time}</span>
+                              <span className="text-xs text-neutral-500 font-bold uppercase tracking-widest">{formatLeagueName(m.league)} @ {m.time}</span>
                            </div>
                            <h3 className="text-xl md:text-2xl font-bold text-neutral-100 mb-2">{m.homeTeam} - {m.awayTeam}</h3>
                            <div className="flex items-center gap-4">

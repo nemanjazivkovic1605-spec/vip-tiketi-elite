@@ -20,6 +20,7 @@ import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsS
 import { evaluateImportedMatchPrediction } from '../../utils/predictionResults';
 import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyPublishedAt, getDailyPublicationInputValue, getKickoffTime } from '../../utils/dailyPublication';
 import { isFinishedDailyAnalysisStatus, isVisibleInAdminActiveDailyList } from '../../utils/dailyLifecycle';
+import { formatLeagueName } from '../../utils/leagueMapper';
 
 const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
 const dailyPredictionOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5', 'Over poeni', 'Handicap favorit'];
@@ -1126,7 +1127,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">
-                    #{index + 1} · {item.match.date} · {item.match.league}
+                    #{index + 1} · {item.match.date} · {formatLeagueName(item.match.league)}
                   </div>
                   <div className="font-bold text-neutral-100">
                     {item.match.homeTeam} - {item.match.awayTeam}
@@ -1270,7 +1271,7 @@ export default function AdminDashboard() {
                     {item.match.homeTeam} - {item.match.awayTeam}
                   </div>
                   <div className="mt-1 text-[11px] font-bold text-neutral-500">
-                    {item.match.league || 'Liga nije uneta'}
+                    {formatLeagueName(item.match.league)}
                   </div>
                 </div>
                 <button
@@ -1801,7 +1802,7 @@ export default function AdminDashboard() {
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
                           <div>
-                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {resultTipMatch.league}</div>
+                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {formatLeagueName(resultTipMatch.league)}</div>
                             <h3 className="text-xl font-bold">{resultTipMatch.homeTeam} - {resultTipMatch.awayTeam}</h3>
                             <p className="text-gold-500 font-display font-black mt-1">
                               {resultTipMatch.homeScore} - {resultTipMatch.awayScore}
@@ -1902,7 +1903,7 @@ export default function AdminDashboard() {
                         <div key={match.id} className="glass p-5 rounded-[2rem] border-white/5">
                           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
                             <div>
-                              <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {match.league}</div>
+                              <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {formatLeagueName(match.league)}</div>
                               <div className="font-bold text-neutral-100 text-lg">{match.homeTeam} - {match.awayTeam}</div>
                               <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-neutral-500">
                                 <span>Rezultat: <strong className="text-gold-500">{match.homeScore} - {match.awayScore}</strong></span>
@@ -2062,7 +2063,7 @@ export default function AdminDashboard() {
                           {availableMatches.slice(0, 80).map((match) => (
                             <div key={match.id} className="bg-white/5 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                               <div>
-                                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {match.league}</div>
+                                <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.date} · {formatLeagueName(match.league)}</div>
                                 <div className="font-bold text-neutral-200">{match.homeTeam} - {match.awayTeam}</div>
                               </div>
                               <div className="flex items-center gap-3">
@@ -2104,7 +2105,7 @@ export default function AdminDashboard() {
                       <div className="glass p-6 rounded-[2rem] border-gold-500/30 mb-8">
                         <div className="flex items-start justify-between gap-4 mb-5">
                           <div>
-                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {resultTipMatch.league}</div>
+                            <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{resultTipMatch.date} · {formatLeagueName(resultTipMatch.league)}</div>
                             <h3 className="text-xl font-bold">{resultTipMatch.homeTeam} - {resultTipMatch.awayTeam}</h3>
                             <p className="text-gold-500 font-display font-black mt-1">
                               {resultTipMatch.homeScore} - {resultTipMatch.awayScore}
@@ -2298,7 +2299,7 @@ export default function AdminDashboard() {
                                  <div key={idx} className="bg-white/5 p-4 rounded-2xl border border-white/5">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                        <div>
-                                          <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{m.league}</div>
+                                          <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{formatLeagueName(m.league)}</div>
                                           <div className="font-bold text-neutral-200">{m.homeTeam} - {m.awayTeam}</div>
                                           <div className="mt-2 flex items-center gap-4">
                                              <div className="text-xs"><span className="text-neutral-500 uppercase tracking-tighter">Tip:</span> <span className="text-gold-500 font-black">{m.prediction}</span></div>
@@ -2555,7 +2556,7 @@ export default function AdminDashboard() {
                                 {analysis.manualOverride && <span className="rounded-full border border-orange-500/25 bg-orange-500/10 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-orange-300">Manual override</span>}
                               </div>
                               <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
-                                Meč: {analysis.date} · {getKickoffTime(analysis)} · {analysis.league}
+                                Meč: {analysis.date} · {getKickoffTime(analysis)} · {formatLeagueName(analysis.league)}
                               </div>
                               <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-gold-400">
                                 Objavljeno: {formatDailyPublishedAt(analysis)}

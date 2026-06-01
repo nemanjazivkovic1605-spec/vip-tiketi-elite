@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Plus, Trash2, X } from 'lucide-react';
 import { Match, TicketStatus, Tip, TipPublicationStatus } from '../../types';
 import { calculateTotalOdds, generateTicketCode, getDefaultUnitsStake, getTicketKind, getTicketPublicationMeta, getTicketUnitsStake, normalizeOdds, normalizePublishedDate, normalizePublishedTime, unitsToRsd } from '../../utils/tickets';
+import { formatLeagueName } from '../../utils/leagueMapper';
 
 type TicketKind = 'SINGL' | 'DUBL' | 'COMBO';
 
@@ -140,7 +141,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
       teams: match.teams || `${match.homeTeam} - ${match.awayTeam}`,
       homeTeam: match.homeTeam.trim(),
       awayTeam: match.awayTeam.trim(),
-      league: match.league.trim(),
+      league: formatLeagueName(match.league),
       prediction: match.prediction.trim(),
       odds: normalizeOdds(match.odds),
       time: match.time || 'FT',

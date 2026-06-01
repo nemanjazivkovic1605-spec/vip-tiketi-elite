@@ -8,6 +8,7 @@ import { MembershipStatus, TicketStatus, Tip, GlobalStats } from '../types';
 import { formatTicketPublishedAt, isPredictionLockedForUser } from '../utils/tickets';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
 import { withTimeout } from '../utils/async';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
 
@@ -150,7 +151,7 @@ export default function Dashboard() {
                           <span className="font-bold text-neutral-200">
                             {match.homeTeam && match.awayTeam ? `${match.homeTeam} - ${match.awayTeam}` : match.teams}
                           </span>
-                          <span className="text-[10px] text-neutral-500 uppercase tracking-widest">{match.league}</span>
+                          <span className="text-[10px] text-neutral-500 uppercase tracking-widest">{formatLeagueName(match.league)}</span>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-center min-w-[76px]">

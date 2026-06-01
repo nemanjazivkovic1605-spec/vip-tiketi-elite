@@ -1,5 +1,6 @@
 import type { EnrichedMatchStats, SportsDataProvider, SportsMatchLookup } from './sportsDataProvider.js';
 import { compactArray, requestJson, teamsMatch } from './providerUtils.js';
+import { formatLeagueName } from '../../utils/leagueMapper.js';
 
 type SportsDbEvent = {
   idEvent?: string;
@@ -51,7 +52,7 @@ export const theSportsDbProvider: SportsDataProvider = {
     return {
       provider: 'TheSportsDB',
       fixtureId: event.idEvent,
-      league: event.strLeague || lookup.league,
+      league: formatLeagueName(event.strLeague || lookup.league),
       date: event.dateEvent || lookup.date,
       homeTeam: event.strHomeTeam || lookup.homeTeam,
       awayTeam: event.strAwayTeam || lookup.awayTeam,

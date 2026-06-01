@@ -1,5 +1,6 @@
 import type { EnrichedMatchStats, SportsDataProvider, SportsMatchLookup } from './sportsDataProvider.js';
 import { compactArray, requestJson, teamsMatch } from './providerUtils.js';
+import { formatLeagueName } from '../../utils/leagueMapper.js';
 
 type FootballFixture = {
   fixture?: { id?: number; date?: string };
@@ -80,7 +81,7 @@ const enrichFootball = async (lookup: SportsMatchLookup): Promise<EnrichedMatchS
   return {
     provider: 'API-Football',
     fixtureId: String(fixtureId),
-    league: fixture.league?.name || lookup.league,
+    league: formatLeagueName(fixture.league?.name || lookup.league),
     date: fixture.fixture?.date || lookup.date,
     homeTeam: fixture.teams?.home?.name || lookup.homeTeam,
     awayTeam: fixture.teams?.away?.name || lookup.awayTeam,
@@ -113,7 +114,7 @@ const enrichBasketball = async (lookup: SportsMatchLookup): Promise<EnrichedMatc
   return {
     provider: 'API-Football',
     fixtureId: String(game.id),
-    league: game.league?.name || lookup.league,
+    league: formatLeagueName(game.league?.name || lookup.league),
     date: game.date || lookup.date,
     homeTeam: game.teams?.home?.name || lookup.homeTeam,
     awayTeam: game.teams?.away?.name || lookup.awayTeam,

@@ -34,6 +34,7 @@ import { getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublicati
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
 import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -66,6 +67,7 @@ const normalizeTip = (tip: Tip): Tip => {
   const matches = Array.isArray(tip.matches)
     ? tip.matches.map((match) => ({
       ...match,
+      league: formatLeagueName(match.league),
       odds: normalizeOdds(match.odds),
       analysis: cleanAnalysis(match.analysis),
     }))
@@ -154,7 +156,7 @@ const normalizeDailyAnalysisDoc = (analysisDoc: any): DailyAnalysisItem => {
     matchTime: time,
     kickoffTime: time,
     ...publicationMeta,
-    league: typeof data.league === 'string' ? data.league : '',
+    league: formatLeagueName(typeof data.league === 'string' ? data.league : ''),
     leagueId: Number.isFinite(Number(data.leagueId)) ? Number(data.leagueId) : undefined,
     homeTeam: typeof data.homeTeam === 'string' ? data.homeTeam : '',
     awayTeam: typeof data.awayTeam === 'string' ? data.awayTeam : '',

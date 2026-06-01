@@ -1,4 +1,5 @@
 import { FootballCompetition, FootballStanding, MatchResult, MatchStatus } from '../types';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 const API_BASE_URL = 'https://api.football-data.org/v4';
 const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY as string | undefined;
@@ -36,7 +37,7 @@ type CacheEnvelope<T> = {
 };
 
 const getCompetitionName = (code?: string) =>
-  SUPPORTED_COMPETITIONS.find((competition) => competition.code === code)?.name || code || 'Football';
+  formatLeagueName(SUPPORTED_COMPETITIONS.find((competition) => competition.code === code)?.name || code);
 
 const getCacheKey = (name: string) => `${CACHE_PREFIX}${name}`;
 
@@ -126,7 +127,7 @@ const mapMatch = (match: any): MatchResult => {
     source: 'football-data.org',
     homeTeam: match.homeTeam?.name || 'TBD',
     awayTeam: match.awayTeam?.name || 'TBD',
-    league: match.competition?.name || getCompetitionName(competitionCode),
+    league: formatLeagueName(match.competition?.name || getCompetitionName(competitionCode)),
     date: Number.isNaN(date.getTime()) ? new Date().toISOString().split('T')[0] : date.toISOString().split('T')[0],
     time: Number.isNaN(date.getTime()) ? '--:--' : date.toISOString().slice(11, 16),
     status: mapStatus(match.status),

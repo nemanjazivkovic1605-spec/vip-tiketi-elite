@@ -1,5 +1,6 @@
 import type { EnrichedMatchStats, SportsDataProvider, SportsMatchLookup } from './sportsDataProvider.js';
 import { requestJson, teamsMatch } from './providerUtils.js';
+import { formatLeagueName } from '../../utils/leagueMapper.js';
 
 type FootballDataMatch = {
   id?: number;
@@ -47,7 +48,7 @@ export const footballDataProvider: SportsDataProvider = {
     return {
       provider: 'football-data.org',
       fixtureId: String(match.id),
-      league: match.competition?.name || lookup.league,
+      league: formatLeagueName(match.competition?.name || lookup.league),
       date: match.utcDate || lookup.date,
       homeTeam: match.homeTeam?.name || lookup.homeTeam,
       awayTeam: match.awayTeam?.name || lookup.awayTeam,

@@ -1,4 +1,5 @@
 import { ImportedMatch } from '../types';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 const IMPORTED_MATCHES_KEY = 'elite_imported_matches';
 const IMPORTED_MATCHES_UPDATED_EVENT = 'elite_imported_matches_updated';
@@ -18,31 +19,6 @@ const REQUIRED_COLUMNS = [
   'oddsDraw',
   'oddsAway',
 ] as const;
-
-const LEAGUE_NAMES: Record<string, string> = {
-  E0: 'Premier League',
-  E1: 'Championship',
-  E2: 'League One',
-  E3: 'League Two',
-  EC: 'National League',
-  SP1: 'La Liga',
-  SP2: 'La Liga 2',
-  I1: 'Serie A',
-  I2: 'Serie B',
-  D1: 'Bundesliga',
-  D2: 'Bundesliga 2',
-  F1: 'Ligue 1',
-  F2: 'Ligue 2',
-  N1: 'Eredivisie',
-  P1: 'Primeira Liga',
-  B1: 'Belgian Pro League',
-  T1: 'Super Lig',
-  G1: 'Greek Super League',
-  SC0: 'Scottish Premiership',
-  SC1: 'Scottish Championship',
-  SC2: 'Scottish League One',
-  SC3: 'Scottish League Two',
-};
 
 const safeString = (value: unknown) => String(value ?? '').trim();
 
@@ -98,7 +74,7 @@ const normalizeRow = (row: RawImportedMatch, importedAt: string): ImportedMatch 
 
   const match = {
     date: normalizeDate(row.date ?? row.Date),
-    league: safeString(row.league) || LEAGUE_NAMES[leagueCode] || leagueCode,
+    league: formatLeagueName(safeString(row.league) || leagueCode),
     homeTeam: safeString(row.homeTeam ?? row.HomeTeam),
     awayTeam: safeString(row.awayTeam ?? row.AwayTeam),
     homeScore: safeNumber(row.homeScore ?? row.FTHG),
@@ -134,7 +110,9 @@ const readMatches = (): ImportedMatch[] => {
     const stored = localStorage.getItem(IMPORTED_MATCHES_KEY);
     if (!stored) return [];
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.map((match) => ({ ...match, league: formatLeagueName(match.league) }))
+      : [];
   } catch {
     return [];
   }
@@ -151,7 +129,9 @@ const loadSeedMatches = async (): Promise<ImportedMatch[]> => {
     const response = await fetch(IMPORTED_MATCHES_SEED_PATH, { cache: 'force-cache' });
     if (!response.ok) return [];
     const matches = await response.json();
-    return Array.isArray(matches) ? matches : [];
+    return Array.isArray(matches)
+      ? matches.map((match) => ({ ...match, league: formatLeagueName(match.league) }))
+      : [];
   } catch {
     return [];
   }

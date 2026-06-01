@@ -1,6 +1,7 @@
 import { DailyAnalysisAccess, DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisSport } from '../types';
 import { auth } from '../lib/firebase';
 import { createDailyPublicationMeta } from '../utils/dailyPublication';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 const TIMEZONE = 'Europe/Belgrade';
 const FOOTBALL_CANDIDATE_LIMIT = 40;
@@ -304,7 +305,7 @@ const mapFootballFixture = async (fixture: ApiFixture, sortOrder: number): Promi
     matchTime: kickoffTime,
     kickoffTime,
     ...createDailyPublicationMeta(),
-    league: fixture.league.country ? `${fixture.league.name} · ${fixture.league.country}` : fixture.league.name,
+    league: formatLeagueName(fixture.league.country ? `${fixture.league.name} · ${fixture.league.country}` : fixture.league.name),
     leagueId: fixture.league.id,
     homeTeam: fixture.teams.home.name,
     awayTeam: fixture.teams.away.name,
@@ -352,7 +353,7 @@ const mapBasketballGame = (game: BasketballGame, sortOrder: number): RankedAnaly
     matchTime: kickoffTime,
     kickoffTime,
     ...createDailyPublicationMeta(),
-    league: game.league.country ? `${game.league.name} · ${game.league.country}` : game.league.name,
+    league: formatLeagueName(game.league.country ? `${game.league.name} · ${game.league.country}` : game.league.name),
     leagueId: game.league.id,
     homeTeam: game.teams.home.name,
     awayTeam: game.teams.away.name,

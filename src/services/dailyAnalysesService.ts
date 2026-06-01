@@ -19,6 +19,7 @@ import { isFinishedDailyAnalysisStatus, isVisibleInDailyFeed, normalizeDailyAnal
 import { dailyAnalysisAiService, type AiAnalysisResult, type AnalysisGenerationType } from './dailyAnalysisAiService';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 const COLLECTION = 'dailyAnalyses';
 const PUBLIC_COLLECTION = 'publicDailyAnalyses';
@@ -216,7 +217,7 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
   matchTime: data.matchTime || data.kickoffTime || data.time || time,
   kickoffTime: data.kickoffTime || data.matchTime || data.time || time,
   ...publicationMeta,
-  league: data.league || '',
+  league: formatLeagueName(data.league),
   leagueId: Number.isFinite(Number(data.leagueId)) ? Number(data.leagueId) : undefined,
   homeTeam: data.homeTeam || '',
   awayTeam: data.awayTeam || '',
@@ -536,6 +537,7 @@ export const dailyAnalysesService = {
 
     await setDoc(doc(db, COLLECTION, id), removeUndefined({
       ...completedAnalysis,
+      league: formatLeagueName(completedAnalysis.league),
       matchTime: analysis.matchTime || analysis.kickoffTime || analysis.time,
       kickoffTime: analysis.kickoffTime || analysis.matchTime || analysis.time,
       ...publicationMeta,
@@ -576,6 +578,7 @@ export const dailyAnalysesService = {
 
     await updateDoc(doc(db, COLLECTION, id), removeUndefined({
       ...patch,
+      ...(patch.league !== undefined ? { league: formatLeagueName(patch.league) } : {}),
       ...(patch.publishedAt || patch.publishedDate || patch.publishedTime || patch.publishTime
         ? getDailyPublicationMeta({ ...patch, date: patch.date || new Date().toISOString().split('T')[0] })
         : {}),

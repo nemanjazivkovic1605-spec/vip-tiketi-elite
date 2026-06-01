@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { resultsProvider } from '../services/resultsProvider';
 import { MatchResult, MatchStatus } from '../types';
 import { Calendar, RefreshCw, Trophy, AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
+import { formatLeagueName } from '../utils/leagueMapper';
 
 export default function LiveResults() {
   const [matches, setMatches] = useState<MatchResult[]>([]);
@@ -73,7 +74,7 @@ export default function LiveResults() {
                 layout
               >
                 <div className="flex flex-col gap-1 w-full md:w-1/4">
-                  <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{match.league}</div>
+                  <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{formatLeagueName(match.league)}</div>
                   <div className="flex items-center gap-2 text-xs font-bold text-neutral-400">
                     <Calendar size={12} /> {match.date}
                     <Clock size={12} className="ml-2" /> {match.time}

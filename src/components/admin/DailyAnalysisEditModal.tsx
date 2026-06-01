@@ -4,6 +4,7 @@ import { EyeOff, Save, Trash2, X } from 'lucide-react';
 import { DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisStatus } from '../../types';
 import { evaluateDailyAnalysisStatus } from '../../services/dailyAnalysesService';
 import { dailyPublicationMetaFromInput, getDailyPublicationInputValue } from '../../utils/dailyPublication';
+import { formatLeagueName } from '../../utils/leagueMapper';
 
 type DailyAnalysisEditModalProps = {
   analysis: DailyAnalysisItem;
@@ -49,6 +50,7 @@ export default function DailyAnalysisEditModal({ analysis, onClose, onSave, onDe
 
       await onSave({
         ...next,
+        league: formatLeagueName(next.league),
         manualOverride: true,
         resultManualOverride: next.resultManualOverride === true || resultChanged,
         odds: Number(next.odds) || 1,

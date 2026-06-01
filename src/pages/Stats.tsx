@@ -7,6 +7,7 @@ import { getTicketUnitsStake, isPredictionLockedForUser } from '../utils/tickets
 import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
 import { withTimeout } from '../utils/async';
+import { formatLeagueName } from '../utils/leagueMapper';
 const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
 
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
@@ -310,7 +311,7 @@ export default function Stats() {
                     <div>
                       <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">{row.ticket.date}</div>
                       <div className="mt-1 font-bold text-neutral-100">{row.match.homeTeam} - {row.match.awayTeam}</div>
-                      <div className="mt-1 text-xs text-neutral-500">{row.match.league || 'Fudbal'}</div>
+                      <div className="mt-1 text-xs text-neutral-500">{formatLeagueName(row.match.league)}</div>
                     </div>
                     <span className={`shrink-0 rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${meta.className}`}>
                       {meta.label}
@@ -363,7 +364,7 @@ export default function Stats() {
                         className={`hover:bg-white/[0.02] transition-colors ${isAdmin ? 'cursor-pointer' : ''}`}
                       >
                         <td className="py-4 pr-4 text-neutral-300 font-bold">{row.ticket.date}</td>
-                        <td className="py-4 pr-4 text-neutral-400">{row.match.league || 'Fudbal'}</td>
+                        <td className="py-4 pr-4 text-neutral-400">{formatLeagueName(row.match.league)}</td>
                         <td className="py-4 pr-4 font-bold text-neutral-100">{row.match.homeTeam} - {row.match.awayTeam}</td>
                         <td className="py-4 pr-4 text-gold-400 font-black">
                           {locked ? (

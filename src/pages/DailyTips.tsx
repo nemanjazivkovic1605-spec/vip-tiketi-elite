@@ -9,6 +9,7 @@ import { dailyAnalysesService, isQuickResultPredictionSupported } from '../servi
 import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
 import { withTimeout } from '../utils/async';
+import { formatLeagueName } from '../utils/leagueMapper';
 const DailyAnalysisEditModal = lazy(() => import('../components/admin/DailyAnalysisEditModal'));
 
 const formatDate = (date: string) =>
@@ -235,7 +236,7 @@ const AnalysisCard = React.memo(function AnalysisCard({ item, canAccessVip, isAd
             {sportLabel(item.sport)}
           </span>
           <span className="max-w-[180px] truncate rounded-full border border-gold-500/20 bg-gold-500/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-gold-300 md:max-w-[260px]">
-            {item.league}
+            {formatLeagueName(item.league)}
           </span>
           <span className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${
             access === 'VIP'

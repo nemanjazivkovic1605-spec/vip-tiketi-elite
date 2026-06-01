@@ -7,6 +7,7 @@ import { Tip, TicketStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
 import { withTimeout } from '../utils/async';
+import { formatLeagueName } from '../utils/leagueMapper';
 import {
   calculateTicketUnitsProfit,
   canReadVipAnalysis,
@@ -244,7 +245,8 @@ export default function Tickets() {
     return (
       <div className={compact ? 'space-y-3' : 'space-y-3 px-4 pb-3'}>
         {tip.matches.map((match, index) => {
-          const sport = getSportMeta(match.league);
+          const league = formatLeagueName(match.league);
+          const sport = getSportMeta(league);
 
           return (
           <div key={match.id || index} className="relative border-t border-[#262626] py-3 first:border-t-0">
@@ -252,7 +254,7 @@ export default function Tickets() {
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-widest">
                 <span className="text-gold-300">{sport.icon} {sport.label}</span>
                 <span className="text-neutral-600">•</span>
-                <span className="truncate text-neutral-400">{match.league || 'Liga'}</span>
+                <span className="truncate text-neutral-400">{league}</span>
               </div>
               {match.result && (
                 <span className="text-xs font-display font-black tabular-nums text-neutral-300">
