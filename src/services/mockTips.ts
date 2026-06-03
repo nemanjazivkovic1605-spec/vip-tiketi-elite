@@ -36,6 +36,7 @@ import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite
 import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
 import { formatLeagueName } from '../utils/leagueMapper';
 import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot } from './publicHistorySnapshot';
+import { getTicketProductType } from '../utils/ticketProduct';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -102,6 +103,7 @@ const normalizeTip = (tip: Tip): Tip => {
     source: 'admin',
     publicationStatus,
     status,
+    type: getTicketProductType(tip),
     isVip: Boolean(tip.isVip),
     date,
     analysis: cleanAnalysis(tip.analysis),
@@ -272,7 +274,7 @@ const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
 const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
 
-type StatsFilter = 'all' | 'free' | 'vip';
+type StatsFilter = 'all' | 'free' | 'vip' | 'elite_ticket' | 'safe_pick';
 
 export type PublicHomepageData = {
   stats: GlobalStats;
@@ -283,6 +285,9 @@ export type PublicHomepageData = {
 
 const filterTipsByType = (tips: Tip[], filter: StatsFilter) => {
   if (filter === 'all') return tips;
+  if (filter === 'elite_ticket' || filter === 'safe_pick') {
+    return tips.filter((tip) => getTicketProductType(tip) === filter);
+  }
   const wantVip = filter === 'vip';
   return tips.filter((tip) => Boolean(tip.isVip) === wantVip);
 };

@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Award, BarChart3, ChevronRight, Lock, Target, TrendingUp, Zap } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
-import { GlobalStats, MonthlyStats, TicketStatus, Tip } from '../types';
+import { GlobalStats, MonthlyStats, TicketStatus, Tip, type TicketProductType } from '../types';
 import { getTicketUnitsStake, isPredictionLockedForUser } from '../utils/tickets';
 import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
@@ -13,6 +13,7 @@ const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEdit
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
 const formatRsd = (value = 0) => `${value >= 0 ? '+' : ''}${value.toLocaleString('sr-RS')} RSD`;
+type StatsFilter = 'all' | TicketProductType;
 
 const statusMeta = (status: TicketStatus) => {
   if (status === TicketStatus.WON) return { label: '✓ POGOĐENO', className: 'text-green-300 bg-green-500/10 border-green-500/20' };
@@ -34,25 +35,25 @@ const ticketRows = (tickets: Tip[]) =>
 export default function Stats() {
   const { user, isAdmin, canAccessFree, canAccessVip } = useAuth();
   const [stats, setStats] = useState<GlobalStats | null>(null);
-  const [comparisonStats, setComparisonStats] = useState<{ free: GlobalStats | null; vip: GlobalStats | null }>({ free: null, vip: null });
-  const [statsFilter, setStatsFilter] = useState<'all' | 'free' | 'vip'>('all');
+  const [comparisonStats, setComparisonStats] = useState<{ elite: GlobalStats | null; safe: GlobalStats | null }>({ elite: null, safe: null });
+  const [statsFilter, setStatsFilter] = useState<StatsFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [loadError, setLoadError] = useState('');
 
-  const fetchData = async (showLoading = false, filter: 'all' | 'free' | 'vip' = statsFilter) => {
+  const fetchData = async (showLoading = false, filter: StatsFilter = statsFilter) => {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
-      const [nextStats, freeStats, vipStats] = await Promise.all([
+      const [nextStats, eliteStats, safeStats] = await Promise.all([
         withTimeout(mockTipsService.getPublicStats(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
-        withTimeout(mockTipsService.getPublicStats('free'), 'Statistika FREE se učitava predugo.'),
-        withTimeout(mockTipsService.getPublicStats('vip'), 'Statistika VIP se učitava predugo.'),
+        withTimeout(mockTipsService.getPublicStats('elite_ticket'), 'ELITE TIKET statistika se učitava predugo.'),
+        withTimeout(mockTipsService.getPublicStats('safe_pick'), 'SAFE PICK statistika se učitava predugo.'),
       ]);
 
       setStats(nextStats);
-      setComparisonStats({ free: freeStats, vip: vipStats });
+      setComparisonStats({ elite: eliteStats, safe: safeStats });
       setSelectedMonth((current) => {
         if (!current) return nextStats.monthlyBreakdown[0] || null;
         return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
@@ -96,26 +97,13 @@ export default function Stats() {
     },
   ], [hasPublicStats, stats]);
 
-  const freeVsVipOverview = useMemo(() => {
-    const free = comparisonStats.free;
-    const vip = comparisonStats.vip;
+  const productOverview = useMemo(() => {
+    const elite = comparisonStats.elite;
+    const safe = comparisonStats.safe;
 
-    if (!free || !vip || (!free.completedCount && !vip.completedCount)) return null;
+    if (!elite || !safe || (!elite.completedCount && !safe.completedCount)) return null;
 
-    const vipYield = vip.yield ?? 0;
-    const freeYield = free.yield ?? 0;
-    const vipProfit = vip.unitsProfit ?? 0;
-    const freeProfit = free.unitsProfit ?? 0;
-    const yieldDelta = vipYield - freeYield;
-    const profitDelta = vipProfit - freeProfit;
-
-    return {
-      free,
-      vip,
-      yieldDelta,
-      profitDelta,
-      premiumMultiplier: freeProfit !== 0 ? vipProfit / freeProfit : 0,
-    };
+    return { elite, safe };
   }, [comparisonStats]);
 
   const monthOptions = stats?.monthlyBreakdown || [];
@@ -144,26 +132,26 @@ export default function Stats() {
       </div>
 
       <div className="mb-6 flex flex-wrap justify-center gap-2">
-        {(['all','free','vip'] as const).map((option) => (
+        {(['all','elite_ticket','safe_pick'] as const).map((option) => (
           <button
             key={option}
             type="button"
             onClick={() => setStatsFilter(option)}
             className={`rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition ${
               statsFilter === option
-                ? option === 'vip'
+                ? option === 'elite_ticket'
                   ? 'border-gold-500 bg-gold-500 text-black shadow-[0_0_24px_rgba(245,124,0,0.18)]'
-                  : option === 'free'
-                    ? 'border-emerald-400 bg-emerald-400/15 text-emerald-100 shadow-[0_0_24px_rgba(52,211,153,0.12)]'
+                  : option === 'safe_pick'
+                    ? 'border-blue-400 bg-blue-400 text-black shadow-[0_0_24px_rgba(37,99,235,0.16)]'
                     : 'border-gold-500 bg-gold-500 text-black'
-                : option === 'vip'
+                : option === 'elite_ticket'
                   ? 'border-gold-500/20 bg-gold-500/8 text-gold-100 hover:border-gold-500/50 hover:bg-gold-500/12'
-                  : option === 'free'
-                    ? 'border-emerald-400/20 bg-emerald-400/8 text-emerald-100 hover:border-emerald-400/50 hover:bg-emerald-400/12'
+                  : option === 'safe_pick'
+                    ? 'border-blue-400/20 bg-blue-500/8 text-blue-100 hover:border-blue-400/50 hover:bg-blue-500/12'
                     : 'border-white/10 bg-white/5 text-neutral-300 hover:border-gold-500/30 hover:text-gold-300'
             }`}
           >
-            {option === 'all' ? 'Svi' : option === 'free' ? 'Free' : 'VIP'}
+            {option === 'all' ? 'Svi' : option === 'elite_ticket' ? 'ELITE TIKET' : 'SAFE PICK'}
           </button>
         ))}
       </div>
@@ -194,42 +182,50 @@ export default function Stats() {
         ))}
       </div>
 
-      {freeVsVipOverview && (
+      {productOverview && (
         <div className="mb-12 grid gap-4 lg:grid-cols-[1fr_1.1fr]">
-          <div className="glass rounded-[2rem] border border-white/10 p-5 md:p-6">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-gold-400">FREE vs VIP</p>
-            <h2 className="mt-2 text-xl md:text-2xl font-display font-black">Komparacija performansi</h2>
-            <p className="mt-2 text-sm text-neutral-400">Brzo poređenje koliko VIP paketi nose veću dobit u odnosu na FREE tipove.</p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div className="glass rounded-[2rem] border border-gold-500/20 bg-gradient-to-br from-gold-500/8 via-transparent to-transparent p-5 md:p-6">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-gold-400">ELITE TIKET statistika</p>
+            <h2 className="mt-2 text-xl md:text-2xl font-display font-black">Premium tiket performanse</h2>
+            <p className="mt-2 text-sm text-neutral-400">Odvojeno računanje za premium tikete sa većim kvotama i ciljem većeg profita.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <article className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">FREE</div>
-                <div className="mt-2 text-2xl font-display font-black text-neutral-100">{formatPercent(freeVsVipOverview.free.yield)}</div>
-                <p className="mt-1 text-xs text-neutral-400">Yield • {formatUnits(freeVsVipOverview.free.unitsProfit)}</p>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Tiketi</div>
+                <div className="mt-2 text-2xl font-display font-black text-neutral-100">{productOverview.elite.completedCount}</div>
+                <p className="mt-1 text-xs text-neutral-400">{productOverview.elite.winCount}/{productOverview.elite.completedCount} pogođeno</p>
               </article>
               <article className="rounded-2xl border border-gold-500/30 bg-gold-500/10 p-4 shadow-[0_0_30px_rgba(245,124,0,0.12)]">
-                <div className="text-[10px] uppercase tracking-[0.3em] text-gold-300">VIP</div>
-                <div className="mt-2 text-2xl font-display font-black text-gold-100">{formatPercent(freeVsVipOverview.vip.yield)}</div>
-                <p className="mt-1 text-xs text-gold-100/90">Yield • {formatUnits(freeVsVipOverview.vip.unitsProfit)}</p>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-gold-300">Prolaznost</div>
+                <div className="mt-2 text-2xl font-display font-black text-gold-100">{productOverview.elite.hitRate}%</div>
+                <p className="mt-1 text-xs text-gold-100/90">Avg kvota {productOverview.elite.averageOdds.toFixed(2)}</p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Profit / ROI</div>
+                <div className="mt-2 text-2xl font-display font-black text-gold-300">{formatUnits(productOverview.elite.unitsProfit)}</div>
+                <p className="mt-1 text-xs text-neutral-400">ROI/Yield {formatPercent(productOverview.elite.yield)}</p>
               </article>
             </div>
           </div>
 
-          <div className="glass rounded-[2rem] border border-gold-500/20 bg-gradient-to-br from-gold-500/8 via-transparent to-transparent p-5 md:p-6">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-gold-400">Marketing insight</p>
-            <h3 className="mt-2 text-xl md:text-2xl font-display font-black text-neutral-100">VIP premium ima jači profitni doprinos</h3>
-            <p className="mt-3 text-sm text-neutral-400">VIP paket daje {formatPercent(freeVsVipOverview.yieldDelta)} veći yield i {formatUnits(freeVsVipOverview.profitDelta)} veću dobit u odnosu na FREE segment.</p>
+          <div className="glass rounded-[2rem] border border-blue-400/20 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent p-5 md:p-6">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-blue-300">SAFE PICK statistika</p>
+            <h3 className="mt-2 text-xl md:text-2xl font-display font-black text-neutral-100">Stabilniji pick performanse</h3>
+            <p className="mt-3 text-sm text-neutral-400">Odvojeno računanje za singlove, dublove i manje kombo predloge sa fokusom na prolaznost.</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
-                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Yield razlika</div>
-                <div className="mt-2 text-xl font-display font-black text-gold-300">{formatPercent(freeVsVipOverview.yieldDelta)}</div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Tiketi</div>
+                <div className="mt-2 text-xl font-display font-black text-blue-300">{productOverview.safe.completedCount}</div>
+                <p className="mt-1 text-[10px] text-neutral-500">{productOverview.safe.winCount}/{productOverview.safe.completedCount} pogođeno</p>
               </article>
               <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
-                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Units razlika</div>
-                <div className="mt-2 text-xl font-display font-black text-gold-300">{formatUnits(freeVsVipOverview.profitDelta)}</div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Prolaznost</div>
+                <div className="mt-2 text-xl font-display font-black text-blue-300">{productOverview.safe.hitRate}%</div>
+                <p className="mt-1 text-[10px] text-neutral-500">Avg kvota {productOverview.safe.averageOdds.toFixed(2)}</p>
               </article>
               <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
-                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Premium faktor</div>
-                <div className="mt-2 text-xl font-display font-black text-gold-300">{freeVsVipOverview.premiumMultiplier.toFixed(2)}x</div>
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Profit / Yield</div>
+                <div className="mt-2 text-xl font-display font-black text-blue-300">{formatUnits(productOverview.safe.unitsProfit)}</div>
+                <p className="mt-1 text-[10px] text-neutral-500">{formatPercent(productOverview.safe.yield)}</p>
               </article>
             </div>
           </div>

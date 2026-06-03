@@ -203,25 +203,25 @@ export default function Home() {
       <section className="px-5 py-4 md:px-6">
         <div className="mx-auto grid max-w-7xl gap-3 lg:grid-cols-[1fr_1fr_0.62fr]">
           <DailyPickCard
-            title="VIP tiket dana"
-            description="Pažljivo odabran tiket sa većom kvotom."
+            title="Elite tiket"
+            description="Premium tiket sa većom kvotom i ciljem većeg profita."
             price="15€"
             tone="vip"
-            features={['2–6 mečeva (dubl, tripl ili kombo)', 'Kvota 2.50+', 'Objava svaki dan']}
+            features={['2–6 mečeva', 'Veća kvota', 'Premium analiza']}
             buttonLabel="Kupi tiket"
             target={getCheckoutPath('vip-ticket-day')}
-            sectionId="vip-ticket-day"
+            sectionId="elite-ticket"
           />
           <DailyPickCard
-            title="Safe pick dana"
-            description="Najsigurniji dnevni predlog."
+            title="Safe pick"
+            description="Stabilniji predlog sa fokusom na veću prolaznost."
             price="10€"
             tone="safe"
             badge="Popularno"
-            features={['1–3 meča (singl, dubl ili kombo)', 'Kvota 1.50–3.00', 'Objava svaki dan']}
+            features={['Singl, dubl ili manji kombo', 'Kvota 1.50–3.00', 'Fokus na prolaznost']}
             buttonLabel="Kupi pick"
             target={getCheckoutPath('safe-pick-day')}
-            sectionId="safe-pick-day"
+            sectionId="safe-pick"
           />
           <aside className="grid content-center gap-6 rounded-xl border border-white/10 bg-black/55 p-5">
             <CompactInfoCard icon={ShoppingCart} title="Kupovina bez pretplate" text="Odmah dobijaš tiket" />

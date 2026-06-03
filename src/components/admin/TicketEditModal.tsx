@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Plus, Trash2, X } from 'lucide-react';
-import { Match, TicketStatus, Tip, TipPublicationStatus } from '../../types';
+import { Match, TicketStatus, Tip, TipPublicationStatus, type TicketProductType } from '../../types';
 import { calculateTotalOdds, generateTicketCode, getDefaultUnitsStake, getTicketKind, getTicketPublicationMeta, getTicketUnitsStake, normalizeOdds, normalizePublishedDate, normalizePublishedTime, unitsToRsd } from '../../utils/tickets';
 import { formatLeagueName } from '../../utils/leagueMapper';
+import { getTicketProductType } from '../../utils/ticketProduct';
 
 type TicketKind = 'SINGL' | 'DUBL' | 'COMBO';
 
@@ -51,6 +52,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     const meta = getTicketPublicationMeta(tip);
     return {
       ...tip,
+      type: getTicketProductType(tip),
       ...meta,
       ticketCode: tip.ticketCode || meta.ticketCode,
       unitsStake: getTicketUnitsStake(tip),
@@ -134,6 +136,13 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     });
   };
 
+  const changeProductType = (type: TicketProductType) => {
+    updateDraft({
+      type,
+      ticketType: type === 'safe_pick' ? 'SAFE PICK' : getTicketKind(draft.matches.length),
+    });
+  };
+
   const buildNormalizedTip = (publicationStatus = draft.publicationStatus): Tip | null => {
     const matches = ensureKindMatchCount(draft.matches, selectedKind).map((match) => ({
       ...match,
@@ -171,6 +180,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     return {
       ...draft,
       source: 'admin',
+      type: draft.type || 'elite_ticket',
       date,
       publicationStatus,
       publishedDate,
@@ -278,6 +288,15 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                 </button>
                 <button onClick={() => changeVisibility(true)} className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border ${draft.isVip ? 'bg-gold-500 text-black border-gold-500' : 'bg-white/5 text-neutral-500 border-white/10'}`}>
                   VIP
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <button onClick={() => changeProductType('elite_ticket')} className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border ${(draft.type || 'elite_ticket') === 'elite_ticket' ? 'bg-gold-500 text-black border-gold-500' : 'bg-white/5 text-neutral-500 border-white/10'}`}>
+                  ELITE TIKET
+                </button>
+                <button onClick={() => changeProductType('safe_pick')} className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border ${draft.type === 'safe_pick' ? 'bg-blue-400 text-black border-blue-400' : 'bg-white/5 text-neutral-500 border-white/10'}`}>
+                  SAFE PICK
                 </button>
               </div>
 

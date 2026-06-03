@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, X, XCircle } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
-import { Tip, TicketStatus } from '../types';
+import { Tip, TicketStatus, type TicketProductType } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
 import { withTimeout } from '../utils/async';
@@ -16,6 +16,7 @@ import {
   getTicketUnitsStake,
   isPredictionLockedForUser,
 } from '../utils/tickets';
+import { getTicketProductLabel, getTicketProductTone, getTicketProductType } from '../utils/ticketProduct';
 
 const getTicketVisuals = (status: TicketStatus) => {
   if (status === TicketStatus.WON) {
@@ -97,7 +98,7 @@ export default function Tickets() {
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | TicketStatus>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'vip' | 'free'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | TicketProductType>('all');
   const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
@@ -128,7 +129,7 @@ export default function Tickets() {
 
   const filteredTips = useMemo(() => tips.filter((tip) => {
     const matchesStatus = filter === 'all' || tip.status === filter;
-    const matchesType = typeFilter === 'all' || (typeFilter === 'vip' ? tip.isVip : !tip.isVip);
+    const matchesType = typeFilter === 'all' || getTicketProductType(tip) === typeFilter;
     return matchesStatus && matchesType;
   }), [tips, filter, typeFilter]);
 
@@ -324,17 +325,19 @@ export default function Tickets() {
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
-          {['all', 'free', 'vip'].map((ticketType) => (
+          {(['all', 'elite_ticket', 'safe_pick'] as const).map((ticketType) => (
             <button
               key={ticketType}
-              onClick={() => setTypeFilter(ticketType as 'all' | 'vip' | 'free')}
+              onClick={() => setTypeFilter(ticketType)}
               className={`rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                 typeFilter === ticketType
-                  ? 'border-[#f59e0b] bg-[#f59e0b] text-black'
+                  ? ticketType === 'safe_pick'
+                    ? 'border-blue-400 bg-blue-400 text-black'
+                    : 'border-[#f59e0b] bg-[#f59e0b] text-black'
                   : 'border-[#2a2a2a] bg-[#181818] text-neutral-400 hover:border-[#3a3a3a] hover:text-neutral-200'
               }`}
             >
-              {ticketType === 'all' ? 'Svi' : ticketType.toUpperCase()}
+              {ticketType === 'all' ? 'Svi' : ticketType === 'elite_ticket' ? 'Elite tiket' : 'Safe pick'}
             </button>
           ))}
         </div>
@@ -352,6 +355,7 @@ export default function Tickets() {
             {filteredTips.map((tip) => {
               const visuals = getTicketVisuals(tip.status);
               const profit = calculateTicketUnitsProfit(tip);
+              const productTone = getTicketProductTone(tip);
 
               return (
                 <motion.div
@@ -388,10 +392,8 @@ export default function Tickets() {
                     <div className="flex items-start justify-between gap-3 p-4 pb-3">
                       <div className="min-w-0">
                         <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                          <div className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${
-                            tip.isVip ? 'border-gold-500/40 bg-gold-500/12 text-gold-200' : 'border-white/10 bg-white/5 text-neutral-300'
-                          }`}>
-                            {tip.isVip ? 'VIP' : 'FREE'}
+                          <div className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${productTone.badge}`}>
+                            {getTicketProductLabel(tip)}
                           </div>
                           <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-widest ${visuals.badge}`}>
                             {visuals.icon}
@@ -477,10 +479,8 @@ export default function Tickets() {
 
               <div className="relative pr-12">
                 <div className="flex flex-wrap items-center gap-2 mb-4">
-                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                    selectedTip.isVip ? 'bg-gold-500 text-black border-gold-300/70' : 'bg-white/5 text-neutral-300 border-white/10'
-                  }`}>
-                    {selectedTip.isVip ? 'VIP' : 'FREE'}
+                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${getTicketProductTone(selectedTip).badge}`}>
+                    {getTicketProductLabel(selectedTip)}
                   </span>
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest ${selectedVisuals.badge}`}>
                     {selectedVisuals.icon}

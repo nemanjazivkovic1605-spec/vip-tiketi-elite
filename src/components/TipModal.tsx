@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { Tip, Match, TicketStatus, TipPublicationStatus } from '../types';
+import { Tip, Match, TicketStatus, TipPublicationStatus, type TicketProductType } from '../types';
 import { motion } from 'motion/react';
 import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, normalizeOdds, unitsToRsd } from '../utils/tickets';
+import { getTicketProductType } from '../utils/ticketProduct';
 
 interface TipModalProps {
   onClose: () => void;
@@ -12,6 +13,7 @@ interface TipModalProps {
 
 export default function TipModal({ onClose, onSave, initialData }: TipModalProps) {
   const [isVip, setIsVip] = useState(initialData?.isVip ?? true);
+  const [productType, setProductType] = useState<TicketProductType>(initialData ? getTicketProductType(initialData) : 'elite_ticket');
   const [date, setDate] = useState(initialData?.date ?? new Date().toISOString().split('T')[0]);
   const [publishedTime, setPublishedTime] = useState(initialData?.publishedTime ?? formatLocalTime(new Date()));
   const [status, setStatus] = useState<TicketStatus>(initialData?.status ?? TicketStatus.PENDING);
@@ -66,6 +68,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
       ...initialData,
       id: initialData?.id || Math.random().toString(36).substr(2, 9),
       source: 'admin',
+      type: productType,
       publicationStatus: initialData?.publicationStatus ?? TipPublicationStatus.DRAFT,
       date,
       publishedDate: initialData?.publishedDate || date,
@@ -116,6 +119,21 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                 className={`py-3 rounded-2xl font-bold uppercase text-xs tracking-widest border transition-all ${!isVip ? 'bg-neutral-200 text-black border-neutral-200' : 'bg-white/5 border-white/10 text-neutral-500'}`}
               >
                 Free Tip
+              </button>
+           </div>
+
+           <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setProductType('elite_ticket')}
+                className={`py-3 rounded-2xl font-bold uppercase text-xs tracking-widest border transition-all ${productType === 'elite_ticket' ? 'bg-gold-500 text-black border-gold-500' : 'bg-white/5 border-white/10 text-neutral-500'}`}
+              >
+                ELITE TIKET
+              </button>
+              <button
+                onClick={() => setProductType('safe_pick')}
+                className={`py-3 rounded-2xl font-bold uppercase text-xs tracking-widest border transition-all ${productType === 'safe_pick' ? 'bg-blue-400 text-black border-blue-400' : 'bg-white/5 border-white/10 text-neutral-500'}`}
+              >
+                SAFE PICK
               </button>
            </div>
 

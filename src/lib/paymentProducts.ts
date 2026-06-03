@@ -27,20 +27,20 @@ export type PaymentProduct = {
 export const PAYMENT_PRODUCTS: Record<PaymentProductId, PaymentProduct> = {
   'vip-ticket-day': {
     id: 'vip-ticket-day',
-    name: 'VIP tiket dana',
-    shortName: 'VIP TIKET DANA',
-    description: 'Pažljivo odabran dnevni tiket sa većom kvotom.',
+    name: 'Elite tiket',
+    shortName: 'ELITE TIKET',
+    description: 'Premium tiket sa 2 do 6 mečeva, većom kvotom i fokusom na veći profit.',
     priceEur: 15,
-    purpose: 'ELITE TIPS - VIP TIKET DANA',
+    purpose: 'ELITE TIPS - ELITE TIKET',
     accent: 'rose',
   },
   'safe-pick-day': {
     id: 'safe-pick-day',
-    name: 'Safe pick dana',
-    shortName: 'SAFE PICK DANA',
+    name: 'Safe pick',
+    shortName: 'SAFE PICK',
     description: 'Stabilniji dnevni predlog sa fokusom na kontrolisani rizik.',
     priceEur: 10,
-    purpose: 'ELITE TIPS - SAFE PICK DANA',
+    purpose: 'ELITE TIPS - SAFE PICK',
     accent: 'blue',
   },
   'silver-7': {

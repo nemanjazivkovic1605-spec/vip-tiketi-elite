@@ -12,6 +12,8 @@ export enum TipPublicationStatus {
   PUBLISHED = 'PUBLISHED'
 }
 
+export type TicketProductType = 'elite_ticket' | 'safe_pick';
+
 export enum MembershipStatus {
   FREE = 'free',
   PENDING = 'pending',
@@ -98,6 +100,7 @@ export interface FootballStanding {
 
 export interface Tip {
   id: string;
+  type?: TicketProductType;
   source?: 'admin' | 'demo';
   sourceProvider?: 'api-football' | 'football-data.org';
   fixtureId?: string;

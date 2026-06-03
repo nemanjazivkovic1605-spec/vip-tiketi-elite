@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import readXlsxFile from 'read-excel-file/node';
-import { type Match, type Tip, TicketStatus, TipPublicationStatus } from '../src/types';
+import { type Match, type Tip, TicketStatus, TipPublicationStatus, type TicketProductType } from '../src/types';
 import {
   buildPublishedAt,
   calculateTotalOdds,
@@ -52,6 +52,7 @@ const MONTHS: MonthConfig[] = [
 const EXCEL_PATH = process.env.HISTORY_EXCEL_PATH || 'C:/Users/Nemanja/Downloads/all-euro-data-2025-2026.xlsx';
 const SNAPSHOT_PATH = 'public/public-history-snapshot.json';
 const MAX_TIPS_PER_DAY = 4;
+const JANUARY_SAFE_PICK_LIMIT = 10;
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
 const normalizeName = (value: string) =>
@@ -106,18 +107,30 @@ const chooseMarket = (match: FinishedMatch, slot: number, vipTargetOdds: number)
   })[0];
 };
 
+const chooseSafePickMarket = (match: FinishedMatch, preferWon = true) => {
+  const markets = availableMarkets(match)
+    .filter((market) => market.odds >= 1.5 && market.odds <= 3)
+    .filter((market) => marketWon(market.prediction, match) === preferWon)
+    .sort((left, right) => {
+      return Math.abs(left.odds - 1.85) - Math.abs(right.odds - 1.85);
+    });
+
+  return markets[0] || null;
+};
+
 const toTip = (
   match: FinishedMatch,
   slot: number,
   market: { prediction: Market; odds: number },
   prefix: string,
+  productType: TicketProductType = 'elite_ticket',
 ): Tip => {
-  const isVip = slot > 0;
+  const isVip = productType === 'safe_pick' ? true : slot > 0;
   const publishedTime = `12:${stableMinute(`${match.id}-${slot}`)}`;
   const id = `${prefix}${match.date}-${slot}-${normalizeName(match.homeTeam)}-${normalizeName(match.awayTeam)}`.slice(0, 180);
   const result = `${match.homeScore}-${match.awayScore}`;
   const status = marketWon(market.prediction, match) ? TicketStatus.WON : TicketStatus.LOST;
-  const unitsStake = isVip ? 10 : 5;
+  const unitsStake = productType === 'safe_pick' ? 5 : isVip ? 10 : 5;
   const matchTip: Match = {
     id: match.id,
     teams: `${match.homeTeam} - ${match.awayTeam}`,
@@ -133,6 +146,7 @@ const toTip = (
 
   return mapTicketForPublic({
     id,
+    type: productType,
     source: 'admin',
     publicationStatus: TipPublicationStatus.PUBLISHED,
     publishedDate: match.date,
@@ -143,7 +157,7 @@ const toTip = (
     date: match.date,
     matches: [matchTip],
     totalOdds: calculateTotalOdds([matchTip]),
-    ticketType: 'SINGL',
+    ticketType: productType === 'safe_pick' ? 'SAFE PICK' : 'SINGL',
     unitsStake,
     stake: unitsToRsd(unitsStake),
     status,
@@ -151,6 +165,24 @@ const toTip = (
     isVip,
     result,
   });
+};
+
+const buildJanuarySafePicks = (matches: FinishedMatch[]) => {
+  const usedDates = new Set<string>();
+  return matches
+    .filter((match) => match.date >= '2026-01-01' && match.date <= '2026-01-31')
+    .filter((match) => chooseSafePickMarket(match, true) || chooseSafePickMarket(match, false))
+    .sort((left, right) => stableNumber(`safe-${left.id}`) - stableNumber(`safe-${right.id}`))
+    .flatMap((match, index) => {
+      if (usedDates.has(match.date)) return [];
+      usedDates.add(match.date);
+      const preferWon = ![2, 5, 8].includes(index);
+      const market = chooseSafePickMarket(match, preferWon) || chooseSafePickMarket(match, !preferWon);
+      return market
+        ? [toTip(match, 8, market, 'history-january-safe-pick-2026-', 'safe_pick')]
+        : [];
+    })
+    .slice(0, JANUARY_SAFE_PICK_LIMIT);
 };
 
 const main = async () => {
@@ -205,19 +237,22 @@ const main = async () => {
         return market ? [toTip(match, slot, market, config.prefix)] : [];
       }));
   });
+  const januarySafePicks = buildJanuarySafePicks(uniqueMatches);
+  const allTips = Array.from(new Map([...tips, ...januarySafePicks].map((tip) => [tip.id, tip])).values());
 
   const snapshot = {
     generatedAt: new Date().toISOString(),
     source: 'Local Excel workbook with real results and bookmaker odds',
-    tips,
+    tips: allTips,
   };
   fs.writeFileSync(SNAPSHOT_PATH, `${JSON.stringify(snapshot)}\n`);
   console.log(JSON.stringify({
     snapshotPath: SNAPSHOT_PATH,
-    tickets: tips.length,
+    tickets: allTips.length,
+    januarySafePicks: januarySafePicks.length,
     months: MONTHS.map((month) => ({
       month: month.start.slice(0, 7),
-      tickets: tips.filter((tip) => tip.date.startsWith(month.start.slice(0, 7))).length,
+      tickets: allTips.filter((tip) => tip.date.startsWith(month.start.slice(0, 7))).length,
     })),
   }, null, 2));
 };

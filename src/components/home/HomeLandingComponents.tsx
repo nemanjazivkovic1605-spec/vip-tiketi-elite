@@ -33,8 +33,8 @@ export function TopNoticeBar({
   hitRate: number | null;
 }) {
   const offerItems = [
-    { label: 'VIP TIKET DANA', value: '15€ • Kvota 2.50+', target: '/#vip-ticket-day' },
-    { label: 'SAFE PICK DANA', value: '10€ • Kvota 1.50–3.00', target: '/#safe-pick-day' },
+    { label: 'ELITE TIKET', value: '15€ • Kvota 2.50+', target: '/#elite-ticket' },
+    { label: 'SAFE PICK', value: '10€ • Kvota 1.50–3.00', target: '/#safe-pick' },
     { label: 'SILVER 7 DANA', value: '15€', target: '/#pricing' },
     { label: 'GOLD 30 DANA', value: '40€', target: '/#pricing' },
     { label: 'ELITE 90 DANA', value: '100€', target: '/#pricing' },
