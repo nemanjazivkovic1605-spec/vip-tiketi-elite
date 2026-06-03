@@ -5,7 +5,7 @@ import { Award, ChevronRight, Clock, Lock, ShieldCheck, Target, TrendingUp, Zap 
 import { useAuth } from '../hooks/useAuth';
 import { mockTipsService } from '../services/mockTips';
 import { MembershipStatus, TicketStatus, Tip, GlobalStats } from '../types';
-import { formatTicketPublishedAt, isPredictionLockedForUser } from '../utils/tickets';
+import { formatFirstMatchStartAt, formatTicketPublishedAt, isPredictionLockedForUser } from '../utils/tickets';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
 import { withTimeout } from '../utils/async';
 import { formatLeagueName } from '../utils/leagueMapper';
@@ -13,6 +13,7 @@ import { formatLeagueName } from '../utils/leagueMapper';
 const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
 
 const formatPublishedAt = formatTicketPublishedAt;
+const formatFirstMatchAt = formatFirstMatchStartAt;
 const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
 
 export default function Dashboard() {
@@ -124,7 +125,9 @@ export default function Dashboard() {
                     <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${tip.isVip ? 'bg-gold-500 text-black' : 'bg-neutral-800 text-neutral-400'}`}>
                       {tip.isVip ? 'VIP' : 'FREE'}
                     </div>
-                    <span className="text-xs text-neutral-500 font-medium">{formatPublishedAt(tip)} · {tip.ticketCode || tip.id.slice(0, 8).toUpperCase()}</span>
+                    <span className="text-xs text-neutral-500 font-medium">
+                      Objavljeno: {formatPublishedAt(tip)} · Pocetak: {formatFirstMatchAt(tip)} · {tip.ticketCode || tip.id.slice(0, 8).toUpperCase()}
+                    </span>
                   </div>
                   <div className={`text-xs font-black uppercase tracking-widest ${
                     tip.status === TicketStatus.WON ? 'text-green-500' :

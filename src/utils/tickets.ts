@@ -42,10 +42,15 @@ export const normalizePublishedTime = (value?: string) => {
   return `${pad2(Math.min(23, Math.max(0, Number.isFinite(hour) ? hour : 12)))}:${pad2(Math.min(59, Math.max(0, Number.isFinite(minute) ? minute : 0)))}`;
 };
 
+const hasClockTime = (value?: string) => /^([01]?\d|2[0-3]):[0-5]\d/.test((value || '').trim());
+
 export const generatePublishedTime = () => `12:${pad2(Math.floor(Math.random() * 60))}`;
 
 export const buildPublishedAt = (publishedDate: string, publishedTime: string) =>
   `${normalizePublishedDate(publishedDate)}T${normalizePublishedTime(publishedTime)}:00`;
+
+export const buildEventAt = (eventDate: string, eventTime: string) =>
+  `${normalizePublishedDate(eventDate)}T${normalizePublishedTime(eventTime)}:00`;
 
 export const generateTicketCode = (isVip: boolean, publishedDate: string, publishedTime: string) => {
   const [year, month, day] = normalizePublishedDate(publishedDate).split('-');
@@ -79,17 +84,91 @@ export const getTicketPublicationMeta = (
   };
 };
 
-export const formatTicketPublishedAt = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date' | 'createdAt'>) => {
+export const getMatchEventDate = (match: Partial<Match>, fallbackDate?: string) =>
+  normalizePublishedDate(match.eventDate || fallbackDate);
+
+export const getMatchEventTime = (match: Partial<Match>) => {
+  if (hasClockTime(match.eventTime)) return normalizePublishedTime(match.eventTime);
+  if (hasClockTime(match.time)) return normalizePublishedTime(match.time);
+  return '20:00';
+};
+
+export const getFirstMatchStartAt = (tip: Pick<Tip, 'date' | 'matches'>) => {
+  const starts = (tip.matches || [])
+    .map((match) => new Date(buildEventAt(getMatchEventDate(match, tip.date), getMatchEventTime(match))))
+    .filter((date) => Number.isFinite(date.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  return starts[0];
+};
+
+const getTicketPublishedDate = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date' | 'createdAt'>) => {
   const value = tip.publishedAt || tip.createdAt || buildPublishedAt(tip.publishedDate || tip.date, tip.publishedTime || '12:00');
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return tip.date;
-  return date.toLocaleString('sr-Latn-RS', {
+  return Number.isFinite(date.getTime()) ? date : undefined;
+};
+
+const hashString = (value: string) => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+};
+
+export const getCorrectedPublicationMetaIfInvalid = (tip: Tip) => {
+  const published = getTicketPublishedDate(tip);
+  const firstMatchStart = getFirstMatchStartAt(tip);
+
+  if (!published || !firstMatchStart || published.getTime() < firstMatchStart.getTime()) {
+    return getTicketPublicationMeta(tip);
+  }
+
+  const seed = hashString(`${tip.id}-${firstMatchStart.toISOString()}`);
+  const minutesBeforeKickoff = 60 + (seed % 241);
+  const corrected = new Date(firstMatchStart.getTime() - minutesBeforeKickoff * 60 * 1000);
+  const publishedDate = formatLocalIsoDate(corrected);
+  const publishedTime = formatLocalTime(corrected);
+
+  return {
+    publishedDate,
+    publishedTime,
+    publishedAt: buildPublishedAt(publishedDate, publishedTime),
+    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime),
+  };
+};
+
+export const isPublishedBeforeFirstMatch = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date' | 'createdAt' | 'matches'>) => {
+  const published = getTicketPublishedDate(tip);
+  const firstMatchStart = getFirstMatchStartAt(tip);
+  if (!published || !firstMatchStart) return false;
+  return published.getTime() < firstMatchStart.getTime();
+};
+
+export const formatDateTimeForDisplay = (value?: string) => {
+  if (!value) return 'Nije podeseno';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Nije podeseno';
+  const datePart = date.toLocaleDateString('sr-Latn-RS', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+  });
+  const timePart = date.toLocaleTimeString('sr-Latn-RS', {
     hour: '2-digit',
     minute: '2-digit',
   });
+  return `${datePart} u ${timePart}`;
+};
+
+export const formatTicketPublishedAt = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date' | 'createdAt'>) => {
+  const value = tip.publishedAt || tip.createdAt || buildPublishedAt(tip.publishedDate || tip.date, tip.publishedTime || '12:00');
+  return formatDateTimeForDisplay(value);
+};
+
+export const formatFirstMatchStartAt = (tip: Pick<Tip, 'date' | 'matches'>) => {
+  const firstMatchStart = getFirstMatchStartAt(tip);
+  return firstMatchStart ? formatDateTimeForDisplay(firstMatchStart.toISOString()) : 'Nije podeseno';
 };
 
 export const sortTicketsByDate = (tips: Tip[]) =>
@@ -115,6 +194,17 @@ export const normalizeOdds = (odds: unknown) => {
 export const calculateTotalOdds = (matches: Match[]) => {
   const total = matches.reduce((acc, match) => acc * normalizeOdds(match.odds), 1);
   return Number(total.toFixed(2));
+};
+
+export const hasRealTicketOdds = (tip: Pick<Tip, 'totalOdds' | 'matches' | 'locked'>) => {
+  if (tip.locked) return false;
+  const totalOdds = Number(tip.totalOdds);
+  if (!Number.isFinite(totalOdds) || totalOdds <= 1) return false;
+
+  return (tip.matches || []).every((match) => {
+    const odds = Number(match.odds);
+    return Number.isFinite(odds) && odds > 1;
+  });
 };
 
 export const getDefaultUnitsStake = (isVip: boolean, matchCount: number) => {

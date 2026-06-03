@@ -21,9 +21,12 @@ import { Tip, TicketStatus, GlobalStats, TipPublicationStatus, DailyAnalysisItem
 import {
   calculateTotalOdds,
   formatLocalIsoDate,
-  getTicketPublicationMeta,
+  getCorrectedPublicationMetaIfInvalid,
+  getMatchEventDate,
+  getMatchEventTime,
   getTicketStake,
   getTicketUnitsStake,
+  hasRealTicketOdds,
   isFinishedForStats,
   normalizeOdds,
   normalizePublishedDate,
@@ -66,21 +69,30 @@ const isAdminActiveTicketStatus = (status?: TicketStatus) =>
   status === TicketStatus.PENDING || status === TicketStatus.POSTPONED;
 
 const normalizeTip = (tip: Tip): Tip => {
+  const date = normalizePublishedDate(tip.date || new Date().toISOString().split('T')[0]);
   const matches = Array.isArray(tip.matches)
     ? tip.matches.map((match) => ({
       ...match,
       league: formatLeagueName(match.league),
       odds: normalizeOdds(match.odds),
+      eventDate: getMatchEventDate(match, date),
+      eventTime: getMatchEventTime(match),
+      time: getMatchEventTime(match),
       analysis: cleanAnalysis(match.analysis),
     }))
     : [];
   const totalOdds = calculateTotalOdds(matches);
-  const date = normalizePublishedDate(tip.date || new Date().toISOString().split('T')[0]);
   const publicationStatus = tip.publicationStatus || TipPublicationStatus.DRAFT;
   const status = tip.status || TicketStatus.PENDING;
-  const publicationMeta = getTicketPublicationMeta({
+  const normalizedDraft = {
+    ...tip,
     id: tip.id,
     date,
+    matches,
+  } as Tip;
+  const publicationMeta = getCorrectedPublicationMetaIfInvalid({
+    ...normalizedDraft,
+    id: tip.id,
     isVip: Boolean(tip.isVip),
     publishedDate: tip.publishedDate,
     publishedTime: tip.publishedTime,
@@ -218,6 +230,7 @@ const mapDailyAnalysisToTip = (analysis: DailyAnalysisItem): Tip => {
   return normalizeTip({
     id: `daily-${analysis.id}`,
     source: 'admin',
+    type: 'vip_monthly',
     publicationStatus: TipPublicationStatus.PUBLISHED,
     date: analysis.date,
     publishedDate: publicationMeta.publishedDate,
@@ -274,7 +287,7 @@ const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
 const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
 
-type StatsFilter = 'all' | 'free' | 'vip' | 'elite_ticket' | 'safe_pick';
+type StatsFilter = 'all' | 'free' | 'vip' | 'elite_ticket' | 'safe_pick' | 'vip_monthly';
 
 export type PublicHomepageData = {
   stats: GlobalStats;
@@ -285,7 +298,7 @@ export type PublicHomepageData = {
 
 const filterTipsByType = (tips: Tip[], filter: StatsFilter) => {
   if (filter === 'all') return tips;
-  if (filter === 'elite_ticket' || filter === 'safe_pick') {
+  if (filter === 'elite_ticket' || filter === 'safe_pick' || filter === 'vip_monthly') {
     return tips.filter((tip) => getTicketProductType(tip) === filter);
   }
   const wantVip = filter === 'vip';
@@ -351,7 +364,7 @@ const syncPublicTicket = async (tip: Tip) => {
 
   await setDocIfChanged(getPublicTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
 
-  if (isFinishedForStats(normalized.status)) {
+  if (isFinishedForStats(normalized.status) && hasRealTicketOdds(normalized)) {
     await setDocIfChanged(getPublicStatsTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
   } else {
     await deleteDocIfExists(getPublicStatsTicketDoc(normalized.id));
@@ -399,13 +412,22 @@ const readPublishedSafeTips = async (): Promise<Tip[]> => {
   });
 };
 
+const onlyValidStatsTips = (tips: Tip[]) => tips.filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
+
 const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
+    let finishedDailyTips: Tip[] = [];
+    try {
+      finishedDailyTips = onlyValidStatsTips(await readFinishedDailyAnalysisTips());
+    } catch {
+      finishedDailyTips = [];
+    }
+
     const snapshotTips = await readPublicHistorySnapshot();
     if (snapshotTips.length) {
       const normalizedSnapshotTips = snapshotTips
         .map((tip) => mapTicketForPublic(normalizeTip(tip)))
-        .filter((tip) => isFinishedForStats(tip.status));
+        .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
 
       try {
         const documents = await readPublicCollectionInPages(getPublicStatsTicketsCollection);
@@ -414,32 +436,35 @@ const readPublicStatsTips = async (): Promise<Tip[]> => {
             ...ticketDoc.data(),
             id: ticketDoc.id,
           } as Tip)))
-          .filter((tip) => isFinishedForStats(tip.status));
+          .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
 
         if (firestoreTips.length) {
-          return mergeTips(normalizedSnapshotTips, firestoreTips);
+          return mergeTips(normalizedSnapshotTips, firestoreTips, finishedDailyTips);
         }
       } catch {
         // Snapshot keeps public history available if Firestore public reads are temporarily unavailable.
       }
 
-      return sortTicketsByDate(normalizedSnapshotTips);
+      return sortTicketsByDate(mergeTips(normalizedSnapshotTips, finishedDailyTips));
     }
 
     try {
       const documents = await readPublicCollectionInPages(getPublicStatsTicketsCollection);
       const statsTips = sortTicketsByDate(documents
         .map((ticketDoc) => mapTicketForPublic(normalizeTip({
-          ...ticketDoc.data(),
-          id: ticketDoc.id,
-        } as Tip)))
-        .filter((tip) => isFinishedForStats(tip.status)));
-      if (statsTips.length) return statsTips;
+            ...ticketDoc.data(),
+            id: ticketDoc.id,
+          } as Tip)))
+        .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip)));
+      if (statsTips.length || finishedDailyTips.length) return mergeTips(statsTips, finishedDailyTips);
     } catch {
       // Compatibility while newly added public stats rules/index are being deployed.
     }
 
-    return (await readPublishedSafeTips()).filter((tip) => isFinishedForStats(tip.status));
+    return mergeTips(
+      (await readPublishedSafeTips()).filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip)),
+      finishedDailyTips,
+    );
   });
 };
 

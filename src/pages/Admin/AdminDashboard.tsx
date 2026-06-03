@@ -16,7 +16,7 @@ import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSet
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import AdminOverview from '../../components/admin/AdminOverview';
-import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, getStatusLabel, getTicketKind, normalizeOdds, unitsToRsd } from '../../utils/tickets';
+import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, getStatusLabel, getTicketKind, isPublishedBeforeFirstMatch, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 import { evaluateImportedMatchPrediction } from '../../utils/predictionResults';
 import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyPublishedAt, getDailyPublicationInputValue, getKickoffTime } from '../../utils/dailyPublication';
 import { isFinishedDailyAnalysisStatus, isVisibleInAdminActiveDailyList } from '../../utils/dailyLifecycle';
@@ -372,11 +372,18 @@ export default function AdminDashboard() {
       return;
     }
 
+    const eventDate = resultTipMatch.date;
+    const eventTime = '20:00';
+    const publishedDate = eventDate;
+    const publishedTime = '12:00';
+
     const tip: Tip = {
       id: `tip-${resultTipMatch.id}-${Date.now()}`,
       source: 'admin',
       publicationStatus: publishNow ? TipPublicationStatus.PUBLISHED : TipPublicationStatus.DRAFT,
-      publishedAt: publishNow ? new Date().toISOString() : undefined,
+      publishedDate: publishNow ? publishedDate : undefined,
+      publishedTime: publishNow ? publishedTime : undefined,
+      publishedAt: publishNow ? buildPublishedAt(publishedDate, publishedTime) : undefined,
       date: resultTipMatch.date,
       isVip: resultTipForm.isVip,
       status: resultTipForm.status,
@@ -394,12 +401,19 @@ export default function AdminDashboard() {
           league: resultTipMatch.league,
           prediction: resultTipForm.prediction,
           odds: normalizeOdds(odds),
-          time: 'FT',
+          time: eventTime,
+          eventDate,
+          eventTime,
           result: `${resultTipMatch.homeScore}:${resultTipMatch.awayScore}`,
           status: resultTipForm.status,
         },
       ],
     };
+
+    if (publishNow && !isPublishedBeforeFirstMatch(tip)) {
+      alert('Tiket ne može biti objavljen nakon početka prvog meča.');
+      return;
+    }
 
     await mockTipsService.addTip(tip);
     setResultTipMatch(null);
@@ -497,6 +511,8 @@ export default function AdminDashboard() {
     const createdAt = new Date().toISOString();
     const matches = ticketCart.map((item) => {
       const odds = normalizeOdds(item.odds);
+      const eventDate = item.match.date;
+      const eventTime = '20:00';
 
       return {
         id: `ticket-match-${item.match.id}-${Date.now()}`,
@@ -507,7 +523,9 @@ export default function AdminDashboard() {
         league: item.match.league,
         prediction: item.prediction,
         odds: Number(odds.toFixed(2)),
-        time: 'FT',
+        time: eventTime,
+        eventDate,
+        eventTime,
         result: `${item.match.homeScore}:${item.match.awayScore}`,
         status: item.status || ticketStatus,
         analysis: item.analysis.trim(),
@@ -534,6 +552,11 @@ export default function AdminDashboard() {
         .join('\n'),
       matches,
     };
+
+    if (!isPublishedBeforeFirstMatch(ticket)) {
+      alert('Tiket ne može biti objavljen nakon početka prvog meča.');
+      return;
+    }
 
     await mockTipsService.addTip(ticket);
     handleClearTicketCart();
@@ -613,7 +636,9 @@ export default function AdminDashboard() {
           league: pick.match.league,
           prediction: pick.prediction,
           odds: pick.odds,
-          time: 'FT',
+          time: '20:00',
+          eventDate: pick.match.date,
+          eventTime: '20:00',
           result: `${pick.match.homeScore}:${pick.match.awayScore}`,
           status: pick.status,
           analysis: '',

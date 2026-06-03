@@ -231,6 +231,42 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="px-5 py-5 md:px-6">
+        <div className="mx-auto max-w-7xl rounded-xl border border-white/10 bg-black/45 p-4 md:p-5">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.32em] text-gold-400">Najbolje od nas</p>
+              <h2 className="mt-1 font-display text-2xl font-black uppercase text-neutral-100">Elite tiket i Safe pick</h2>
+            </div>
+            <Link to="/history" className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-neutral-300 transition hover:border-gold-500/40 hover:text-gold-300">
+              Vidi istoriju <ArrowRight size={14} />
+            </Link>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <article className="rounded-xl border border-gold-500/25 bg-gradient-to-br from-gold-500/10 via-black/45 to-black p-5">
+              <div className="mb-3 flex items-center gap-3">
+                <Target className="text-gold-400" size={24} />
+                <h3 className="font-display text-xl font-black uppercase text-gold-100">ELITE TIKET</h3>
+              </div>
+              <p className="text-sm leading-6 text-neutral-400">Premium tiket sa 2 do 6 meceva, vecom ukupnom kvotom i fokusom na veci profit.</p>
+              <Link to="/#elite-ticket" className="mt-5 inline-flex rounded-lg bg-gold-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-gold-400">
+                Pogledaj Elite tiket
+              </Link>
+            </article>
+            <article className="rounded-xl border border-blue-400/25 bg-gradient-to-br from-blue-500/10 via-black/45 to-black p-5">
+              <div className="mb-3 flex items-center gap-3">
+                <ShieldCheck className="text-blue-300" size={24} />
+                <h3 className="font-display text-xl font-black uppercase text-blue-100">SAFE PICK</h3>
+              </div>
+              <p className="text-sm leading-6 text-neutral-400">Singl, dubl ili manji kombo sa kvotom uglavnom 1.50 do 3.00 i fokusom na prolaznost.</p>
+              <Link to="/#safe-pick" className="mt-5 inline-flex rounded-lg bg-blue-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-blue-400">
+                Pogledaj Safe pick
+              </Link>
+            </article>
+          </div>
+        </div>
+      </section>
+
       <section id="pricing" className="scroll-mt-28 px-5 py-7 md:px-6">
         <div className="mx-auto max-w-7xl">
           <div className="mb-5 text-center">

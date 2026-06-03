@@ -11,6 +11,7 @@ import { formatLeagueName } from '../utils/leagueMapper';
 import {
   calculateTicketUnitsProfit,
   canReadVipAnalysis,
+  formatFirstMatchStartAt,
   formatTicketPublishedAt,
   getTicketKind,
   getTicketUnitsStake,
@@ -91,6 +92,7 @@ const getSportMeta = (league = '') => {
 const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
 
 const formatPublishedAt = formatTicketPublishedAt;
+const formatFirstMatchAt = formatFirstMatchStartAt;
 const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
 
 export default function Tickets() {
@@ -237,6 +239,10 @@ export default function Tickets() {
                 <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-500">Objavljeno</span>
                 <span className="font-bold text-neutral-200">{formatPublishedAt(tip)}</span>
               </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:col-span-2">
+                <span className="block text-[9px] font-black uppercase tracking-widest text-neutral-500">Pocetak meca</span>
+                <span className="font-bold text-neutral-200">{formatFirstMatchAt(tip)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -325,7 +331,7 @@ export default function Tickets() {
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
-          {(['all', 'elite_ticket', 'safe_pick'] as const).map((ticketType) => (
+          {(['all', 'elite_ticket', 'safe_pick', 'vip_monthly'] as const).map((ticketType) => (
             <button
               key={ticketType}
               onClick={() => setTypeFilter(ticketType)}
@@ -333,11 +339,13 @@ export default function Tickets() {
                 typeFilter === ticketType
                   ? ticketType === 'safe_pick'
                     ? 'border-blue-400 bg-blue-400 text-black'
+                    : ticketType === 'vip_monthly'
+                      ? 'border-purple-400 bg-purple-400 text-black'
                     : 'border-[#f59e0b] bg-[#f59e0b] text-black'
                   : 'border-[#2a2a2a] bg-[#181818] text-neutral-400 hover:border-[#3a3a3a] hover:text-neutral-200'
               }`}
             >
-              {ticketType === 'all' ? 'Svi' : ticketType === 'elite_ticket' ? 'Elite tiket' : 'Safe pick'}
+              {ticketType === 'all' ? 'Svi' : ticketType === 'elite_ticket' ? 'Elite tiket' : ticketType === 'safe_pick' ? 'Safe pick' : 'VIP mesecni'}
             </button>
           ))}
         </div>
@@ -402,6 +410,10 @@ export default function Tickets() {
                           <div className="px-1 text-[8px] font-black uppercase tracking-widest text-neutral-500">
                             {isActiveLockedTicket(tip) ? 'TIP OBJAVLJEN' : getTicketKind(tip.matches.length)}
                           </div>
+                        </div>
+                        <div className="mb-1 space-y-1 text-[9px] font-black uppercase tracking-[0.16em] text-neutral-500">
+                          <div>Objavljeno: {formatPublishedAt(tip)}</div>
+                          <div>Pocetak meca: {formatFirstMatchAt(tip)}</div>
                         </div>
                         <span className="text-[9px] font-black uppercase tracking-[0.16em] text-neutral-500">
                           {formatPublishedAt(tip)} · {tip.ticketCode || tip.id.slice(0, 8).toUpperCase()} · {isActiveLockedTicket(tip) ? 'Aktivan tip' : `${tip.matches.length} ${tip.matches.length === 1 ? 'par' : 'parova'}`}
@@ -492,6 +504,10 @@ export default function Tickets() {
                 </div>
 
                 <h2 className="text-3xl font-display font-black mb-2">Detalji tiketa</h2>
+                <div className="mb-3 space-y-1 text-xs font-black uppercase tracking-[0.22em] text-neutral-500">
+                  <p>Objavljeno: {formatPublishedAt(selectedTip)}</p>
+                  <p>Pocetak meca: {formatFirstMatchAt(selectedTip)}</p>
+                </div>
                 <p className="text-xs text-neutral-500 font-black uppercase tracking-[0.22em] mb-7">
                   {formatPublishedAt(selectedTip)} · {selectedTip.ticketCode || selectedTip.id.slice(0, 8).toUpperCase()} · {isActiveLockedTicket(selectedTip) ? 'Aktivan tip' : `${selectedTip.matches.length} ${selectedTip.matches.length === 1 ? 'par' : 'parova'}`}
                 </p>

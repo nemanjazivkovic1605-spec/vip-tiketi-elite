@@ -12,7 +12,7 @@ export enum TipPublicationStatus {
   PUBLISHED = 'PUBLISHED'
 }
 
-export type TicketProductType = 'elite_ticket' | 'safe_pick';
+export type TicketProductType = 'elite_ticket' | 'safe_pick' | 'vip_monthly';
 
 export enum MembershipStatus {
   FREE = 'free',
@@ -35,6 +35,8 @@ export interface Match {
   prediction: string; // GG, 3+, 1, X, 2, 1X, X2
   odds: number;
   time: string;
+  eventDate?: string;
+  eventTime?: string;
   result?: string;
   status?: TicketStatus;
   analysis?: string;

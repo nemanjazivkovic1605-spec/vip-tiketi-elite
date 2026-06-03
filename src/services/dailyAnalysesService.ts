@@ -403,6 +403,7 @@ const publishFinishedAnalysisToHistory = async (
   await mockTipsService.addTip({
     id: `daily-${analysis.id}`,
     source: 'admin',
+    type: 'vip_monthly',
     publicationStatus: TipPublicationStatus.PUBLISHED,
     date: analysis.date,
     ...publicationMeta,

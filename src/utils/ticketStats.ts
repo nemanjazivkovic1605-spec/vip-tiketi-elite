@@ -2,6 +2,7 @@ import { type GlobalStats, type MonthlyStats, type Tip, TicketStatus } from '../
 import {
   calculateTicketUnitsProfit,
   getTicketUnitsStake,
+  hasRealTicketOdds,
   isFinishedForStats,
   isSettledTicket,
   normalizeOdds,
@@ -16,7 +17,7 @@ const getMonthLabel = (key: string) => {
 };
 
 export const calculateMonthlyStats = (tips: Tip[]): MonthlyStats[] => {
-  const finished = tips.filter((tip) => isFinishedForStats(tip.status));
+  const finished = tips.filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
   const grouped = new Map<string, Tip[]>();
 
   finished.forEach((tip) => {
@@ -59,8 +60,8 @@ export const calculateMonthlyStats = (tips: Tip[]): MonthlyStats[] => {
 };
 
 export const calculateStats = (tips: Tip[]): GlobalStats => {
-  const finished = tips.filter((tip) => isFinishedForStats(tip.status));
-  const completed = tips.filter((tip) => isSettledTicket(tip.status));
+  const finished = tips.filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
+  const completed = tips.filter((tip) => isSettledTicket(tip.status) && hasRealTicketOdds(tip));
   const wins = completed.filter((tip) => tip.status === TicketStatus.WON);
   const refunds = finished.filter((tip) => tip.status === TicketStatus.REFUND);
 

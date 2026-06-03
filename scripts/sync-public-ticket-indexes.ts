@@ -4,8 +4,9 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
 import { type Tip, TipPublicationStatus } from '../src/types';
-import { isFinishedForStats } from '../src/utils/tickets';
+import { hasRealTicketOdds, isFinishedForStats } from '../src/utils/tickets';
 import { mapTicketForPublic } from '../src/services/tickets/ticketMappers';
+import { getTicketProductType } from '../src/utils/ticketProduct';
 
 type PublicIndexCollection = 'publicTickets' | 'publicStatsTickets';
 
@@ -220,8 +221,9 @@ const main = async () => {
   const ticketSnapshot = await db.collection('tickets').get();
   const publishedTips = ticketSnapshot.docs
     .map((ticketDoc) => ({ id: ticketDoc.id, ...ticketDoc.data() }) as Tip)
-    .filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED);
-  const settledTips = publishedTips.filter((tip) => isFinishedForStats(tip.status));
+    .filter((tip) => tip.publicationStatus === TipPublicationStatus.PUBLISHED)
+    .map((tip) => ({ ...tip, type: getTicketProductType(tip) }));
+  const settledTips = publishedTips.filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
   const publishedIds = new Set(publishedTips.map((tip) => tip.id));
   const settledIds = new Set(settledTips.map((tip) => tip.id));
   const [publicTicketsSnapshot, publicStatsSnapshot] = await Promise.all([

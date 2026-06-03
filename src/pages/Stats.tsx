@@ -35,7 +35,7 @@ const ticketRows = (tickets: Tip[]) =>
 export default function Stats() {
   const { user, isAdmin, canAccessFree, canAccessVip } = useAuth();
   const [stats, setStats] = useState<GlobalStats | null>(null);
-  const [comparisonStats, setComparisonStats] = useState<{ elite: GlobalStats | null; safe: GlobalStats | null }>({ elite: null, safe: null });
+  const [comparisonStats, setComparisonStats] = useState<{ elite: GlobalStats | null; safe: GlobalStats | null; monthly: GlobalStats | null }>({ elite: null, safe: null, monthly: null });
   const [statsFilter, setStatsFilter] = useState<StatsFilter>('all');
   const [selectedMonth, setSelectedMonth] = useState<MonthlyStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,14 +46,15 @@ export default function Stats() {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
-      const [nextStats, eliteStats, safeStats] = await Promise.all([
+      const [nextStats, eliteStats, safeStats, monthlyStats] = await Promise.all([
         withTimeout(mockTipsService.getPublicStats(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
         withTimeout(mockTipsService.getPublicStats('elite_ticket'), 'ELITE TIKET statistika se učitava predugo.'),
         withTimeout(mockTipsService.getPublicStats('safe_pick'), 'SAFE PICK statistika se učitava predugo.'),
+        withTimeout(mockTipsService.getPublicStats('vip_monthly'), 'VIP MESECNI PREDLOZI statistika se ucitava predugo.'),
       ]);
 
       setStats(nextStats);
-      setComparisonStats({ elite: eliteStats, safe: safeStats });
+      setComparisonStats({ elite: eliteStats, safe: safeStats, monthly: monthlyStats });
       setSelectedMonth((current) => {
         if (!current) return nextStats.monthlyBreakdown[0] || null;
         return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
@@ -100,10 +101,11 @@ export default function Stats() {
   const productOverview = useMemo(() => {
     const elite = comparisonStats.elite;
     const safe = comparisonStats.safe;
+    const monthly = comparisonStats.monthly;
 
-    if (!elite || !safe || (!elite.completedCount && !safe.completedCount)) return null;
+    if (!elite || !safe || !monthly || (!elite.completedCount && !safe.completedCount && !monthly.completedCount)) return null;
 
-    return { elite, safe };
+    return { elite, safe, monthly };
   }, [comparisonStats]);
 
   const monthOptions = stats?.monthlyBreakdown || [];
@@ -132,7 +134,7 @@ export default function Stats() {
       </div>
 
       <div className="mb-6 flex flex-wrap justify-center gap-2">
-        {(['all','elite_ticket','safe_pick'] as const).map((option) => (
+        {(['all','elite_ticket','safe_pick','vip_monthly'] as const).map((option) => (
           <button
             key={option}
             type="button"
@@ -143,15 +145,19 @@ export default function Stats() {
                   ? 'border-gold-500 bg-gold-500 text-black shadow-[0_0_24px_rgba(245,124,0,0.18)]'
                   : option === 'safe_pick'
                     ? 'border-blue-400 bg-blue-400 text-black shadow-[0_0_24px_rgba(37,99,235,0.16)]'
+                    : option === 'vip_monthly'
+                      ? 'border-purple-400 bg-purple-400 text-black shadow-[0_0_24px_rgba(168,85,247,0.16)]'
                     : 'border-gold-500 bg-gold-500 text-black'
                 : option === 'elite_ticket'
                   ? 'border-gold-500/20 bg-gold-500/8 text-gold-100 hover:border-gold-500/50 hover:bg-gold-500/12'
                   : option === 'safe_pick'
                     ? 'border-blue-400/20 bg-blue-500/8 text-blue-100 hover:border-blue-400/50 hover:bg-blue-500/12'
+                    : option === 'vip_monthly'
+                      ? 'border-purple-400/20 bg-purple-500/8 text-purple-100 hover:border-purple-400/50 hover:bg-purple-500/12'
                     : 'border-white/10 bg-white/5 text-neutral-300 hover:border-gold-500/30 hover:text-gold-300'
             }`}
           >
-            {option === 'all' ? 'Svi' : option === 'elite_ticket' ? 'ELITE TIKET' : 'SAFE PICK'}
+            {option === 'all' ? 'Svi' : option === 'elite_ticket' ? 'ELITE TIKET' : option === 'safe_pick' ? 'SAFE PICK' : 'VIP MESECNI PREDLOZI'}
           </button>
         ))}
       </div>
@@ -183,7 +189,7 @@ export default function Stats() {
       </div>
 
       {productOverview && (
-        <div className="mb-12 grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+        <div className="mb-12 grid gap-4 xl:grid-cols-3">
           <div className="glass rounded-[2rem] border border-gold-500/20 bg-gradient-to-br from-gold-500/8 via-transparent to-transparent p-5 md:p-6">
             <p className="text-[10px] uppercase tracking-[0.35em] text-gold-400">ELITE TIKET statistika</p>
             <h2 className="mt-2 text-xl md:text-2xl font-display font-black">Premium tiket performanse</h2>
@@ -226,6 +232,29 @@ export default function Stats() {
                 <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Profit / Yield</div>
                 <div className="mt-2 text-xl font-display font-black text-blue-300">{formatUnits(productOverview.safe.unitsProfit)}</div>
                 <p className="mt-1 text-[10px] text-neutral-500">{formatPercent(productOverview.safe.yield)}</p>
+              </article>
+            </div>
+          </div>
+
+          <div className="glass rounded-[2rem] border border-purple-400/20 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent p-5 md:p-6">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300">VIP MESECNI PREDLOZI statistika</p>
+            <h3 className="mt-2 text-xl md:text-2xl font-display font-black text-neutral-100">Dnevni VIP predlozi</h3>
+            <p className="mt-3 text-sm text-neutral-400">Odvojeno racunanje za tikete koji dolaze iz dnevnih VIP predloga i zavrsenih analiza.</p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Tiketi</div>
+                <div className="mt-2 text-xl font-display font-black text-purple-300">{productOverview.monthly.completedCount}</div>
+                <p className="mt-1 text-[10px] text-neutral-500">{productOverview.monthly.winCount}/{productOverview.monthly.completedCount} pogodjeno</p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Prolaznost</div>
+                <div className="mt-2 text-xl font-display font-black text-purple-300">{productOverview.monthly.hitRate}%</div>
+                <p className="mt-1 text-[10px] text-neutral-500">Avg kvota {productOverview.monthly.averageOdds.toFixed(2)}</p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Profit / Yield</div>
+                <div className="mt-2 text-xl font-display font-black text-purple-300">{formatUnits(productOverview.monthly.unitsProfit)}</div>
+                <p className="mt-1 text-[10px] text-neutral-500">{formatPercent(productOverview.monthly.yield)}</p>
               </article>
             </div>
           </div>

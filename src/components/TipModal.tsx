@@ -2,7 +2,19 @@ import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { Tip, Match, TicketStatus, TipPublicationStatus, type TicketProductType } from '../types';
 import { motion } from 'motion/react';
-import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, normalizeOdds, unitsToRsd } from '../utils/tickets';
+import {
+  buildPublishedAt,
+  calculateTotalOdds,
+  formatLocalTime,
+  getDefaultUnitsStake,
+  getMatchEventDate,
+  getMatchEventTime,
+  isPublishedBeforeFirstMatch,
+  normalizeOdds,
+  normalizePublishedDate,
+  normalizePublishedTime,
+  unitsToRsd,
+} from '../utils/tickets';
 import { getTicketProductType } from '../utils/ticketProduct';
 
 interface TipModalProps {
@@ -15,16 +27,22 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
   const [isVip, setIsVip] = useState(initialData?.isVip ?? true);
   const [productType, setProductType] = useState<TicketProductType>(initialData ? getTicketProductType(initialData) : 'elite_ticket');
   const [date, setDate] = useState(initialData?.date ?? new Date().toISOString().split('T')[0]);
+  const [publishedDate, setPublishedDate] = useState(initialData?.publishedDate ?? initialData?.date ?? new Date().toISOString().split('T')[0]);
   const [publishedTime, setPublishedTime] = useState(initialData?.publishedTime ?? formatLocalTime(new Date()));
   const [status, setStatus] = useState<TicketStatus>(initialData?.status ?? TicketStatus.PENDING);
   const [unitsStake, setUnitsStake] = useState(String(initialData?.unitsStake ?? getDefaultUnitsStake(initialData?.isVip ?? true, initialData?.matches?.length ?? 1)));
   const [analysis, setAnalysis] = useState(initialData?.analysis ?? '');
-  const [matches, setMatches] = useState<Match[]>(initialData?.matches ?? [
-    { teams: '', homeTeam: '', awayTeam: '', league: '', prediction: '', odds: 1.5, time: '20:00' }
+  const [matches, setMatches] = useState<Match[]>(initialData?.matches?.map((match) => ({
+    ...match,
+    eventDate: getMatchEventDate(match, initialData.date),
+    eventTime: getMatchEventTime(match),
+    time: getMatchEventTime(match),
+  })) ?? [
+    { teams: '', homeTeam: '', awayTeam: '', league: '', prediction: '', odds: 1.5, time: '20:00', eventDate: date, eventTime: '20:00' }
   ]);
 
   const addMatch = () => {
-    setMatches([...matches, { teams: '', homeTeam: '', awayTeam: '', league: '', prediction: '', odds: 1.5, time: '20:00' }]);
+    setMatches([...matches, { teams: '', homeTeam: '', awayTeam: '', league: '', prediction: '', odds: 1.5, time: '20:00', eventDate: date, eventTime: '20:00' }]);
   };
 
   const removeMatch = (index: number) => {
@@ -38,6 +56,9 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
     // Automatically updated "teams" string if home/away change
     if (field === 'homeTeam' || field === 'awayTeam') {
        updated[index].teams = `${updated[index].homeTeam} - ${updated[index].awayTeam}`;
+    }
+    if (field === 'eventTime') {
+       updated[index].time = String(value);
     }
     
     setMatches(updated);
@@ -54,6 +75,9 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
       id: match.id || Math.random().toString(36).slice(2, 11),
       teams: match.teams || `${match.homeTeam} - ${match.awayTeam}`,
       odds: normalizeOdds(match.odds),
+      eventDate: getMatchEventDate(match, date),
+      eventTime: getMatchEventTime(match),
+      time: getMatchEventTime(match),
       status: match.status || status,
     }));
 
@@ -65,16 +89,21 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
 
     const totalOdds = calculateTotalOdds(normalizedMatches);
     
+    const normalizedDate = normalizePublishedDate(date);
+    const normalizedPublishedDate = normalizePublishedDate(publishedDate || date);
+    const normalizedPublishedTime = normalizePublishedTime(publishedTime);
+    const publishedAt = buildPublishedAt(normalizedPublishedDate, normalizedPublishedTime);
+
     const newTip: Tip = {
       ...initialData,
       id: initialData?.id || Math.random().toString(36).substr(2, 9),
       source: 'admin',
       type: productType,
       publicationStatus: initialData?.publicationStatus ?? TipPublicationStatus.DRAFT,
-      date,
-      publishedDate: initialData?.publishedDate || date,
-      publishedTime,
-      publishedAt: buildPublishedAt(initialData?.publishedDate || date, publishedTime),
+      date: normalizedDate,
+      publishedDate: normalizedPublishedDate,
+      publishedTime: normalizedPublishedTime,
+      publishedAt,
       isVip,
       status,
       totalOdds,
@@ -83,6 +112,11 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
       analysis,
       matches: normalizedMatches
     };
+
+    if (!isPublishedBeforeFirstMatch(newTip)) {
+      alert('Tiket ne može biti objavljen nakon početka prvog meča.');
+      return;
+    }
 
     onSave(newTip);
   };
@@ -140,7 +174,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
 
            <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-black uppercase text-neutral-500 tracking-widest mb-2">Datum</label>
+                <label className="block text-[10px] font-black uppercase text-neutral-500 tracking-widest mb-2">Datum tiketa</label>
                 <input
                   type="date"
                   value={date}
@@ -161,6 +195,15 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                   <option value={TicketStatus.POSTPONED}>ODLOZENO</option>
                   <option value={TicketStatus.REFUND}>KVOTA 1 / POVRAT</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase text-neutral-500 tracking-widest mb-2">Datum objave tiketa</label>
+                <input
+                  type="date"
+                  value={publishedDate}
+                  onChange={(event) => setPublishedDate(event.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-gold-500/50 transition-all"
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-black uppercase text-neutral-500 tracking-widest mb-2">Vreme objave tiketa</label>
@@ -233,6 +276,27 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                         onChange={(e) => updateMatch(i, 'awayTeam', e.target.value)}
                         className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm outline-none focus:border-gold-500/50"
                       />
+                   </div>
+
+                   <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Datum pocetka meca</label>
+                        <input
+                          type="date"
+                          value={m.eventDate || date}
+                          onChange={(e) => updateMatch(i, 'eventDate', e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Vreme pocetka meca</label>
+                        <input
+                          type="time"
+                          value={m.eventTime || m.time || '20:00'}
+                          onChange={(e) => updateMatch(i, 'eventTime', e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
+                        />
+                      </div>
                    </div>
 
                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
