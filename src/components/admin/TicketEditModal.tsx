@@ -156,7 +156,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
       time: match.time || 'FT',
       result: match.result?.trim(),
       analysis: match.analysis?.trim(),
-      status: draft.status,
+      status: match.status || draft.status,
     }));
 
     const invalidMatch = matches.find((match) => !match.homeTeam || !match.awayTeam || !match.prediction);
@@ -260,15 +260,36 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   <input value={match.result || ''} onChange={(event) => updateMatch(index, { result: event.target.value })} className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" placeholder="Rezultat npr. 2:1" />
                 </div>
 
-                <div className="grid md:grid-cols-[140px_140px_1fr] gap-3">
-                  <select value={match.prediction} onChange={(event) => updateMatch(index, { prediction: event.target.value })} className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50">
-                    {['1', 'X', '2', '1X', 'X2', 'GG', '3+'].map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
+                <div className="grid md:grid-cols-[1fr_120px_150px] gap-3">
+                  <label className="block">
+                    <span className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Igra / tip</span>
+                    <input
+                      list={`ticket-edit-predictions-${index}`}
+                      value={match.prediction}
+                      onChange={(event) => updateMatch(index, { prediction: event.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                      placeholder="npr. 7+, 1. poluvreme GG, X2..."
+                    />
+                    <datalist id={`ticket-edit-predictions-${index}`}>
+                      {['1', 'X', '2', '1X', 'X2', 'GG', '3+', '7+', 'Over 2.5', 'Under 2.5', '1. poluvreme GG', '2. poluvreme GG', '1+ prvo', '2+ drugo', 'tim daje gol'].map((option) => (
+                        <option key={option} value={option} />
+                      ))}
+                    </datalist>
+                  </label>
                   <input type="number" step="0.01" value={match.odds || ''} onChange={(event) => updateMatch(index, { odds: Number(event.target.value) })} className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" placeholder="Kvota" />
-                  <input value={match.analysis || ''} onChange={(event) => updateMatch(index, { analysis: event.target.value })} className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" placeholder="Komentar / analiza para" />
+                  <select
+                    value={match.status || draft.status}
+                    onChange={(event) => updateMatch(index, { status: event.target.value as TicketStatus })}
+                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
+                  >
+                    <option value={TicketStatus.PENDING}>PENDING</option>
+                    <option value={TicketStatus.WON}>WIN</option>
+                    <option value={TicketStatus.LOST}>LOSE</option>
+                    <option value={TicketStatus.REFUND}>VOID</option>
+                    <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
+                  </select>
                 </div>
+                <input value={match.analysis || ''} onChange={(event) => updateMatch(index, { analysis: event.target.value })} className="mt-3 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50" placeholder="Komentar / analiza para" />
               </div>
             ))}
 

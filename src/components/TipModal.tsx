@@ -54,6 +54,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
       id: match.id || Math.random().toString(36).slice(2, 11),
       teams: match.teams || `${match.homeTeam} - ${match.awayTeam}`,
       odds: normalizeOdds(match.odds),
+      status: match.status || status,
     }));
 
     const normalizedUnitsStake = Number(unitsStake);
@@ -234,23 +235,25 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                       />
                    </div>
 
-                   <div className="grid grid-cols-3 gap-4">
+                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                       <input 
                         placeholder="Liga"
                         value={m.league}
                         onChange={(e) => updateMatch(i, 'league', e.target.value)}
                         className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
                       />
-                      <select
+                      <input
+                        list={`tip-modal-predictions-${i}`}
                         value={m.prediction}
                         onChange={(e) => updateMatch(i, 'prediction', e.target.value)}
                         className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
-                      >
-                        <option value="">Tip igre</option>
-                        {['GG', '3+', '1', 'X', '2', '1X', 'X2'].map((option) => (
-                          <option key={option} value={option}>{option}</option>
+                        placeholder="Tip igre"
+                      />
+                      <datalist id={`tip-modal-predictions-${i}`}>
+                        {['GG', '3+', '7+', '1', 'X', '2', '1X', 'X2', '1. poluvreme GG', '2. poluvreme GG', '1+ prvo', '2+ drugo', 'tim daje gol'].map((option) => (
+                          <option key={option} value={option} />
                         ))}
-                      </select>
+                      </datalist>
                       <input 
                         type="number"
                         step="0.01"
@@ -259,6 +262,23 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                         onChange={(e) => updateMatch(i, 'odds', normalizeOdds(e.target.value))}
                         className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
                       />
+                      <input
+                        placeholder="Rezultat"
+                        value={m.result || ''}
+                        onChange={(e) => updateMatch(i, 'result', e.target.value)}
+                        className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
+                      />
+                      <select
+                        value={m.status || status}
+                        onChange={(e) => updateMatch(i, 'status', e.target.value as TicketStatus)}
+                        className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs outline-none focus:border-gold-500/50"
+                      >
+                        <option value={TicketStatus.PENDING}>PENDING</option>
+                        <option value={TicketStatus.WON}>WIN</option>
+                        <option value={TicketStatus.LOST}>LOSE</option>
+                        <option value={TicketStatus.REFUND}>VOID</option>
+                        <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
+                      </select>
                    </div>
                 </div>
               ))}

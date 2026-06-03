@@ -22,7 +22,7 @@ import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyP
 import { isFinishedDailyAnalysisStatus, isVisibleInAdminActiveDailyList } from '../../utils/dailyLifecycle';
 import { formatLeagueName } from '../../utils/leagueMapper';
 
-const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+'];
+const tipOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '3+', '7+', 'Over 2.5', 'Under 2.5', '1. poluvreme GG', '2. poluvreme GG', '1+ prvo', '2+ drugo', 'tim daje gol'];
 const dailyPredictionOptions = ['1', 'X', '2', '1X', 'X2', 'GG', '2+', '3+', 'Over 1.5', 'Over 2.5', 'Over poeni', 'Handicap favorit'];
 
 type TicketBuilderItem = {
@@ -30,6 +30,7 @@ type TicketBuilderItem = {
   prediction: string;
   odds: string;
   analysis: string;
+  status: TicketStatus;
 };
 
 type TicketAccessType = 'FREE' | 'VIP';
@@ -420,6 +421,7 @@ export default function AdminDashboard() {
           prediction,
           odds: getDefaultOddsForPrediction(prediction, match).toFixed(2),
           analysis: '',
+          status: ticketStatus,
         },
       ];
       const currentDefaultUnits = getDefaultUnitsStake(ticketAccessType === 'VIP', current.length);
@@ -446,7 +448,6 @@ export default function AdminDashboard() {
         return {
           ...item,
           prediction,
-          odds: getDefaultOddsForPrediction(prediction, item.match).toFixed(2),
         };
       })
     );
@@ -508,7 +509,7 @@ export default function AdminDashboard() {
         odds: Number(odds.toFixed(2)),
         time: 'FT',
         result: `${item.match.homeScore}:${item.match.awayScore}`,
-        status: ticketStatus,
+        status: item.status || ticketStatus,
         analysis: item.analysis.trim(),
       };
     });
@@ -1137,16 +1138,14 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="grid sm:grid-cols-[120px_120px_1fr_auto] gap-3 flex-1">
-                  <select
+                <div className="grid sm:grid-cols-[150px_120px_140px_1fr_auto] gap-3 flex-1">
+                  <input
+                    list="admin-ticket-builder-tip-options"
                     value={item.prediction}
                     onChange={(e) => handleUpdateTicketPrediction(item.match.id, e.target.value)}
                     className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-gold-500/50"
-                  >
-                    {tipOptions.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
+                    placeholder="Igra / tip"
+                  />
                   <input
                     type="number"
                     step="0.01"
@@ -1155,6 +1154,17 @@ export default function AdminDashboard() {
                     className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-gold-500/50"
                     placeholder="Kvota"
                   />
+                  <select
+                    value={item.status}
+                    onChange={(e) => handleUpdateTicketItem(item.match.id, { status: e.target.value as TicketStatus })}
+                    className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                  >
+                    <option value={TicketStatus.PENDING}>PENDING</option>
+                    <option value={TicketStatus.WON}>WIN</option>
+                    <option value={TicketStatus.LOST}>LOSE</option>
+                    <option value={TicketStatus.REFUND}>VOID</option>
+                    <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
+                  </select>
                   <input
                     value={item.analysis}
                     onChange={(e) => handleUpdateTicketItem(item.match.id, { analysis: e.target.value })}
@@ -1286,15 +1296,13 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-2 gap-3">
                 <label>
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
-                  <select
+                  <input
+                    list="admin-ticket-builder-tip-options"
                     value={item.prediction}
                     onChange={(e) => handleUpdateTicketPrediction(item.match.id, e.target.value)}
                     className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-gold-500/50"
-                  >
-                    {tipOptions.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
+                    placeholder="Igra / tip"
+                  />
                 </label>
                 <label>
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Kvota</span>
@@ -1306,6 +1314,20 @@ export default function AdminDashboard() {
                     className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-gold-500/50"
                     placeholder="Kvota"
                   />
+                </label>
+                <label>
+                  <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Status</span>
+                  <select
+                    value={item.status}
+                    onChange={(e) => handleUpdateTicketItem(item.match.id, { status: e.target.value as TicketStatus })}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none focus:border-gold-500/50"
+                  >
+                    <option value={TicketStatus.PENDING}>PENDING</option>
+                    <option value={TicketStatus.WON}>WIN</option>
+                    <option value={TicketStatus.LOST}>LOSE</option>
+                    <option value={TicketStatus.REFUND}>VOID</option>
+                    <option value={TicketStatus.POSTPONED}>ODLOŽENO</option>
+                  </select>
                 </label>
                 <label className="col-span-2">
                   <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Komentar</span>
@@ -1414,6 +1436,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.06),transparent_34%),#0a0a0a] flex flex-col md:flex-row">
+      <datalist id="admin-ticket-builder-tip-options">
+        {tipOptions.map((option) => <option key={option} value={option} />)}
+      </datalist>
       {/* Sidebar */}
       <aside className={`
         fixed md:relative z-50 w-64 h-screen bg-black/90 backdrop-blur-xl border-r border-white/10 transition-transform duration-300
@@ -1814,22 +1839,18 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="grid md:grid-cols-6 gap-3 mb-4">
-                          <select
+                          <input
+                            list="admin-ticket-builder-tip-options"
                             value={resultTipForm.prediction}
                             onChange={(e) => {
-                              const prediction = e.target.value;
                               setResultTipForm({
                                 ...resultTipForm,
-                                prediction,
-                                odds: getDefaultOddsForPrediction(prediction, resultTipMatch).toFixed(2),
+                                prediction: e.target.value,
                               });
                             }}
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
-                          >
-                            {tipOptions.map((option) => (
-                              <option key={option} value={option}>{option}</option>
-                            ))}
-                          </select>
+                            placeholder="Igra / tip"
+                          />
                           <input
                             type="number"
                             step="0.01"
@@ -2117,15 +2138,13 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="grid md:grid-cols-5 gap-3 mb-4">
-                          <select
+                          <input
+                            list="admin-ticket-builder-tip-options"
                             value={resultTipForm.prediction}
                             onChange={(e) => setResultTipForm({ ...resultTipForm, prediction: e.target.value })}
                             className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
-                          >
-                            {tipOptions.map((option) => (
-                              <option key={option} value={option}>{option}</option>
-                            ))}
-                          </select>
+                            placeholder="Igra / tip"
+                          />
                           <input
                             type="number"
                             step="0.01"
