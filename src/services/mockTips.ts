@@ -403,9 +403,27 @@ const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
     const snapshotTips = await readPublicHistorySnapshot();
     if (snapshotTips.length) {
-      return sortTicketsByDate(snapshotTips
+      const normalizedSnapshotTips = snapshotTips
         .map((tip) => mapTicketForPublic(normalizeTip(tip)))
-        .filter((tip) => isFinishedForStats(tip.status)));
+        .filter((tip) => isFinishedForStats(tip.status));
+
+      try {
+        const documents = await readPublicCollectionInPages(getPublicStatsTicketsCollection);
+        const firestoreTips = documents
+          .map((ticketDoc) => mapTicketForPublic(normalizeTip({
+            ...ticketDoc.data(),
+            id: ticketDoc.id,
+          } as Tip)))
+          .filter((tip) => isFinishedForStats(tip.status));
+
+        if (firestoreTips.length) {
+          return mergeTips(normalizedSnapshotTips, firestoreTips);
+        }
+      } catch {
+        // Snapshot keeps public history available if Firestore public reads are temporarily unavailable.
+      }
+
+      return sortTicketsByDate(normalizedSnapshotTips);
     }
 
     try {
@@ -593,7 +611,17 @@ export const mockTipsService = {
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
     const normalized = normalizeTip(updatedTip);
-    await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized), { merge: true });
+    const [privateSnapshot, publicSnapshot, publicStatsSnapshot] = await Promise.all([
+      getDoc(getTicketDoc(normalized.id)),
+      getDoc(getPublicTicketDoc(normalized.id)),
+      getDoc(getPublicStatsTicketDoc(normalized.id)),
+    ]);
+
+    if (!privateSnapshot.exists() && !publicSnapshot.exists() && !publicStatsSnapshot.exists()) {
+      throw new Error(`Tiket ${normalized.id} ne postoji u bazi. Update je prekinut da se ne bi kreirao duplikat.`);
+    }
+
+    await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
     await syncPublicTicket(normalized);
   },
 
@@ -615,7 +643,7 @@ export const mockTipsService = {
         publicationStatus: TipPublicationStatus.PUBLISHED,
       } as Tip;
       const normalized = normalizeTip(existingTip);
-      await setDoc(getTicketDoc(id), removeUndefined(normalized), { merge: true });
+      await setDoc(getTicketDoc(id), removeUndefined(normalized));
       await syncPublicTicket(normalized);
     }
   },
