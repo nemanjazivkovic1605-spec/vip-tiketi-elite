@@ -8,12 +8,30 @@ import { useAuth } from '../hooks/useAuth';
 import DataLoadFailure from '../components/utils/DataLoadFailure';
 import { withTimeout } from '../utils/async';
 import { formatLeagueName } from '../utils/leagueMapper';
+import { calculateStats } from '../utils/ticketStats';
 const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
 
 const formatPercent = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
 const formatRsd = (value = 0) => `${value >= 0 ? '+' : ''}${value.toLocaleString('sr-RS')} RSD`;
 type StatsFilter = 'all' | TicketProductType;
+type TicketFormat = 'singl' | 'dubl' | 'tripl' | 'combo';
+
+const getTicketFormat = (tip: Tip): TicketFormat => {
+  const matchCount = tip.matches?.length || 0;
+  if (matchCount === 1) return 'singl';
+  if (matchCount === 2) return 'dubl';
+  if (matchCount === 3) return 'tripl';
+  return 'combo';
+};
+
+const getFormatStats = (stats: GlobalStats | null) => {
+  const tickets = stats?.monthlyBreakdown.flatMap((month) => month.tickets) || [];
+  return (['singl', 'dubl', 'tripl', 'combo'] as const).map((format) => ({
+    format,
+    stats: calculateStats(tickets.filter((tip) => getTicketFormat(tip) === format)),
+  }));
+};
 
 const statusMeta = (status: TicketStatus) => {
   if (status === TicketStatus.WON) return { label: '✓ POGOĐENO', className: 'text-green-300 bg-green-500/10 border-green-500/20' };
@@ -50,7 +68,7 @@ export default function Stats() {
         withTimeout(mockTipsService.getPublicStats(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
         withTimeout(mockTipsService.getPublicStats('elite_ticket'), 'ELITE TIKET statistika se učitava predugo.'),
         withTimeout(mockTipsService.getPublicStats('safe_pick'), 'SAFE PICK statistika se učitava predugo.'),
-        withTimeout(mockTipsService.getPublicStats('vip_monthly'), 'VIP MESECNI PREDLOZI statistika se ucitava predugo.'),
+        withTimeout(mockTipsService.getPublicStats('vip_monthly'), 'VIP MESECNI TIPOVI statistika se ucitava predugo.'),
       ]);
 
       setStats(nextStats);
@@ -107,6 +125,8 @@ export default function Stats() {
 
     return { elite, safe, monthly };
   }, [comparisonStats]);
+  const eliteFormatStats = useMemo(() => getFormatStats(comparisonStats.elite), [comparisonStats.elite]);
+  const safeFormatStats = useMemo(() => getFormatStats(comparisonStats.safe), [comparisonStats.safe]);
 
   const monthOptions = stats?.monthlyBreakdown || [];
 
@@ -157,7 +177,7 @@ export default function Stats() {
                     : 'border-white/10 bg-white/5 text-neutral-300 hover:border-gold-500/30 hover:text-gold-300'
             }`}
           >
-            {option === 'all' ? 'Svi' : option === 'elite_ticket' ? 'ELITE TIKET' : option === 'safe_pick' ? 'SAFE PICK' : 'VIP MESECNI PREDLOZI'}
+            {option === 'all' ? 'Svi' : option === 'elite_ticket' ? 'ELITE TIKET' : option === 'safe_pick' ? 'SAFE PICK' : 'VIP MESECNI TIPOVI'}
           </button>
         ))}
       </div>
@@ -237,7 +257,7 @@ export default function Stats() {
           </div>
 
           <div className="glass rounded-[2rem] border border-purple-400/20 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent p-5 md:p-6">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300">VIP MESECNI PREDLOZI statistika</p>
+            <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300">VIP MESECNI TIPOVI statistika</p>
             <h3 className="mt-2 text-xl md:text-2xl font-display font-black text-neutral-100">Dnevni VIP predlozi</h3>
             <p className="mt-3 text-sm text-neutral-400">Odvojeno racunanje za tikete koji dolaze iz dnevnih VIP predloga i zavrsenih analiza.</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
@@ -259,6 +279,59 @@ export default function Stats() {
             </div>
           </div>
         </div>
+      )}
+
+      {productOverview && (
+        <section className="mb-12">
+          <div className="mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-gold-400">Format tiketa</p>
+            <h2 className="mt-1 text-xl font-bold md:text-2xl">ELITE TIKET i SAFE PICK po formatu</h2>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {[
+              { title: 'ELITE TIKET', accent: 'text-gold-300', border: 'border-gold-500/20', rows: eliteFormatStats },
+              { title: 'SAFE PICK', accent: 'text-blue-300', border: 'border-blue-400/20', rows: safeFormatStats },
+            ].map((group) => (
+              <div key={group.title} className={`glass rounded-[1.5rem] border ${group.border} p-4 md:p-5`}>
+                <h3 className={`mb-4 text-sm font-black uppercase tracking-[0.25em] ${group.accent}`}>{group.title}</h3>
+                <div className="grid gap-2">
+                  {group.rows.map(({ format, stats: formatStats }) => (
+                    <article key={`${group.title}-${format}`} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <span className="font-display text-base font-black uppercase text-neutral-100">{format}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                          {formatStats.winCount}/{formatStats.completedCount} pogodjeno
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-[11px] text-neutral-300 sm:grid-cols-5">
+                        <div>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-neutral-500">Tiketa</span>
+                          {formatStats.completedCount}
+                        </div>
+                        <div>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-neutral-500">Prolaznost</span>
+                          {formatStats.hitRate}%
+                        </div>
+                        <div>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-neutral-500">Profit</span>
+                          {formatUnits(formatStats.unitsProfit)}
+                        </div>
+                        <div>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-neutral-500">ROI/Yield</span>
+                          {formatPercent(formatStats.yield)}
+                        </div>
+                        <div>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-neutral-500">Avg kvota</span>
+                          {formatStats.averageOdds.toFixed(2)}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="mb-5">

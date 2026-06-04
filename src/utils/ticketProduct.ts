@@ -3,13 +3,13 @@ import { type Tip, type TicketProductType } from '../types';
 export const TICKET_PRODUCT_LABELS: Record<TicketProductType, string> = {
   elite_ticket: 'ELITE TIKET',
   safe_pick: 'SAFE PICK',
-  vip_monthly: 'VIP MESECNI PREDLOZI',
+  vip_monthly: 'VIP MESECNI TIPOVI',
 };
 
 export const TICKET_PRODUCT_DESCRIPTIONS: Record<TicketProductType, string> = {
   elite_ticket: 'Premium tiket sa vecom kvotom i ciljem veceg profita.',
   safe_pick: 'Stabilniji pick sa fokusom na vecu prolaznost.',
-  vip_monthly: 'Dnevni i mesecni VIP predlozi sa odvojenom statistikom.',
+  vip_monthly: 'Dnevni i mesecni VIP tipovi sa odvojenom statistikom.',
 };
 
 export const getTicketProductType = (tip: Pick<Tip, 'type' | 'id' | 'isVip' | 'ticketType' | 'matches'>): TicketProductType => {
