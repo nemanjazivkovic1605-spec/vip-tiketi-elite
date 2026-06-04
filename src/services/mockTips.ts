@@ -38,7 +38,7 @@ import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache'
 import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
 import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
 import { formatLeagueName } from '../utils/leagueMapper';
-import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot } from './publicHistorySnapshot';
+import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot, refreshPublicHistorySnapshot } from './publicHistorySnapshot';
 import { getTicketProductType } from '../utils/ticketProduct';
 
 const TICKETS_COLLECTION = 'tickets';
@@ -414,13 +414,16 @@ const readPublishedSafeTips = async (): Promise<Tip[]> => {
 
 const onlyValidStatsTips = (tips: Tip[]) => tips.filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
 
+const normalizePublicStatsTips = (tips: Tip[]) =>
+  sortTicketsByDate(tips
+    .map((tip) => mapTicketForPublic(normalizeTip(tip)))
+    .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip)));
+
 const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
     const snapshotTips = await readPublicHistorySnapshot();
     if (snapshotTips.length) {
-      return sortTicketsByDate(snapshotTips
-        .map((tip) => mapTicketForPublic(normalizeTip(tip)))
-        .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip)));
+      return normalizePublicStatsTips(snapshotTips);
     }
 
     let finishedDailyTips: Tip[] = [];
@@ -521,6 +524,15 @@ export const mockTipsService = {
   },
 
   getVisibleHistoryTips: async (_access: { canAccessVip: boolean }): Promise<Tip[]> => {
+    return readPublicStatsTips();
+  },
+
+  refreshVisibleHistoryTips: async (): Promise<Tip[]> => {
+    const refreshed = await refreshPublicHistorySnapshot();
+    if (refreshed.tips.length) {
+      invalidateCachedQueries(PUBLIC_STATS_CACHE_KEY);
+      return normalizePublicStatsTips(refreshed.tips);
+    }
     return readPublicStatsTips();
   },
 

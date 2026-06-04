@@ -6,8 +6,11 @@ import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' 
 import { type Tip } from '../src/types';
 import { isFinishedForStats, sortTicketsByDate } from '../src/utils/tickets';
 import { mapTicketForPublic } from '../src/services/tickets/ticketMappers';
+import { calculateStats } from '../src/utils/ticketStats';
+import { getTicketProductType } from '../src/utils/ticketProduct';
 
 const SNAPSHOT_PATH = 'public/public-history-snapshot.json';
+const STATS_SUMMARY_PATH = 'public/public-stats-summary.json';
 const stripQuotes = (value?: string) => (value || '').trim().replace(/^["']|["']$/g, '');
 const getEnv = (name: string) => stripQuotes(process.env[name]);
 const FIRESTORE_DATABASE_ID = getEnv('FIRESTORE_DATABASE_ID')
@@ -55,8 +58,30 @@ const main = async () => {
     source: 'Firestore publicStatsTickets manual export',
     tips,
   })}\n`);
+
+  const compactStats = (stats: ReturnType<typeof calculateStats>) => ({
+    ...stats,
+    monthlyBreakdown: stats.monthlyBreakdown.map((month) => ({
+      ...month,
+      tickets: [],
+    })),
+  });
+  const generatedAt = new Date().toISOString();
+  const categories = ['elite_ticket', 'safe_pick', 'vip_monthly'] as const;
+  const summary = {
+    generatedAt,
+    source: 'Firestore publicStatsTickets precomputed summary',
+    all: compactStats(calculateStats(tips)),
+    categories: Object.fromEntries(categories.map((category) => [
+      category,
+      compactStats(calculateStats(tips.filter((tip) => getTicketProductType(tip) === category))),
+    ])),
+  };
+  fs.writeFileSync(STATS_SUMMARY_PATH, `${JSON.stringify(summary)}\n`);
+
   console.log(JSON.stringify({
     snapshotPath: SNAPSHOT_PATH,
+    statsSummaryPath: STATS_SUMMARY_PATH,
     tickets: tips.length,
     note: 'Commit and deploy this snapshot so public History/Stats/Home no longer depend on Firestore reads.',
   }, null, 2));

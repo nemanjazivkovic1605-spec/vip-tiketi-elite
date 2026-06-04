@@ -94,6 +94,7 @@ const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status ===
 const formatPublishedAt = formatTicketPublishedAt;
 const formatFirstMatchAt = formatFirstMatchStartAt;
 const AdminTicketEditor = lazy(() => import('../components/admin/AdminTicketEditor'));
+const HISTORY_PAGE_SIZE = 50;
 
 export default function Tickets() {
   const { user, isVerified, isAdmin, canAccessFree, canAccessVip } = useAuth();
@@ -106,11 +107,16 @@ export default function Tickets() {
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
   const [accessMessage, setAccessMessage] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
 
   useEffect(() => {
     void fetchData(true);
     return mockTipsService.subscribePublicStats(() => void fetchData());
   }, [canAccessFree, canAccessVip]);
+
+  useEffect(() => {
+    setVisibleCount(HISTORY_PAGE_SIZE);
+  }, [filter, typeFilter]);
 
   const fetchData = async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -121,6 +127,15 @@ export default function Tickets() {
         'Istorija se učitava predugo. Pokušajte ponovo.',
       );
       setTips(allTips);
+      if (showLoading) {
+        void mockTipsService.refreshVisibleHistoryTips()
+          .then((freshTips) => {
+            if (freshTips.length && freshTips.length !== allTips.length) {
+              setTips(freshTips);
+            }
+          })
+          .catch((error) => console.warn('History background refresh failed:', error));
+      }
     } catch (error) {
       console.error('History tickets load failed:', error);
       setLoadError(error instanceof Error ? error.message : 'Istorija trenutno nije dostupna.');
@@ -134,6 +149,8 @@ export default function Tickets() {
     const matchesType = typeFilter === 'all' || getTicketProductType(tip) === typeFilter;
     return matchesStatus && matchesType;
   }), [tips, filter, typeFilter]);
+  const visibleTips = useMemo(() => filteredTips.slice(0, visibleCount), [filteredTips, visibleCount]);
+  const hasMoreTips = visibleCount < filteredTips.length;
 
   const showVipPopup = (message: string) => {
     setAccessMessage(message);
@@ -360,7 +377,7 @@ export default function Tickets() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 md:gap-4">
           <AnimatePresence mode="popLayout">
-            {filteredTips.map((tip) => {
+            {visibleTips.map((tip) => {
               const visuals = getTicketVisuals(tip.status);
               const profit = calculateTicketUnitsProfit(tip);
               const productTone = getTicketProductTone(tip);
@@ -448,6 +465,18 @@ export default function Tickets() {
               );
             })}
           </AnimatePresence>
+        </div>
+      )}
+
+      {hasMoreTips && !loading && !loadError && (
+        <div className="mt-8 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((current) => current + HISTORY_PAGE_SIZE)}
+            className="rounded-full border border-gold-500/30 bg-gold-500/10 px-6 py-3 text-xs font-black uppercase tracking-widest text-gold-200 transition hover:border-gold-500/60 hover:bg-gold-500/15"
+          >
+            Ucitaj jos {Math.min(HISTORY_PAGE_SIZE, filteredTips.length - visibleCount)} tiketa
+          </button>
         </div>
       )}
 
