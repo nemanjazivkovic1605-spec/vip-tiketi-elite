@@ -130,7 +130,16 @@ export default function Tickets() {
       if (showLoading) {
         void mockTipsService.refreshVisibleHistoryTips()
           .then((freshTips) => {
-            if (freshTips.length && freshTips.length !== allTips.length) {
+            if (
+              freshTips.length
+              && (
+                freshTips.length !== allTips.length
+                || freshTips[0]?.id !== allTips[0]?.id
+                || freshTips[0]?.publishedAt !== allTips[0]?.publishedAt
+                || freshTips[0]?.ticketCode !== allTips[0]?.ticketCode
+                || freshTips[0]?.status !== allTips[0]?.status
+              )
+            ) {
               setTips(freshTips);
             }
           })

@@ -1,8 +1,8 @@
 import { type Tip } from '../types';
 
 const PUBLIC_HISTORY_SNAPSHOT_PATH = '/public-history-snapshot.json';
-const PUBLIC_HISTORY_CACHE_KEY = 'eliteVipTips:publicHistory:v1';
-const PUBLIC_HISTORY_META_KEY = 'eliteVipTips:publicHistoryMeta:v1';
+const PUBLIC_HISTORY_CACHE_KEY = 'eliteVipTips:publicHistory:v2';
+const PUBLIC_HISTORY_META_KEY = 'eliteVipTips:publicHistoryMeta:v2';
 
 type PublicHistorySnapshot = {
   generatedAt: string;
