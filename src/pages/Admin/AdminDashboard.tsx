@@ -18,7 +18,7 @@ import TicketEditModal from '../../components/admin/TicketEditModal';
 import AdminOverview from '../../components/admin/AdminOverview';
 import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, getStatusLabel, getTicketKind, isPublishedBeforeFirstMatch, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 import { evaluateImportedMatchPrediction } from '../../utils/predictionResults';
-import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyPublishedAt, getDailyPublicationInputValue, getKickoffTime } from '../../utils/dailyPublication';
+import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyPublishedAt, getDailyPublicationInputValue, getDailyPublicationMeta, getKickoffTime } from '../../utils/dailyPublication';
 import { isFinishedDailyAnalysisStatus, isVisibleInAdminActiveDailyList } from '../../utils/dailyLifecycle';
 import { formatLeagueName } from '../../utils/leagueMapper';
 
@@ -38,6 +38,28 @@ type BuilderTicketType = 'VIP Dubl' | 'VIP Combo';
 type UserStatusFilter = 'all' | 'pending' | 'approved' | 'expired' | 'blocked' | 'free' | 'silver' | 'gold' | 'elite';
 type TipPublicationFilter = 'all' | 'draft' | 'published';
 type DailyLifecycleFilter = 'active' | 'finished';
+
+const ADMIN_FINISHED_DAILY_LIMIT = 10;
+const ADMIN_FINISHED_DAILY_LOOKBACK_DAYS = 2;
+const DAILY_ADMIN_TIMEZONE = 'Europe/Belgrade';
+
+const toDailyAdminDateKey = (date: Date) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: DAILY_ADMIN_TIMEZONE }).format(date);
+
+const getRecentFinishedDailyCutoff = () => {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - ADMIN_FINISHED_DAILY_LOOKBACK_DAYS);
+  return toDailyAdminDateKey(cutoff);
+};
+
+const getAdminDailyDateKey = (analysis: Pick<DailyAnalysisItem, 'date' | 'publishedDate' | 'publishedTime' | 'publishTime' | 'publishedAt' | 'createdAt'>) =>
+  (analysis.date || getDailyPublicationMeta(analysis).publishedDate || '').slice(0, 10);
+
+const getAdminDailySortKey = (analysis: DailyAnalysisItem) => {
+  const dateKey = getAdminDailyDateKey(analysis);
+  const time = getKickoffTime(analysis) || getDailyPublicationMeta(analysis).publishedTime || '00:00';
+  return `${dateKey}T${time}`;
+};
 
 type HistoricalPick = {
   match: ImportedMatch;
@@ -161,7 +183,17 @@ export default function AdminDashboard() {
   }, [availableMatches, matchDateFilter, matchLeagueFilter, matchTeamFilter]);
 
   const activeAdminTips = useMemo(() => dailyAnalyses.filter((analysis) => isVisibleInAdminActiveDailyList(analysis)), [dailyAnalyses]);
-  const finishedAdminTips = useMemo(() => dailyAnalyses.filter((analysis) => isFinishedDailyAnalysisStatus(analysis.status)), [dailyAnalyses]);
+  const finishedAdminTips = useMemo(() => {
+    const cutoffDate = getRecentFinishedDailyCutoff();
+
+    return dailyAnalyses
+      .filter((analysis) => {
+        const dateKey = getAdminDailyDateKey(analysis);
+        return isFinishedDailyAnalysisStatus(analysis.status) && dateKey >= cutoffDate;
+      })
+      .sort((a, b) => getAdminDailySortKey(b).localeCompare(getAdminDailySortKey(a)))
+      .slice(0, ADMIN_FINISHED_DAILY_LIMIT);
+  }, [dailyAnalyses]);
 
   const filteredDailyAnalyses = useMemo(() => (
     dailyLifecycleFilter === 'active' ? activeAdminTips : finishedAdminTips
@@ -2651,7 +2683,7 @@ export default function AdminDashboard() {
                       ))}
                       {filteredDailyAnalyses.length === 0 && (
                         <div className="glass rounded-[2rem] border-white/5 p-10 text-center text-neutral-500 font-bold">
-                          {dailyLifecycleFilter === 'active' ? 'Nema aktivnih dnevnih tipova.' : 'Nema završenih dnevnih tipova.'}
+                          {dailyLifecycleFilter === 'active' ? 'Nema aktivnih dnevnih tipova.' : 'Nema svežih završenih dnevnih tipova.'}
                         </div>
                       )}
                     </div>
