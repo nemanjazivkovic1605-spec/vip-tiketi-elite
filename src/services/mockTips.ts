@@ -419,11 +419,44 @@ const normalizePublicStatsTips = (tips: Tip[]) =>
     .map((tip) => mapTicketForPublic(normalizeTip(tip)))
     .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip)));
 
+const mapPublicStatsDocs = (documents: QueryDocumentSnapshot<DocumentData>[]) =>
+  sortTicketsByDate(documents
+    .map((ticketDoc) => mapTicketForPublic(normalizeTip({
+      ...ticketDoc.data(),
+      id: ticketDoc.id,
+    } as Tip)))
+    .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip)));
+
+const readRecentPublicStatsTips = async (): Promise<Tip[]> => {
+  const [recentByDateSnapshot, recentByUpdateSnapshot] = await Promise.allSettled([
+    getDocs(query(
+      getPublicStatsTicketsCollection(),
+      orderBy('date', 'desc'),
+      queryLimit(PUBLIC_READ_PAGE_SIZE),
+    )),
+    getDocs(query(
+      getPublicStatsTicketsCollection(),
+      orderBy('updatedAt', 'desc'),
+      queryLimit(PUBLIC_READ_PAGE_SIZE),
+    )),
+  ]);
+
+  return mergeTips(
+    recentByDateSnapshot.status === 'fulfilled' ? mapPublicStatsDocs(recentByDateSnapshot.value.docs) : [],
+    recentByUpdateSnapshot.status === 'fulfilled' ? mapPublicStatsDocs(recentByUpdateSnapshot.value.docs) : [],
+  );
+};
+
 const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
     const snapshotTips = await readPublicHistorySnapshot();
     if (snapshotTips.length) {
-      return normalizePublicStatsTips(snapshotTips);
+      const normalizedSnapshotTips = normalizePublicStatsTips(snapshotTips);
+      try {
+        return mergeTips(normalizedSnapshotTips, await readRecentPublicStatsTips());
+      } catch {
+        return normalizedSnapshotTips;
+      }
     }
 
     let finishedDailyTips: Tip[] = [];
@@ -629,7 +662,10 @@ export const mockTipsService = {
   },
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
-    const normalized = normalizeTip(updatedTip);
+    const normalized = normalizeTip({
+      ...updatedTip,
+      updatedAt: new Date().toISOString(),
+    });
     const [privateSnapshot, publicSnapshot, publicStatsSnapshot] = await Promise.all([
       getDoc(getTicketDoc(normalized.id)),
       getDoc(getPublicTicketDoc(normalized.id)),

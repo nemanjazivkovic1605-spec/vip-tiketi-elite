@@ -112,6 +112,7 @@ export interface Tip {
   publishedAt?: string;
   ticketCode?: string;
   createdAt?: string;
+  updatedAt?: string;
   locked?: boolean;
   date: string;
   matches: Match[];
