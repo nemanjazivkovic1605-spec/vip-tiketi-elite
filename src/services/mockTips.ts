@@ -416,36 +416,18 @@ const onlyValidStatsTips = (tips: Tip[]) => tips.filter((tip) => isFinishedForSt
 
 const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
+    const snapshotTips = await readPublicHistorySnapshot();
+    if (snapshotTips.length) {
+      return sortTicketsByDate(snapshotTips
+        .map((tip) => mapTicketForPublic(normalizeTip(tip)))
+        .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip)));
+    }
+
     let finishedDailyTips: Tip[] = [];
     try {
       finishedDailyTips = onlyValidStatsTips(await readFinishedDailyAnalysisTips());
     } catch {
       finishedDailyTips = [];
-    }
-
-    const snapshotTips = await readPublicHistorySnapshot();
-    if (snapshotTips.length) {
-      const normalizedSnapshotTips = snapshotTips
-        .map((tip) => mapTicketForPublic(normalizeTip(tip)))
-        .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
-
-      try {
-        const documents = await readPublicCollectionInPages(getPublicStatsTicketsCollection);
-        const firestoreTips = documents
-          .map((ticketDoc) => mapTicketForPublic(normalizeTip({
-            ...ticketDoc.data(),
-            id: ticketDoc.id,
-          } as Tip)))
-          .filter((tip) => isFinishedForStats(tip.status) && hasRealTicketOdds(tip));
-
-        if (firestoreTips.length) {
-          return mergeTips(normalizedSnapshotTips, firestoreTips, finishedDailyTips);
-        }
-      } catch {
-        // Snapshot keeps public history available if Firestore public reads are temporarily unavailable.
-      }
-
-      return sortTicketsByDate(mergeTips(normalizedSnapshotTips, finishedDailyTips));
     }
 
     try {
