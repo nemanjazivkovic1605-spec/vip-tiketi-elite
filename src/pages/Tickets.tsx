@@ -357,7 +357,7 @@ export default function Tickets() {
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">Tip</span>
-          {(['all', 'elite_ticket', 'safe_pick', 'vip_monthly'] as const).map((ticketType) => (
+          {(['all', 'vip_monthly', 'elite_ticket', 'safe_pick'] as const).map((ticketType) => (
             <button
               key={ticketType}
               onClick={() => setTypeFilter(ticketType)}

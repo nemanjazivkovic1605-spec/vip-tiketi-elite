@@ -13,12 +13,12 @@ export const TICKET_PRODUCT_DESCRIPTIONS: Record<TicketProductType, string> = {
 };
 
 export const getTicketProductType = (tip: Pick<Tip, 'type' | 'id' | 'isVip' | 'ticketType' | 'matches'>): TicketProductType => {
-  if (tip.type === 'safe_pick' || tip.type === 'elite_ticket' || tip.type === 'vip_monthly') return tip.type;
-
   const rawTicketType = String(tip.ticketType || '').toLowerCase();
   const rawId = String(tip.id || '').toLowerCase();
 
-  if (rawId.startsWith('daily-')) return 'vip_monthly';
+  if (rawId.startsWith('history-') || rawId.startsWith('daily-')) return 'vip_monthly';
+  if (tip.type === 'safe_pick' || tip.type === 'elite_ticket' || tip.type === 'vip_monthly') return tip.type;
+
   if (rawTicketType.includes('monthly') || rawTicketType.includes('mesec') || rawTicketType.includes('mese') || rawTicketType.includes('dnevni') || rawTicketType.includes('daily')) return 'vip_monthly';
   if (rawTicketType.includes('safe')) return 'safe_pick';
   if (rawTicketType.includes('elite')) return 'elite_ticket';
