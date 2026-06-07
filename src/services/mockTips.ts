@@ -40,6 +40,7 @@ import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVi
 import { formatLeagueName } from '../utils/leagueMapper';
 import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot, refreshPublicHistorySnapshot } from './publicHistorySnapshot';
 import { getTicketProductType } from '../utils/ticketProduct';
+import { getStatsFromSummary } from './publicStatsSummary';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -599,12 +600,18 @@ export const mockTipsService = {
   },
 
   getPublicStats: async (filter: StatsFilter = 'all'): Promise<GlobalStats> => {
+    if (filter === 'all' || filter === 'elite_ticket' || filter === 'safe_pick' || filter === 'vip_monthly') {
+      const summaryStats = await getStatsFromSummary(filter);
+      if (summaryStats) return summaryStats;
+    }
+
     return calculateStats(filterTipsByType(await readPublicStatsTips(), filter));
   },
 
   getPublicHomepageData: async (): Promise<PublicHomepageData> => {
+    const summaryStats = await getStatsFromSummary('all');
     const tips = await readPublicStatsTips();
-    const stats = calculateStats(tips);
+    const stats = summaryStats || calculateStats(tips);
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayDate = formatLocalIsoDate(yesterday);
