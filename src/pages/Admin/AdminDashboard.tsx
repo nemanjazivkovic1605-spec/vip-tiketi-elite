@@ -266,6 +266,7 @@ export default function AdminDashboard() {
   const unreadNotifications = useMemo(() => notifications.filter((notification) => !notification.read), [notifications]);
   const userListRef = useRef(userList);
   const notificationsRef = useRef(notifications);
+  const reviewsRef = useRef(reviews);
 
   useEffect(() => {
     userListRef.current = userList;
@@ -274,6 +275,14 @@ export default function AdminDashboard() {
   useEffect(() => {
     notificationsRef.current = notifications;
   }, [notifications]);
+
+  useEffect(() => {
+    reviewsRef.current = reviews;
+  }, [reviews]);
+
+  const loadReviews = useCallback(async () => {
+    setReviews(await reviewsService.getAllReviews());
+  }, []);
 
   const refreshData = useCallback(async (options: { includeUsers?: boolean; includeNotifications?: boolean } = {}) => {
     const includeUsers = options.includeUsers ?? true;
@@ -284,7 +293,7 @@ export default function AdminDashboard() {
       importedMatchesService.getMatches(),
       mockTipsService.getStats(),
       dailyAnalysesService.getAdminAnalyses(),
-      reviewsService.getAllReviews(),
+      Promise.resolve(reviewsRef.current),
     ]);
 
     const fetchedUsers = includeUsers ? await authService.getUsers() : userListRef.current;
@@ -308,27 +317,29 @@ export default function AdminDashboard() {
         : notification;
     });
 
-    const debugActive = fetchedDailyAnalyses.filter((analysis) => isVisibleInAdminActiveDailyList(analysis));
-    const debugFinished = fetchedDailyAnalyses.filter((analysis) => isFinishedDailyAnalysisStatus(analysis.status));
+    if (import.meta.env.DEV) {
+      const debugActive = fetchedDailyAnalyses.filter((analysis) => isVisibleInAdminActiveDailyList(analysis));
+      const debugFinished = fetchedDailyAnalyses.filter((analysis) => isFinishedDailyAnalysisStatus(analysis.status));
 
-    console.debug('[daily-admin-debug] view split', {
-      firestoreCount: fetchedDailyAnalyses.length,
-      statuses: fetchedDailyAnalyses.map((analysis) => analysis.status),
-      dates: fetchedDailyAnalyses.reduce<Record<string, number>>((acc, analysis) => {
-        acc[analysis.date] = (acc[analysis.date] || 0) + 1;
-        return acc;
-      }, {}),
-      activeCount: debugActive.length,
-      finishedCount: debugFinished.length,
-      activeByDate: debugActive.reduce<Record<string, number>>((acc, analysis) => {
-        acc[analysis.date] = (acc[analysis.date] || 0) + 1;
-        return acc;
-      }, {}),
-      finishedByDate: debugFinished.reduce<Record<string, number>>((acc, analysis) => {
-        acc[analysis.date] = (acc[analysis.date] || 0) + 1;
-        return acc;
-      }, {}),
-    });
+      console.debug('[daily-admin-debug] view split', {
+        firestoreCount: fetchedDailyAnalyses.length,
+        statuses: fetchedDailyAnalyses.map((analysis) => analysis.status),
+        dates: fetchedDailyAnalyses.reduce<Record<string, number>>((acc, analysis) => {
+          acc[analysis.date] = (acc[analysis.date] || 0) + 1;
+          return acc;
+        }, {}),
+        activeCount: debugActive.length,
+        finishedCount: debugFinished.length,
+        activeByDate: debugActive.reduce<Record<string, number>>((acc, analysis) => {
+          acc[analysis.date] = (acc[analysis.date] || 0) + 1;
+          return acc;
+        }, {}),
+        finishedByDate: debugFinished.reduce<Record<string, number>>((acc, analysis) => {
+          acc[analysis.date] = (acc[analysis.date] || 0) + 1;
+          return acc;
+        }, {}),
+      });
+    }
 
     setTips(fetchedTips);
     setAvailableMatches(fetchedMatches);
@@ -360,6 +371,12 @@ export default function AdminDashboard() {
       unsubscribeNotifications();
     };
   }, [refreshData]);
+
+  useEffect(() => {
+    if (activeTab === 'reviews') {
+      void loadReviews();
+    }
+  }, [activeTab, loadReviews]);
 
   const handleCreateTip = async (newTip: Tip) => {
     if (editingTip) {
@@ -918,18 +935,18 @@ export default function AdminDashboard() {
 
   const handleApproveReview = async (reviewId: string) => {
     await reviewsService.approveReview(reviewId);
-    await refreshData({ includeUsers: false, includeNotifications: false });
+    await loadReviews();
   };
 
   const handleRejectReview = async (reviewId: string) => {
     await reviewsService.rejectReview(reviewId);
-    await refreshData({ includeUsers: false, includeNotifications: false });
+    await loadReviews();
   };
 
   const handleDeleteReview = async (reviewId: string) => {
     if (!confirm('Da li želite da obrišete ovu recenziju?')) return;
     await reviewsService.deleteReview(reviewId);
-    await refreshData({ includeUsers: false, includeNotifications: false });
+    await loadReviews();
   };
 
   const handleUpdateUserStatus = async (userId: string, status: MembershipStatus) => {
