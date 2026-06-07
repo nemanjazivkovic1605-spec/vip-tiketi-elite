@@ -9,6 +9,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
   type DocumentData,
   type Timestamp,
 } from 'firebase/firestore';
@@ -27,7 +28,13 @@ const FREE_COLLECTION = 'freeDailyAnalyses';
 const inFlightPulls = new Map<string, AbortController>();
 const DAILY_PUBLIC_CACHE_KEY = 'daily-analyses:public';
 const DAILY_FREE_CACHE_KEY = 'daily-analyses:free';
-const invalidateDailyIndexCache = () => invalidateCachedQueries(DAILY_PUBLIC_CACHE_KEY, DAILY_FREE_CACHE_KEY);
+const dailyIndexCacheKeys = new Set<string>();
+const getDailyIndexCacheKey = (collectionName: string, date: string) =>
+  `${collectionName === PUBLIC_COLLECTION ? DAILY_PUBLIC_CACHE_KEY : DAILY_FREE_CACHE_KEY}:${date}`;
+const invalidateDailyIndexCache = () => {
+  invalidateCachedQueries(DAILY_PUBLIC_CACHE_KEY, DAILY_FREE_CACHE_KEY, ...dailyIndexCacheKeys);
+  dailyIndexCacheKeys.clear();
+};
 
 const dailyAdminDebug = (event: string, details: Record<string, unknown>) => {
   if (import.meta.env.DEV) {
@@ -266,13 +273,19 @@ const readManual = async () => {
   return snapshot.docs.map((analysisDoc) => normalizeManual(analysisDoc.data(), analysisDoc.id));
 };
 
+const readManualForDate = async (date: string) => {
+  const snapshot = await getDocs(query(collection(db, COLLECTION), where('date', '==', date)));
+  return snapshot.docs.map((analysisDoc) => normalizeManual(analysisDoc.data(), analysisDoc.id));
+};
+
 const publicManualForDate = (items: DailyAnalysisItem[], date: string) =>
   sortAnalyses(items.filter((item) => item.date === date && item.enabled && !item.hidden && isVisibleInDailyFeed(item))).slice(0, 5);
 
-const readIndex = async (collectionName: string) => {
-  const cacheKey = collectionName === PUBLIC_COLLECTION ? DAILY_PUBLIC_CACHE_KEY : DAILY_FREE_CACHE_KEY;
+const readIndexForDate = async (collectionName: string, date: string) => {
+  const cacheKey = getDailyIndexCacheKey(collectionName, date);
+  dailyIndexCacheKeys.add(cacheKey);
   return getCachedQuery(cacheKey, async () => {
-    const snapshot = await getDocs(query(collection(db, collectionName)));
+    const snapshot = await getDocs(query(collection(db, collectionName), where('date', '==', date)));
     return snapshot.docs.map((analysisDoc) => {
       const data = analysisDoc.data();
       if (data.locked === true) return data as DailyAnalysisItem;
@@ -489,13 +502,13 @@ export const dailyAnalysesService = {
   getForDate: async (date: string, access: DailyAnalysesAccess): Promise<DailyAnalysisItem[]> => {
     try {
       if (access.isAdmin || access.canAccessVip) {
-        return publicManualForDate(await readManual(), date);
+        return publicManualForDate(await readManualForDate(date), date);
       }
 
-      const lockedVip = publicIndexForDate(await readIndex(PUBLIC_COLLECTION), date);
+      const lockedVip = publicIndexForDate(await readIndexForDate(PUBLIC_COLLECTION, date), date);
       if (!access.canAccessFree) return lockedVip;
 
-      const freeItems = publicIndexForDate(await readIndex(FREE_COLLECTION), date);
+      const freeItems = publicIndexForDate(await readIndexForDate(FREE_COLLECTION, date), date);
       return sortAnalyses([...freeItems, ...lockedVip]).slice(0, 5);
     } catch (error) {
       console.error('Daily analyses public read failed:', error);
