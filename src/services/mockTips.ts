@@ -447,16 +447,20 @@ const readRecentPublicStatsTips = async (): Promise<Tip[]> => {
   );
 };
 
+const mergeSnapshotWithRecentPublicStats = async (snapshotTips: Tip[]) => {
+  const normalizedSnapshotTips = normalizePublicStatsTips(snapshotTips);
+  try {
+    return mergeTips(normalizedSnapshotTips, await readRecentPublicStatsTips());
+  } catch {
+    return normalizedSnapshotTips;
+  }
+};
+
 const readPublicStatsTips = async (): Promise<Tip[]> => {
   return getCachedQuery(PUBLIC_STATS_CACHE_KEY, async () => {
     const snapshotTips = await readPublicHistorySnapshot();
     if (snapshotTips.length) {
-      const normalizedSnapshotTips = normalizePublicStatsTips(snapshotTips);
-      try {
-        return mergeTips(normalizedSnapshotTips, await readRecentPublicStatsTips());
-      } catch {
-        return normalizedSnapshotTips;
-      }
+      return mergeSnapshotWithRecentPublicStats(snapshotTips);
     }
 
     let finishedDailyTips: Tip[] = [];
@@ -564,7 +568,7 @@ export const mockTipsService = {
     const refreshed = await refreshPublicHistorySnapshot();
     if (refreshed.tips.length) {
       invalidateCachedQueries(PUBLIC_STATS_CACHE_KEY);
-      return normalizePublicStatsTips(refreshed.tips);
+      return mergeSnapshotWithRecentPublicStats(refreshed.tips);
     }
     return readPublicStatsTips();
   },
