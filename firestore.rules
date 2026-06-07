@@ -290,6 +290,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // User reviews. Public visitors can only read approved reviews.
+    match /reviews/{reviewId} {
+      allow read: if isAdmin() || resource.data.status == 'approved';
+      allow create: if isSignedIn() &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().rating is number &&
+        incoming().rating >= 1 &&
+        incoming().rating <= 5 &&
+        incoming().name is string &&
+        incoming().name.size() >= 2 &&
+        incoming().name.size() <= 80 &&
+        incoming().text is string &&
+        incoming().text.size() >= 5 &&
+        incoming().text.size() <= 600;
+      allow update, delete: if isAdmin();
+    }
+
     // Settings
     match /settings/{settingId} {
       allow read: if true;

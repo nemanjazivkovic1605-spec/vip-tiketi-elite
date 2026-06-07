@@ -221,6 +221,19 @@ export interface Testimonial {
   rating: number;
 }
 
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+
+export interface Review {
+  id: string;
+  userId: string;
+  name: string;
+  rating: number;
+  text: string;
+  status: ReviewStatus;
+  createdAt: string;
+  approvedAt?: string | null;
+}
+
 export interface AppSettings {
   telegramLink: string;
   whatsappLink: string;

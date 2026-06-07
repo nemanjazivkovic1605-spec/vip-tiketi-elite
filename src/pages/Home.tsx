@@ -10,6 +10,7 @@ import {
   ReceiptText,
   ShieldCheck,
   ShoppingCart,
+  Star,
   Target,
   TrendingUp,
   UserRound,
@@ -30,16 +31,22 @@ import {
 } from '../components/home/HomeLandingComponents';
 import { useAuth } from '../hooks/useAuth';
 import { mockTipsService, type PublicHomepageData } from '../services/mockTips';
+import { reviewsService } from '../services/reviewsService';
 import { getCheckoutPath } from '../lib/paymentProducts';
+import { type Review } from '../types';
 
 const formatUnits = (value = 0) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
 const formatPercent = (value = 0) => `${value.toFixed(1)}%`;
 
 export default function Home() {
   const [homepageData, setHomepageData] = useState<PublicHomepageData | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [heroImageFailed, setHeroImageFailed] = useState(false);
+  const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, text: '' });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState('');
   const { user, isVerified } = useAuth();
   const { hash } = useLocation();
 
@@ -61,6 +68,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    void reviewsService.getApprovedReviews()
+      .then(setReviews)
+      .catch((error) => console.warn('Reviews load failed:', error));
+  }, []);
+
+  useEffect(() => {
     if (!hash) return;
     const animationFrame = requestAnimationFrame(() => {
       document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -73,6 +86,40 @@ export default function Home() {
   const hasPublicStats = Boolean(stats?.completedCount);
   const unlockTarget = user && isVerified ? '/daily-tips' : '/register';
   const hasVerifiedAccount = Boolean(user && isVerified);
+  const canSubmitReview = Boolean(user);
+
+  const handleReviewSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!user) {
+      setReviewMessage('Morate biti prijavljeni da biste poslali recenziju.');
+      return;
+    }
+
+    const name = reviewForm.name.trim();
+    const text = reviewForm.text.trim();
+    if (!name || !text) {
+      setReviewMessage('Unesite ime i tekst recenzije.');
+      return;
+    }
+
+    setReviewSubmitting(true);
+    setReviewMessage('');
+    try {
+      await reviewsService.submitReview({
+        userId: user.uid || user.id,
+        name,
+        rating: reviewForm.rating,
+        text,
+      });
+      setReviewForm({ name: '', rating: 5, text: '' });
+      setReviewMessage('Hvala! Recenzija je poslata i čeka odobrenje administratora.');
+    } catch (error) {
+      console.error('Review submit failed:', error);
+      setReviewMessage('Slanje recenzije trenutno nije uspelo. Pokušajte ponovo.');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
   const pricingCards: PricingCardProps[] = [
     {
       name: 'FREE',
@@ -292,6 +339,84 @@ export default function Home() {
           ) : (
             <RecentTicketsTable tips={homepageData?.recentTips ?? []} />
           )}
+        </div>
+      </section>
+
+      <section className="px-5 pb-8 md:px-6">
+        <div className="mx-auto max-w-7xl rounded-xl border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_34%),rgba(0,0,0,0.58)] p-4 md:p-6">
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.32em] text-gold-400">Utisci korisnika</p>
+              <h2 className="mt-1 font-display text-2xl font-black uppercase text-white md:text-3xl">Recenzije zajednice</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">
+                Odobrene recenzije korisnika koji prate Elite Tips pristup, javnu istoriju i disciplinovanu statistiku.
+              </p>
+            </div>
+            {!canSubmitReview && (
+              <Link to="/login" className="inline-flex items-center justify-center rounded-lg border border-gold-500/25 bg-gold-500/10 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gold-300 transition hover:bg-gold-500/20">
+                Prijavi se za recenziju
+              </Link>
+            )}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {reviews.slice(0, 16).map((review) => (
+              <article key={review.id} className="rounded-xl border border-white/10 bg-[#111]/85 p-4 transition hover:-translate-y-0.5 hover:border-gold-500/25 hover:bg-[#151515]">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="font-display text-lg font-black text-white">{review.name}</h3>
+                  <span className="text-[10px] font-bold text-neutral-500">{new Date(review.createdAt).toLocaleDateString('sr-RS')}</span>
+                </div>
+                <div className="mb-3 flex gap-1 text-gold-400">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <Star key={index} size={15} fill="currentColor" className={index < review.rating ? 'opacity-100' : 'opacity-25'} />
+                  ))}
+                </div>
+                <p className="text-sm leading-6 text-neutral-400">"{review.text}"</p>
+              </article>
+            ))}
+          </div>
+
+          <form onSubmit={handleReviewSubmit} className="mt-5 grid gap-3 rounded-xl border border-white/10 bg-black/40 p-4 md:grid-cols-[1fr_150px_2fr_auto] md:items-end">
+            <label className="block">
+              <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Ime</span>
+              <input
+                value={reviewForm.name}
+                onChange={(event) => setReviewForm((current) => ({ ...current, name: event.target.value }))}
+                disabled={!canSubmitReview || reviewSubmitting}
+                className="w-full rounded-lg border border-white/10 bg-black/45 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold-500/50 disabled:opacity-50"
+                placeholder="Vaše ime"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Ocena</span>
+              <select
+                value={reviewForm.rating}
+                onChange={(event) => setReviewForm((current) => ({ ...current, rating: Number(event.target.value) }))}
+                disabled={!canSubmitReview || reviewSubmitting}
+                className="w-full rounded-lg border border-white/10 bg-black/45 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold-500/50 disabled:opacity-50"
+              >
+                {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} zvezdica</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Recenzija</span>
+              <input
+                value={reviewForm.text}
+                onChange={(event) => setReviewForm((current) => ({ ...current, text: event.target.value }))}
+                disabled={!canSubmitReview || reviewSubmitting}
+                className="w-full rounded-lg border border-white/10 bg-black/45 px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold-500/50 disabled:opacity-50"
+                placeholder={canSubmitReview ? 'Napišite kratak utisak...' : 'Prijavite se da pošaljete recenziju'}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={!canSubmitReview || reviewSubmitting}
+              className="rounded-lg bg-gold-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-gold-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {reviewSubmitting ? 'Slanje...' : 'Pošalji'}
+            </button>
+          </form>
+          {reviewMessage && <p className="mt-3 text-sm font-semibold text-gold-200">{reviewMessage}</p>}
         </div>
       </section>
 

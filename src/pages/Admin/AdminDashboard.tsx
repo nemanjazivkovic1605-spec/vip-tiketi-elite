@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { 
   BarChart3, Users, FileText, Settings, LogOut, ChevronRight, 
-  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle, Bell, Sparkles
+  Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle, Bell, Sparkles, Star
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { mockTipsService } from '../../services/mockTips';
@@ -12,7 +12,8 @@ import { importedMatchesService } from '../../services/importedMatchesService';
 import { dailyAnalysesService } from '../../services/dailyAnalysesService';
 import { getDailyAnalysisDates } from '../../utils/dailyDates';
 import { authService } from '../../services/authService';
-import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User, AdminNotification, DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisStatus } from '../../types';
+import { reviewsService } from '../../services/reviewsService';
+import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSettings, TipPublicationStatus, User, AdminNotification, DailyAnalysisItem, DailyAnalysisRiskLevel, DailyAnalysisStatus, Review } from '../../types';
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import AdminOverview from '../../components/admin/AdminOverview';
@@ -38,6 +39,7 @@ type BuilderTicketType = 'VIP Dubl' | 'VIP Combo';
 type UserStatusFilter = 'all' | 'pending' | 'approved' | 'expired' | 'blocked' | 'free' | 'silver' | 'gold' | 'elite';
 type TipPublicationFilter = 'all' | 'draft' | 'published';
 type DailyLifecycleFilter = 'active' | 'finished';
+type AdminTab = 'overview' | 'users' | 'matches' | 'tips' | 'analyses' | 'reviews' | 'settings';
 
 const ADMIN_FINISHED_DAILY_LIMIT = 10;
 const ADMIN_FINISHED_DAILY_LOOKBACK_DAYS = 2;
@@ -80,7 +82,7 @@ const getSixMonthsAgo = () => {
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'matches' | 'tips' | 'analyses' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTipModalOpen, setIsTipModalOpen] = useState(false);
   const [editingTip, setEditingTip] = useState<Tip | undefined>(undefined);
@@ -94,6 +96,7 @@ export default function AdminDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [tips, setTips] = useState<Tip[]>([]);
   const [dailyAnalyses, setDailyAnalyses] = useState<DailyAnalysisItem[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [dailyPullMessage, setDailyPullMessage] = useState('');
   const [dailyPullLoadingDate, setDailyPullLoadingDate] = useState('');
   const [dailyAiLoadingId, setDailyAiLoadingId] = useState('');
@@ -276,11 +279,12 @@ export default function AdminDashboard() {
     const includeUsers = options.includeUsers ?? true;
     const includeNotifications = options.includeNotifications ?? true;
 
-    const [fetchedTips, fetchedMatches, fetchedStats, fetchedDailyAnalyses] = await Promise.all([
+    const [fetchedTips, fetchedMatches, fetchedStats, fetchedDailyAnalyses, fetchedReviews] = await Promise.all([
       mockTipsService.getAllTips(),
       importedMatchesService.getMatches(),
       mockTipsService.getStats(),
       dailyAnalysesService.getAdminAnalyses(),
+      reviewsService.getAllReviews(),
     ]);
 
     const fetchedUsers = includeUsers ? await authService.getUsers() : userListRef.current;
@@ -330,6 +334,7 @@ export default function AdminDashboard() {
     setAvailableMatches(fetchedMatches);
     setStats(fetchedStats);
     setDailyAnalyses(fetchedDailyAnalyses);
+    setReviews(fetchedReviews);
     if (includeUsers) setUserList(fetchedUsers);
     if (includeNotifications) setNotifications(mergedNotifications);
   }, []);
@@ -911,6 +916,22 @@ export default function AdminDashboard() {
     await refreshData();
   };
 
+  const handleApproveReview = async (reviewId: string) => {
+    await reviewsService.approveReview(reviewId);
+    await refreshData({ includeUsers: false, includeNotifications: false });
+  };
+
+  const handleRejectReview = async (reviewId: string) => {
+    await reviewsService.rejectReview(reviewId);
+    await refreshData({ includeUsers: false, includeNotifications: false });
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!confirm('Da li želite da obrišete ovu recenziju?')) return;
+    await reviewsService.deleteReview(reviewId);
+    await refreshData({ includeUsers: false, includeNotifications: false });
+  };
+
   const handleUpdateUserStatus = async (userId: string, status: MembershipStatus) => {
     const userToUpdate = userList.find(u => u.id === userId);
     if (!userToUpdate) return;
@@ -1488,6 +1509,7 @@ export default function AdminDashboard() {
     { id: 'matches', label: 'Baza utakmica', icon: <Database size={20} /> },
     { id: 'tips', label: 'Tipovi', icon: <FileText size={20} /> },
     { id: 'analyses', label: 'Dnevni Tipovi', icon: <TrendingUp size={20} /> },
+    { id: 'reviews', label: 'Recenzije', icon: <Star size={20} /> },
     { id: 'settings', label: 'Podešavanja', icon: <Settings size={20} /> },
   ];
 
@@ -2687,6 +2709,69 @@ export default function AdminDashboard() {
                         </div>
                       )}
                     </div>
+                  </div>
+                </motion.div>
+              )}
+              {activeTab === 'reviews' && (
+                <motion.div key="reviews" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                  <div className="mb-8 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div>
+                      <h2 className="text-3xl font-display font-bold">Recenzije korisnika</h2>
+                      <p className="mt-2 text-sm text-neutral-500">Odobravanje javnih utisaka pre prikaza na početnoj strani.</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-widest text-neutral-300">
+                      Pending: {reviews.filter((review) => review.status === 'pending').length}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4">
+                    {reviews.map((review) => (
+                      <article key={review.id} className="glass rounded-[2rem] border-white/5 p-5">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${
+                                review.status === 'approved'
+                                  ? 'border-green-500/25 bg-green-500/10 text-green-300'
+                                  : review.status === 'rejected'
+                                    ? 'border-red-500/25 bg-red-500/10 text-red-300'
+                                    : 'border-gold-500/25 bg-gold-500/10 text-gold-300'
+                              }`}>
+                                {review.status}
+                              </span>
+                              <span className="flex gap-1 text-gold-400">
+                                {Array.from({ length: 5 }).map((_, index) => (
+                                  <Star key={index} size={13} fill="currentColor" className={index < review.rating ? 'opacity-100' : 'opacity-25'} />
+                                ))}
+                              </span>
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-600">
+                                {new Date(review.createdAt).toLocaleDateString('sr-RS')}
+                              </span>
+                            </div>
+                            <h3 className="font-display text-xl font-black text-white">{review.name}</h3>
+                            <p className="mt-2 max-w-4xl text-sm leading-7 text-neutral-400">"{review.text}"</p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => handleApproveReview(review.id)} disabled={review.status === 'approved'} className="rounded-xl bg-green-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-green-300 transition hover:bg-green-500/20 disabled:opacity-40">
+                              Odobri
+                            </button>
+                            <button onClick={() => handleRejectReview(review.id)} disabled={review.status === 'rejected'} className="rounded-xl bg-orange-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-300 transition hover:bg-orange-500/20 disabled:opacity-40">
+                              Odbij
+                            </button>
+                            <button onClick={() => handleDeleteReview(review.id)} className="rounded-xl bg-red-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 transition hover:bg-red-500/20">
+                              Obriši
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+
+                    {reviews.length === 0 && (
+                      <div className="glass rounded-[2rem] border-white/5 p-10 text-center font-bold text-neutral-500">
+                        Nema poslatih recenzija.
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
