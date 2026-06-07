@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Mail, MessageSquare, ShieldCheck, Trophy } from 'lucide-react';
 import { CONTACT_DISPLAY_EMAIL } from '../../services/contactService';
 
+const FACEBOOK_PAGE_URL = 'https://www.facebook.com/eliteviptip/';
+
 export default function Footer() {
   return (
     <footer className="border-t border-white/5 bg-black px-5 pb-8 pt-10 md:px-6 md:pt-12">
@@ -33,6 +35,15 @@ export default function Footer() {
               <a href={`mailto:${CONTACT_DISPLAY_EMAIL}`} aria-label="Email podrška" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 transition-all hover:border-gold-500/25 hover:bg-gold-500/10 hover:text-gold-500">
                 <Mail size={19} />
               </a>
+              <a
+                href={FACEBOOK_PAGE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook stranica"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 text-base font-black transition-all hover:border-blue-400/30 hover:bg-blue-500/10 hover:text-blue-300"
+              >
+                f
+              </a>
               <Link to="/terms" aria-label="Pravila korišćenja" className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 transition-all hover:border-gold-500/25 hover:bg-gold-500/10 hover:text-gold-500">
                 <ShieldCheck size={19} />
               </Link>
@@ -60,6 +71,17 @@ export default function Footer() {
                 <a href={`mailto:${CONTACT_DISPLAY_EMAIL}`} className="flex items-center gap-2 transition-colors hover:text-gold-500">
                   <Mail size={16} className="text-gold-500" />
                   {CONTACT_DISPLAY_EMAIL}
+                </a>
+              </li>
+              <li>
+                <a
+                  href={FACEBOOK_PAGE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 transition-colors hover:text-blue-300"
+                >
+                  <span className="flex h-4 w-4 items-center justify-center rounded bg-blue-500/15 text-[11px] font-black text-blue-300">f</span>
+                  Facebook stranica
                 </a>
               </li>
             </ul>

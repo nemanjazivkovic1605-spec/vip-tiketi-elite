@@ -23,6 +23,8 @@ const initialForm = {
   message: '',
 };
 
+const FACEBOOK_PAGE_URL = 'https://www.facebook.com/eliteviptip/';
+
 const isValidEmail = (email: string) => /\S+@\S+\.\S+/.test(email);
 
 export default function Contact() {
@@ -126,6 +128,25 @@ export default function Contact() {
                 </span>
               </div>
 
+              <a
+                href={FACEBOOK_PAGE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-4 border-b border-white/8 px-1 py-5 transition-colors hover:bg-white/[0.025]"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-blue-400/25 bg-blue-500/[0.08] text-lg font-black text-blue-300">
+                  f
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.22em] text-neutral-500">Facebook stranica</span>
+                  <span className="mt-1 block text-sm font-bold text-neutral-100">Pošaljite nam poruku preko Facebook-a</span>
+                </span>
+                <span className="ml-auto inline-flex shrink-0 items-center gap-2 rounded-lg border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-blue-200 transition-colors group-hover:border-blue-300/40 group-hover:bg-blue-500/20">
+                  Otvori Facebook
+                  <ArrowUpRight size={14} />
+                </span>
+              </a>
+
               <div className="flex items-center gap-4 px-1 py-5">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.035] text-neutral-300">
                   <ShieldCheck size={19} />
@@ -141,6 +162,9 @@ export default function Contact() {
               <Headphones size={18} className="mt-0.5 shrink-0 text-gold-400" />
               Naš tim odgovara na pitanja o nalozima, paketima i pristupu objavljenim tipovima.
             </div>
+            <p className="mt-3 text-xs leading-6 text-neutral-500">
+              Za brzu komunikaciju možete nas kontaktirati i preko naše Facebook stranice.
+            </p>
           </section>
 
           <section className="overflow-hidden rounded-xl border border-white/10 bg-[#101010]/90 shadow-2xl shadow-black/35 backdrop-blur-xl">
