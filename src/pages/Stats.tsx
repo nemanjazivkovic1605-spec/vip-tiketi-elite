@@ -68,7 +68,7 @@ export default function Stats() {
         withTimeout(mockTipsService.getPublicStats(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
         withTimeout(mockTipsService.getPublicStats('elite_ticket'), 'ELITE TIKET statistika se učitava predugo.'),
         withTimeout(mockTipsService.getPublicStats('safe_pick'), 'SAFE PICK statistika se učitava predugo.'),
-        withTimeout(mockTipsService.getPublicStats('vip_monthly'), 'VIP MESECNI TIPOVI statistika se ucitava predugo.'),
+        withTimeout(mockTipsService.getPublicStats('vip_monthly'), 'VIP MESEČNI TIPOVI statistika se učitava predugo.'),
       ]);
 
       setStats(nextStats);
@@ -177,7 +177,7 @@ export default function Stats() {
                     : 'border-white/10 bg-white/5 text-neutral-300 hover:border-gold-500/30 hover:text-gold-300'
             }`}
           >
-            {option === 'all' ? 'Svi' : option === 'elite_ticket' ? 'ELITE TIKET' : option === 'safe_pick' ? 'SAFE PICK' : 'VIP MESECNI TIPOVI'}
+            {option === 'all' ? 'Svi' : option === 'elite_ticket' ? 'ELITE TIKET' : option === 'safe_pick' ? 'SAFE PICK' : 'VIP MESEČNI TIPOVI'}
           </button>
         ))}
       </div>
@@ -211,14 +211,14 @@ export default function Stats() {
       {productOverview && (
         <div className="mb-12 grid gap-4 xl:grid-cols-3">
           <div className="glass rounded-[2rem] border border-purple-400/20 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent p-5 md:p-6">
-            <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300">VIP MESECNI TIPOVI statistika</p>
+            <p className="text-[10px] uppercase tracking-[0.35em] text-purple-300">VIP MESEČNI TIPOVI statistika</p>
             <h2 className="mt-2 text-xl md:text-2xl font-display font-black">Dnevni VIP predlozi</h2>
             <p className="mt-2 text-sm text-neutral-400">Odvojeno računanje za premium tikete sa većim kvotama i ciljem većeg profita.</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <article className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Tiketi</div>
                 <div className="mt-2 text-2xl font-display font-black text-neutral-100">{productOverview.monthly.completedCount}</div>
-                <p className="mt-1 text-xs text-neutral-400">{productOverview.monthly.winCount}/{productOverview.monthly.completedCount} pogodjeno</p>
+                <p className="mt-1 text-xs text-neutral-400">{productOverview.monthly.winCount}/{productOverview.monthly.completedCount} pogođeno</p>
               </article>
               <article className="rounded-2xl border border-purple-400/30 bg-purple-500/10 p-4 shadow-[0_0_30px_rgba(168,85,247,0.12)]">
                 <div className="text-[10px] uppercase tracking-[0.3em] text-purple-300">Prolaznost</div>
@@ -259,12 +259,12 @@ export default function Stats() {
           <div className="glass order-2 rounded-[2rem] border border-gold-500/20 bg-gradient-to-br from-gold-500/8 via-transparent to-transparent p-5 md:p-6">
             <p className="text-[10px] uppercase tracking-[0.35em] text-gold-400">ELITE TIKET statistika</p>
             <h3 className="mt-2 text-xl md:text-2xl font-display font-black text-neutral-100">Nova premium kategorija</h3>
-            <p className="mt-3 text-sm text-neutral-400">Posebna statistika za ELITE TIKET, odvojena od VIP meseÄnih tipova.</p>
+            <p className="mt-3 text-sm text-neutral-400">Posebna statistika za ELITE TIKET, odvojena od VIP mesečnih tipova.</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
               <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
                 <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Tiketi</div>
                 <div className="mt-2 text-xl font-display font-black text-gold-300">{productOverview.elite.completedCount}</div>
-                <p className="mt-1 text-[10px] text-neutral-500">{productOverview.elite.winCount}/{productOverview.elite.completedCount} pogodjeno</p>
+                <p className="mt-1 text-[10px] text-neutral-500">{productOverview.elite.winCount}/{productOverview.elite.completedCount} pogođeno</p>
               </article>
               <article className="rounded-2xl border border-white/10 bg-black/25 p-4">
                 <div className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">Prolaznost</div>
@@ -300,7 +300,7 @@ export default function Stats() {
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <span className="font-display text-base font-black uppercase text-neutral-100">{format}</span>
                         <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
-                          {formatStats.winCount}/{formatStats.completedCount} pogodjeno
+                          {formatStats.winCount}/{formatStats.completedCount} pogođeno
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-[11px] text-neutral-300 sm:grid-cols-5">
@@ -502,3 +502,4 @@ export default function Stats() {
     </div>
   );
 }
+

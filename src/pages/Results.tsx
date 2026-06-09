@@ -108,7 +108,7 @@ export default function Results() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
         <div className="max-w-2xl">
           <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">PRETHODNI <span className="gold-text">REZULTATI</span></h1>
-          <p className="text-neutral-400">Pregled objavljenih tipova i njihovih zavrsenih rezultata.</p>
+          <p className="text-neutral-400">Pregled objavljenih tipova i njihovih završenih rezultata.</p>
         </div>
       </div>
 
@@ -184,7 +184,7 @@ export default function Results() {
                       Objavljeno: {formatTicketPublishedAt(tip)}
                     </div>
                     <div className="mt-1 text-[10px] font-black uppercase tracking-widest text-neutral-500">
-                      Pocetak meca: {formatFirstMatchStartAt(tip)}
+                      Početak meča: {formatFirstMatchStartAt(tip)}
                     </div>
                   </div>
 

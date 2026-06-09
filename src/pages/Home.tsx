@@ -299,7 +299,7 @@ export default function Home() {
                 <Target className="text-gold-400" size={24} />
                 <h3 className="font-display text-xl font-black uppercase text-gold-100">ELITE TIKET</h3>
               </div>
-              <p className="text-sm leading-6 text-neutral-400">Premium tiket sa 2 do 6 meceva, vecom ukupnom kvotom i fokusom na veci profit.</p>
+              <p className="text-sm leading-6 text-neutral-400">Premium tiket sa 2 do 6 mečeva, većom ukupnom kvotom i fokusom na veći profit.</p>
               <Link to="/#elite-ticket" className="mt-5 inline-flex rounded-lg bg-gold-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-gold-400">
                 Pogledaj Elite tiket
               </Link>

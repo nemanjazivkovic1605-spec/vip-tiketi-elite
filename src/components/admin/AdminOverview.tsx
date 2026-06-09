@@ -91,7 +91,7 @@ export default function AdminOverview({
       <div className="bg-green-500/10 border-green-500/20 border p-6 rounded-3xl flex items-center gap-4">
         <AlertTriangle className="text-green-500 shrink-0" size={32} />
         <div>
-          <h4 className="font-bold text-green-500">Rucni import rezim</h4>
+          <h4 className="font-bold text-green-500">Ručni import režim</h4>
           <p className="text-sm text-neutral-400">
             Utakmice se uvoze iz CSV/Excel fajla i ostaju vidljive samo adminu. Public deo vidi samo objavljene tipove.
           </p>

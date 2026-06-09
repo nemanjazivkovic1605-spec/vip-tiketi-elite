@@ -199,7 +199,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
     }
 
     if (draft.totalOddsOverride && (!Number.isFinite(manualTotalOdds) || manualTotalOdds <= 0)) {
-      alert('Unesite validnu ukupnu kvotu ili vratite auto obracun.');
+      alert('Unesite validnu ukupnu kvotu ili vratite auto obračun.');
       return null;
     }
 
@@ -302,7 +302,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
 
                 <div className="grid md:grid-cols-2 gap-3 mb-3">
                   <label className="block">
-                    <span className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Datum pocetka meca</span>
+                    <span className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Datum početka meča</span>
                     <input
                       type="date"
                       value={match.eventDate || draft.date}
@@ -311,7 +311,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Vreme pocetka meca</span>
+                    <span className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Vreme početka meča</span>
                     <input
                       type="time"
                       value={match.eventTime || match.time || '20:00'}
@@ -472,7 +472,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-gold-500/50"
                 />
                 <span className="mt-2 block text-[10px] text-neutral-600 font-bold uppercase tracking-widest">
-                  {draft.totalOddsOverride ? 'Rucni override ukljucen' : 'Automatski obracun iz parova'}
+                  {draft.totalOddsOverride ? 'Ručni override uključen' : 'Automatski obračun iz parova'}
                 </span>
               </div>
 

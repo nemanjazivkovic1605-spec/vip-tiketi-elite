@@ -280,7 +280,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
 
                    <div className="grid sm:grid-cols-2 gap-4 mb-4">
                       <div>
-                        <label className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Datum pocetka meca</label>
+                        <label className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Datum početka meča</label>
                         <input
                           type="date"
                           value={m.eventDate || date}
@@ -289,7 +289,7 @@ export default function TipModal({ onClose, onSave, initialData }: TipModalProps
                         />
                       </div>
                       <div>
-                        <label className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Vreme pocetka meca</label>
+                        <label className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-neutral-500">Vreme početka meča</label>
                         <input
                           type="time"
                           value={m.eventTime || m.time || '20:00'}

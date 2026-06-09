@@ -97,7 +97,7 @@ export default function LiveResults() {
                 <div className="hidden lg:flex w-1/4 justify-end">
                    {match.status === MatchStatus.FINISHED && (
                      <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-xl text-green-500 text-[10px] font-black uppercase">
-                        <Trophy size={14} /> Zavrsen mec
+                        <Trophy size={14} /> Završen meč
                      </div>
                    )}
                 </div>
