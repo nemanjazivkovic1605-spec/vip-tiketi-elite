@@ -266,7 +266,6 @@ export default function AdminDashboard() {
   const unreadNotifications = useMemo(() => notifications.filter((notification) => !notification.read), [notifications]);
   const userListRef = useRef(userList);
   const notificationsRef = useRef(notifications);
-  const reviewsRef = useRef(reviews);
 
   useEffect(() => {
     userListRef.current = userList;
@@ -276,10 +275,6 @@ export default function AdminDashboard() {
     notificationsRef.current = notifications;
   }, [notifications]);
 
-  useEffect(() => {
-    reviewsRef.current = reviews;
-  }, [reviews]);
-
   const loadReviews = useCallback(async () => {
     setReviews(await reviewsService.getAllReviews());
   }, []);
@@ -288,12 +283,11 @@ export default function AdminDashboard() {
     const includeUsers = options.includeUsers ?? true;
     const includeNotifications = options.includeNotifications ?? true;
 
-    const [fetchedTips, fetchedMatches, fetchedStats, fetchedDailyAnalyses, fetchedReviews] = await Promise.all([
+    const [fetchedTips, fetchedMatches, fetchedStats, fetchedDailyAnalyses] = await Promise.all([
       mockTipsService.getAllTips(),
       importedMatchesService.getMatches(),
       mockTipsService.getStats(),
       dailyAnalysesService.getAdminAnalyses(),
-      Promise.resolve(reviewsRef.current),
     ]);
 
     const fetchedUsers = includeUsers ? await authService.getUsers() : userListRef.current;
@@ -345,7 +339,6 @@ export default function AdminDashboard() {
     setAvailableMatches(fetchedMatches);
     setStats(fetchedStats);
     setDailyAnalyses(fetchedDailyAnalyses);
-    setReviews(fetchedReviews);
     if (includeUsers) setUserList(fetchedUsers);
     if (includeNotifications) setNotifications(mergedNotifications);
   }, []);
