@@ -40,7 +40,7 @@ import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVi
 import { formatLeagueName } from '../utils/leagueMapper';
 import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot, refreshPublicHistorySnapshot } from './publicHistorySnapshot';
 import { getTicketProductType } from '../utils/ticketProduct';
-import { getStatsFromSummary } from './publicStatsSummary';
+import { getStatsFromSummary, readPublicStatsSummary } from './publicStatsSummary';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -289,6 +289,13 @@ const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTIO
 const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
 
 type StatsFilter = 'all' | 'free' | 'vip' | 'elite_ticket' | 'safe_pick' | 'vip_monthly';
+
+type PublicStatsBundle = {
+  selected: GlobalStats;
+  elite: GlobalStats | null;
+  safe: GlobalStats | null;
+  monthly: GlobalStats | null;
+};
 
 export type PublicHomepageData = {
   stats: GlobalStats;
@@ -606,6 +613,37 @@ export const mockTipsService = {
     }
 
     return calculateStats(filterTipsByType(await readPublicStatsTips(), filter));
+  },
+
+  getPublicStatsBundle: async (filter: StatsFilter = 'all'): Promise<PublicStatsBundle> => {
+    const summary = await readPublicStatsSummary();
+    const selectedFromSummary = filter === 'all'
+      ? summary?.all
+      : filter === 'elite_ticket' || filter === 'safe_pick' || filter === 'vip_monthly'
+        ? summary?.categories[filter]
+        : null;
+    const eliteFromSummary = summary?.categories.elite_ticket || null;
+    const safeFromSummary = summary?.categories.safe_pick || null;
+    const monthlyFromSummary = summary?.categories.vip_monthly || null;
+
+    if (selectedFromSummary && eliteFromSummary && safeFromSummary && monthlyFromSummary) {
+      return {
+        selected: selectedFromSummary,
+        elite: eliteFromSummary,
+        safe: safeFromSummary,
+        monthly: monthlyFromSummary,
+      };
+    }
+
+    const tips = await readPublicStatsTips();
+    const getStats = (nextFilter: StatsFilter) => calculateStats(filterTipsByType(tips, nextFilter));
+
+    return {
+      selected: selectedFromSummary || getStats(filter),
+      elite: eliteFromSummary || getStats('elite_ticket'),
+      safe: safeFromSummary || getStats('safe_pick'),
+      monthly: monthlyFromSummary || getStats('vip_monthly'),
+    };
   },
 
   getPublicHomepageData: async (): Promise<PublicHomepageData> => {

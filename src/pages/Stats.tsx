@@ -64,15 +64,18 @@ export default function Stats() {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
-      const [nextStats, eliteStats, safeStats, monthlyStats] = await Promise.all([
-        withTimeout(mockTipsService.getPublicStats(filter), 'Statistika se učitava predugo. Pokušajte ponovo.'),
-        withTimeout(mockTipsService.getPublicStats('elite_ticket'), 'ELITE TIKET statistika se učitava predugo.'),
-        withTimeout(mockTipsService.getPublicStats('safe_pick'), 'SAFE PICK statistika se učitava predugo.'),
-        withTimeout(mockTipsService.getPublicStats('vip_monthly'), 'VIP MESEČNI TIPOVI statistika se učitava predugo.'),
-      ]);
+      const statsBundle = await withTimeout(
+        mockTipsService.getPublicStatsBundle(filter),
+        'Statistika se učitava predugo. Pokušajte ponovo.',
+      );
+      const nextStats = statsBundle.selected;
 
       setStats(nextStats);
-      setComparisonStats({ elite: eliteStats, safe: safeStats, monthly: monthlyStats });
+      setComparisonStats({
+        elite: statsBundle.elite,
+        safe: statsBundle.safe,
+        monthly: statsBundle.monthly,
+      });
       setSelectedMonth((current) => {
         if (!current) return nextStats.monthlyBreakdown[0] || null;
         return nextStats.monthlyBreakdown.find((month) => month.key === current.key) || nextStats.monthlyBreakdown[0] || null;
@@ -502,4 +505,3 @@ export default function Stats() {
     </div>
   );
 }
-
