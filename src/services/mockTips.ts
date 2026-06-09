@@ -48,6 +48,7 @@ const PUBLIC_STATS_TICKETS_COLLECTION = 'publicStatsTickets';
 const PUBLIC_TICKETS_CACHE_KEY = 'tickets:public:all';
 const PUBLIC_VIP_TICKETS_CACHE_KEY = 'tickets:public:vip';
 const PUBLIC_STATS_CACHE_KEY = 'tickets:public:stats';
+const PUBLIC_HOMEPAGE_DATA_CACHE_KEY = 'tickets:public:homepage';
 const PUBLIC_READ_PAGE_SIZE = 100;
 const MAX_PUBLIC_READ_PAGES = 20;
 const MAX_FRONTEND_BULK_WRITES = 500;
@@ -55,6 +56,7 @@ const invalidatePublicTicketCache = () => invalidateCachedQueries(
   PUBLIC_TICKETS_CACHE_KEY,
   PUBLIC_VIP_TICKETS_CACHE_KEY,
   PUBLIC_STATS_CACHE_KEY,
+  PUBLIC_HOMEPAGE_DATA_CACHE_KEY,
 );
 
 const cleanAnalysis = (analysis?: string) => {
@@ -647,21 +649,24 @@ export const mockTipsService = {
   },
 
   getPublicHomepageData: async (): Promise<PublicHomepageData> => {
-    const summaryStats = await getStatsFromSummary('all');
-    const tips = await readPublicStatsTips();
-    const stats = summaryStats || calculateStats(tips);
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayDate = formatLocalIsoDate(yesterday);
-    const yesterdayWinner = sortTicketsByDate(tips)
-      .find((tip) => tip.date === yesterdayDate && tip.status === TicketStatus.WON);
+    return getCachedQuery(PUBLIC_HOMEPAGE_DATA_CACHE_KEY, async () => {
+      const summaryStats = await getStatsFromSummary('all');
+      const tips = await readPublicStatsTips();
+      const stats = summaryStats || calculateStats(tips);
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayDate = formatLocalIsoDate(yesterday);
+      const sortedTips = sortTicketsByDate(tips);
+      const yesterdayWinner = sortedTips
+        .find((tip) => tip.date === yesterdayDate && tip.status === TicketStatus.WON);
 
-    return {
-      stats,
-      recentTips: sortTicketsByDate(tips).slice(0, 5),
-      latestMonthProfitUnits: stats.monthlyBreakdown[0]?.profitUnits ?? null,
-      yesterdayWonOdds: yesterdayWinner?.totalOdds ?? null,
-    };
+      return {
+        stats,
+        recentTips: sortedTips.slice(0, 5),
+        latestMonthProfitUnits: stats.monthlyBreakdown[0]?.profitUnits ?? null,
+        yesterdayWonOdds: yesterdayWinner?.totalOdds ?? null,
+      };
+    });
   },
 
   resetTips: async (): Promise<void> => {
