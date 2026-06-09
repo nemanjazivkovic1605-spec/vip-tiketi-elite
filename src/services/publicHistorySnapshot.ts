@@ -13,6 +13,10 @@ type PublicHistorySnapshot = {
 let snapshotPromise: Promise<Tip[]> | null = null;
 let refreshPromise: Promise<{ tips: Tip[]; changed: boolean }> | null = null;
 
+const rememberSnapshot = (tips: Tip[]) => {
+  snapshotPromise = Promise.resolve(tips);
+};
+
 export const isPublicHistorySnapshotEnabled = () =>
   import.meta.env.VITE_PUBLIC_HISTORY_SNAPSHOT_ENABLED !== 'false';
 
@@ -67,6 +71,7 @@ export const refreshPublicHistorySnapshot = async (): Promise<{ tips: Tip[]; cha
         || cached.generatedAt !== snapshot.generatedAt
         || cached.tips.length !== snapshot.tips.length;
       if (changed) writeCachedSnapshot(snapshot);
+      rememberSnapshot(snapshot.tips);
       return { tips: snapshot.tips, changed };
     })
     .catch((error) => {
@@ -86,6 +91,7 @@ export const readPublicHistorySnapshot = async (): Promise<Tip[]> => {
 
   const cached = readCachedSnapshot();
   if (cached?.tips.length) {
+    rememberSnapshot(cached.tips);
     void refreshPublicHistorySnapshot();
     return cached.tips;
   }
@@ -93,6 +99,7 @@ export const readPublicHistorySnapshot = async (): Promise<Tip[]> => {
   snapshotPromise = fetchPublicHistorySnapshot('force-cache')
     .then((snapshot) => {
       if (snapshot.tips.length) writeCachedSnapshot(snapshot);
+      rememberSnapshot(snapshot.tips);
       return snapshot.tips;
     })
     .catch((error) => {
