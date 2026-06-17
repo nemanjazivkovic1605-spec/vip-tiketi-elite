@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { initializeApp, cert, getApps, type App } from 'firebase-admin/app';
 import { getFirestore, FieldValue, type Firestore } from 'firebase-admin/firestore';
+import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
 
 type ApiFixture = {
   fixture?: {
@@ -48,6 +49,9 @@ const API_BASE = 'https://v3.football.api-sports.io';
 const WORLD_CUP_LEAGUE_ID = process.env.WORLD_CUP_LEAGUE_ID?.trim() || '1';
 const WORLD_CUP_SEASON = process.env.WORLD_CUP_SEASON?.trim() || '2026';
 const TIMEZONE = process.env.WORLD_CUP_TIMEZONE?.trim() || 'Europe/Belgrade';
+const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID?.trim()
+  || process.env.VITE_FIRESTORE_DATABASE_ID?.trim()
+  || firebaseConfig.firestoreDatabaseId;
 const DAILY_ANALYSES_COLLECTION = 'dailyAnalyses';
 const PUBLIC_DAILY_COLLECTION = 'publicDailyAnalyses';
 const FREE_DAILY_COLLECTION = 'freeDailyAnalyses';
@@ -74,7 +78,7 @@ export const initAdminDb = () => {
   const existing = getApps()[0];
   if (existing) {
     adminApp = existing;
-    adminDb = getFirestore(existing);
+    adminDb = getFirestore(existing, FIRESTORE_DATABASE_ID);
     return adminDb;
   }
 
@@ -83,8 +87,11 @@ export const initAdminDb = () => {
   const serviceAccount = parseJson(rawServiceAccount);
   if (!serviceAccount || typeof serviceAccount !== 'object') throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT_KEY JSON.');
 
-  adminApp = initializeApp({ credential: cert(serviceAccount as any) });
-  adminDb = getFirestore(adminApp);
+  adminApp = initializeApp({
+    credential: cert(serviceAccount as any),
+    projectId: (serviceAccount as { project_id?: string }).project_id || firebaseConfig.projectId,
+  });
+  adminDb = getFirestore(adminApp, FIRESTORE_DATABASE_ID);
   return adminDb;
 };
 
