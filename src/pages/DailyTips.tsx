@@ -436,6 +436,7 @@ const AnalysisCard = React.memo(function AnalysisCard({ item, canAccessVip, isAd
                 <option value="LOST">PAO</option>
                 <option value="POSTPONED">ODLOŽENO</option>
                 <option value="REFUND">VOID / PUSH (POVRAT)</option>
+                <option value="PENDING_REVIEW">RU?NA PROVERA</option>
               </select>
             </label>
           )}

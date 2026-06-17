@@ -10,6 +10,7 @@ const normalizeDailyStatusValue = (status?: string): DailyAnalysisStatus => {
   const normalized = String(status || 'ACTIVE').trim().toUpperCase();
 
   if (['ACTIVE', 'PENDING', 'OPEN', 'UNRESOLVED', 'IN_PROGRESS'].includes(normalized)) return 'ACTIVE';
+  if (['PENDING_REVIEW', 'PENDING REVIEW', 'REVIEW', 'MANUAL_REVIEW', 'MANUAL REVIEW'].includes(normalized)) return 'PENDING_REVIEW';
   if (['WON', 'PROŠAO', 'PROSAO', 'PROSLO', 'FINISHED', 'COMPLETED', 'DONE'].includes(normalized)) return 'WON';
   if (['LOST', 'PAO', 'PALO', 'FAILED'].includes(normalized)) return 'LOST';
   if (['POSTPONED', 'ODLOŽENO', 'ODLOZEN', 'DELAYED'].includes(normalized)) return 'POSTPONED';
@@ -24,7 +25,7 @@ export const normalizeDailyAnalysisStatus = (status?: string): DailyAnalysisStat
 
 export const isFinishedDailyAnalysisStatus = (status?: string) => {
   const normalized = normalizeDailyAnalysisStatus(status);
-  return normalized !== 'ACTIVE' && normalized !== 'HIDDEN';
+  return normalized !== 'ACTIVE' && normalized !== 'PENDING_REVIEW' && normalized !== 'HIDDEN';
 };
 
 export const isVisibleInDailyFeed = (
@@ -39,5 +40,5 @@ export const isVisibleInAdminActiveDailyList = (
   const normalizedStatus = normalizeDailyAnalysisStatus(analysis.status as string | undefined);
   const enabled = analysis.enabled !== false;
   const hidden = analysis.hidden === true;
-  return enabled && !hidden && (normalizedStatus === 'ACTIVE' || normalizedStatus === 'POSTPONED');
+  return enabled && !hidden && (normalizedStatus === 'ACTIVE' || normalizedStatus === 'POSTPONED' || normalizedStatus === 'PENDING_REVIEW');
 };
