@@ -128,25 +128,54 @@ const timeInBelgrade = (value?: string) => {
 };
 
 const apiKey = () => getEnv('API_FOOTBALL_KEY') || getEnv('VITE_FOOTBALL_API_KEY');
+const hasApiErrors = (errors: unknown) => {
+  if (!errors) return false;
+  if (Array.isArray(errors)) return errors.length > 0;
+  if (typeof errors === 'object') return Object.keys(errors as Record<string, unknown>).length > 0;
+  return true;
+};
 
-const requestApiFootball = async <T>(path: string, params: Record<string, string>) => {
+const requestApiFootballPayload = async <T>(path: string, params: Record<string, string>) => {
   const key = apiKey();
   if (!key) throw new Error('API_FOOTBALL_KEY is not configured.');
   const url = new URL(`${API_BASE}${path}`);
   Object.entries(params).forEach(([paramKey, value]) => value && url.searchParams.set(paramKey, value));
   const apiResponse = await fetch(url, { headers: { 'x-apisports-key': key } });
   if (!apiResponse.ok) throw new Error(`API-Football ${path} failed: ${apiResponse.status}`);
-  const payload = await apiResponse.json() as { response?: T[]; errors?: unknown };
+  return apiResponse.json() as Promise<{ response?: T[]; errors?: unknown }>;
+};
+
+const requestApiFootball = async <T>(path: string, params: Record<string, string>) => {
+  const payload = await requestApiFootballPayload<T>(path, params);
+  if (hasApiErrors(payload.errors)) {
+    throw new Error(`API-Football ${path} returned errors: ${JSON.stringify(payload.errors)}`);
+  }
   return payload.response || [];
 };
 
-export const fetchWorldCupFixtures = async (date: string) =>
-  requestApiFootball<ApiFixture>('/fixtures', {
-    league: WORLD_CUP_LEAGUE_ID,
-    season: WORLD_CUP_SEASON,
+const isWorldCupFixture = (fixture: ApiFixture) =>
+  String(fixture.league?.id || '') === WORLD_CUP_LEAGUE_ID
+  || /world cup/i.test(fixture.league?.name || '');
+
+export const fetchWorldCupFixtures = async (date: string) => {
+  try {
+    const directFixtures = await requestApiFootball<ApiFixture>('/fixtures', {
+      league: WORLD_CUP_LEAGUE_ID,
+      season: WORLD_CUP_SEASON,
+      date,
+      timezone: TIMEZONE,
+    });
+    if (directFixtures.length > 0) return directFixtures;
+  } catch {
+    // Some API-Football plans expose current-date fixtures but block league+season queries.
+  }
+
+  const dateFixtures = await requestApiFootball<ApiFixture>('/fixtures', {
     date,
     timezone: TIMEZONE,
   });
+  return dateFixtures.filter(isWorldCupFixture);
+};
 
 const parseOdd = (value?: string) => {
   const odd = Number(String(value || '').replace(',', '.'));
@@ -191,17 +220,32 @@ const findOddForPrediction = (oddsItems: ApiOddsItem[], fixtureId: number, predi
   return null;
 };
 
-export const fetchWorldCupOdds = async (date: string) => {
+export const fetchWorldCupOdds = async (date: string, fixtures: ApiFixture[] = []) => {
+  const oddsByFixture = new Map<number, ApiOddsItem>();
   try {
-    return await requestApiFootball<ApiOddsItem>('/odds', {
+    const dateOdds = await requestApiFootball<ApiOddsItem>('/odds', {
       league: WORLD_CUP_LEAGUE_ID,
       season: WORLD_CUP_SEASON,
       date,
       timezone: TIMEZONE,
     });
+    dateOdds.forEach((item) => item.fixture?.id && oddsByFixture.set(item.fixture.id, item));
   } catch {
-    return [];
+    // Fixture-level odds are used below when the league odds endpoint is unavailable.
   }
+
+  for (const fixture of fixtures) {
+    const fixtureId = fixture.fixture?.id;
+    if (!fixtureId || oddsByFixture.has(fixtureId)) continue;
+    try {
+      const fixtureOdds = await requestApiFootball<ApiOddsItem>('/odds', { fixture: String(fixtureId) });
+      fixtureOdds.forEach((item) => item.fixture?.id && oddsByFixture.set(item.fixture.id, item));
+    } catch {
+      // Missing odds for one fixture should not block the full daily run.
+    }
+  }
+
+  return Array.from(oddsByFixture.values());
 };
 
 const choosePredictionCandidates = (fixture: ApiFixture) => {
@@ -285,7 +329,7 @@ const syncDailyPublicIndexesForStatus = async (analysis: StoredDailyAnalysis, st
 export const upsertWorldCupPicks = async (date: string) => {
   const db = initAdminDb();
   const fixtures = await fetchWorldCupFixtures(date);
-  const odds = await fetchWorldCupOdds(date);
+  const odds = await fetchWorldCupOdds(date, fixtures);
   const picks = buildWorldCupPicks(fixtures, odds);
   let created = 0;
   let skippedExisting = 0;
