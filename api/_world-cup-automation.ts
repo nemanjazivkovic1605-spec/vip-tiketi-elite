@@ -15,7 +15,10 @@ type ApiFixture = {
     away?: { id?: number; name?: string; logo?: string };
   };
   goals?: { home?: number | null; away?: number | null };
-  score?: { fulltime?: { home?: number | null; away?: number | null } };
+  score?: {
+    halftime?: { home?: number | null; away?: number | null };
+    fulltime?: { home?: number | null; away?: number | null };
+  };
 };
 
 type ApiOddsOutcome = { name?: string; value?: string; odd?: string };
@@ -30,11 +33,32 @@ type WorldCupPick = {
   fixture: ApiFixture;
   access: 'FREE' | 'VIP';
   prediction: string;
+  marketCategory: MarketCategory;
   odds: number;
   confidence: number;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   sortOrder: number;
 };
+
+type MarketCategory =
+  | 'goals_safe'
+  | 'goals_value'
+  | 'btts'
+  | 'double_chance'
+  | 'favorite_win'
+  | 'team_goal'
+  | 'first_half_goal'
+  | 'under_control';
+
+type MarketDefinition = {
+  category: MarketCategory;
+  prediction: (fixture: ApiFixture) => string;
+  betPatterns: RegExp[];
+  outcomeAliases: (fixture: ApiFixture) => string[];
+  confidence: number;
+};
+
+type PickCandidate = Omit<WorldCupPick, 'access' | 'sortOrder'>;
 
 type CronLogPayload = {
   action: 'seed' | 'results';
@@ -58,7 +82,16 @@ const FREE_DAILY_COLLECTION = 'freeDailyAnalyses';
 const CRON_LOG_COLLECTION = 'automationLogs';
 const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
 const POSTPONED_STATUSES = new Set(['PST', 'CANC', 'ABD', 'AWD', 'WO']);
-const SUPPORTED_PREDICTIONS = ['1', '2', '1X', 'X2', 'GG', 'Over 1.5', 'Over 2.5'];
+const MARKET_ROTATION: MarketCategory[] = [
+  'goals_safe',
+  'double_chance',
+  'btts',
+  'favorite_win',
+  'team_goal',
+  'goals_value',
+  'first_half_goal',
+  'under_control',
+];
 
 const getEnv = (key: string) => process.env[key]?.trim() || '';
 
@@ -185,33 +218,116 @@ const parseOdd = (value?: string) => {
 const normalizeOutcomeName = (value?: string) =>
   String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
-const marketAliases: Record<string, string[]> = {
-  '1': ['home', '1'],
-  '2': ['away', '2'],
-  '1X': ['home/draw', '1x'],
-  'X2': ['draw/away', 'x2'],
-  GG: ['yes'],
-  'Over 1.5': ['over 1.5'],
-  'Over 2.5': ['over 2.5'],
+const includesAnyAlias = (value: string | undefined, aliases: string[]) => {
+  const normalized = normalizeOutcomeName(value);
+  return aliases.some((alias) => normalized === normalizeOutcomeName(alias));
 };
 
-const isBetNameForPrediction = (betName: string, prediction: string) => {
-  const normalized = normalizeOutcomeName(betName);
-  if (['1', '2'].includes(prediction)) return /match winner|1x2|winner/i.test(normalized);
-  if (['1X', 'X2'].includes(prediction)) return /double chance/i.test(normalized);
-  if (prediction === 'GG') return /both teams score|btts/i.test(normalized);
-  if (prediction.startsWith('Over')) return /goals over\/under|over\/under|total goals/i.test(normalized);
-  return false;
+const favoredSide = (fixture: ApiFixture) => {
+  const home = fixture.teams?.home?.name || '';
+  const away = fixture.teams?.away?.name || '';
+  const combined = `${home} ${away}`.toLowerCase();
+  const strongHome = /argentina|brazil|france|spain|england|germany|portugal|netherlands|belgium|italy|croatia|uruguay|usa|mexico/.test(home.toLowerCase());
+  const strongAway = /argentina|brazil|france|spain|england|germany|portugal|netherlands|belgium|italy|croatia|uruguay|usa|mexico/.test(away.toLowerCase());
+  if (strongHome && !strongAway) return 'home';
+  if (strongAway && !strongHome) return 'away';
+  if (/argentina|brazil|france|spain|england|germany|portugal|netherlands/.test(combined)) {
+    return strongHome ? 'home' : strongAway ? 'away' : 'home';
+  }
+  return 'home';
 };
 
-const findOddForPrediction = (oddsItems: ApiOddsItem[], fixtureId: number, prediction: string) => {
+const marketDefinitions: MarketDefinition[] = [
+  {
+    category: 'goals_safe',
+    prediction: () => 'Over 1.5',
+    betPatterns: [/goals over\/under/i, /over\/under/i, /total goals/i],
+    outcomeAliases: () => ['over 1.5'],
+    confidence: 72,
+  },
+  {
+    category: 'goals_value',
+    prediction: () => 'Over 2.5',
+    betPatterns: [/goals over\/under/i, /over\/under/i, /total goals/i],
+    outcomeAliases: () => ['over 2.5'],
+    confidence: 64,
+  },
+  {
+    category: 'btts',
+    prediction: () => 'GG',
+    betPatterns: [/both teams score/i, /btts/i],
+    outcomeAliases: () => ['yes'],
+    confidence: 63,
+  },
+  {
+    category: 'double_chance',
+    prediction: (fixture) => favoredSide(fixture) === 'away' ? 'X2' : '1X',
+    betPatterns: [/double chance/i],
+    outcomeAliases: (fixture) => favoredSide(fixture) === 'away' ? ['draw/away', 'x2'] : ['home/draw', '1x'],
+    confidence: 68,
+  },
+  {
+    category: 'favorite_win',
+    prediction: (fixture) => favoredSide(fixture) === 'away' ? '2' : '1',
+    betPatterns: [/match winner/i, /1x2/i, /winner/i],
+    outcomeAliases: (fixture) => favoredSide(fixture) === 'away' ? ['away', '2'] : ['home', '1'],
+    confidence: 61,
+  },
+  {
+    category: 'team_goal',
+    prediction: (fixture) => `${favoredSide(fixture) === 'away' ? fixture.teams?.away?.name : fixture.teams?.home?.name} daje gol`,
+    betPatterns: ([
+      /home team total goals/i,
+      /away team total goals/i,
+      /total - home/i,
+      /total - away/i,
+      /home team score a goal/i,
+      /away team score a goal/i,
+    ]),
+    outcomeAliases: (fixture) => favoredSide(fixture) === 'away' ? ['over 0.5', 'yes'] : ['over 0.5', 'yes'],
+    confidence: 69,
+  },
+  {
+    category: 'first_half_goal',
+    prediction: () => '1. poluvreme Over 0.5',
+    betPatterns: [/goals over\/under first half/i, /over\/under first half/i, /1st half/i],
+    outcomeAliases: () => ['over 0.5'],
+    confidence: 62,
+  },
+  {
+    category: 'under_control',
+    prediction: () => 'Under 3.5',
+    betPatterns: [/goals over\/under/i, /over\/under/i, /total goals/i],
+    outcomeAliases: () => ['under 3.5'],
+    confidence: 66,
+  },
+];
+
+const isMatchingBet = (betName: string, definition: MarketDefinition, fixture: ApiFixture) => {
+  const prediction = definition.prediction(fixture);
+  if (definition.category === 'team_goal') {
+    const side = favoredSide(fixture);
+    const normalized = normalizeOutcomeName(betName);
+    const sidePattern = side === 'away'
+      ? /away team total goals|total - away|away team score a goal/i
+      : /home team total goals|total - home|home team score a goal/i;
+    return sidePattern.test(normalized);
+  }
+  return definition.betPatterns.some((pattern) => pattern.test(betName))
+    || (prediction === '1' && /match winner|1x2|winner/i.test(betName))
+    || (prediction === '2' && /match winner|1x2|winner/i.test(betName));
+};
+
+const findOddForMarket = (oddsItems: ApiOddsItem[], fixture: ApiFixture, definition: MarketDefinition) => {
+  const fixtureId = fixture.fixture?.id;
+  if (!fixtureId) return null;
   const item = oddsItems.find((entry) => entry.fixture?.id === fixtureId);
-  const expectedOutcomes = marketAliases[prediction] || [];
+  const expectedOutcomes = definition.outcomeAliases(fixture);
   for (const bookmaker of item?.bookmakers || []) {
     for (const bet of bookmaker.bets || []) {
-      if (!isBetNameForPrediction(bet.name || '', prediction)) continue;
+      if (!isMatchingBet(bet.name || '', definition, fixture)) continue;
       const outcome = bet.values?.find((value) =>
-        expectedOutcomes.includes(normalizeOutcomeName(value.value)),
+        includesAnyAlias(value.value, expectedOutcomes),
       );
       const odd = parseOdd(outcome?.odd);
       if (odd) return odd;
@@ -248,35 +364,85 @@ export const fetchWorldCupOdds = async (date: string, fixtures: ApiFixture[] = [
   return Array.from(oddsByFixture.values());
 };
 
-const choosePredictionCandidates = (fixture: ApiFixture) => {
-  const home = fixture.teams?.home?.name || '';
-  const away = fixture.teams?.away?.name || '';
-  const combined = `${home} ${away}`.toLowerCase();
-  if (/argentina|brazil|france|spain|england|germany|portugal|netherlands/.test(combined)) {
-    return ['Over 1.5', '1X', 'X2', '1', '2', 'Over 2.5', 'GG'];
+const rotatedMarketCategories = (dateSeed = '') => {
+  const seed = dateSeed
+    .split('')
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const offset = seed % MARKET_ROTATION.length;
+  return [...MARKET_ROTATION.slice(offset), ...MARKET_ROTATION.slice(0, offset)];
+};
+
+const riskLevelForOdd = (odd: number): WorldCupPick['riskLevel'] =>
+  odd <= 1.65 ? 'LOW' : odd <= 1.9 ? 'MEDIUM' : 'HIGH';
+
+const buildCandidatesForFixture = (
+  fixture: ApiFixture,
+  odds: ApiOddsItem[],
+  marketOrder: MarketCategory[],
+): PickCandidate[] => {
+  const definitions = marketOrder
+    .map((category) => marketDefinitions.find((definition) => definition.category === category))
+    .filter((definition): definition is MarketDefinition => Boolean(definition));
+
+  return definitions.flatMap((definition) => {
+    const odd = findOddForMarket(odds, fixture, definition);
+    if (!odd) return [];
+    return [{
+      fixture,
+      marketCategory: definition.category,
+      prediction: definition.prediction(fixture),
+      odds: odd,
+      confidence: definition.confidence,
+      riskLevel: riskLevelForOdd(odd),
+    }];
+  });
+};
+
+const pickDiverseCandidates = (candidates: PickCandidate[]) => {
+  const selected: PickCandidate[] = [];
+  const usedFixtures = new Set<number>();
+  const usedCategories = new Set<MarketCategory>();
+
+  const selectCandidate = (pool: PickCandidate[]) => {
+    const diverse = pool.find((candidate) =>
+      !usedFixtures.has(candidate.fixture.fixture!.id!)
+      && !usedCategories.has(candidate.marketCategory),
+    );
+    const fallback = pool.find((candidate) => !usedFixtures.has(candidate.fixture.fixture!.id!));
+    const candidate = diverse || fallback;
+    if (!candidate) return null;
+    selected.push(candidate);
+    usedFixtures.add(candidate.fixture.fixture!.id!);
+    usedCategories.add(candidate.marketCategory);
+    return candidate;
+  };
+
+  const freePool = candidates
+    .filter((candidate) => candidate.odds >= 1.15 && candidate.odds <= 1.75)
+    .sort((left, right) => right.confidence - left.confidence || left.odds - right.odds);
+  selectCandidate(freePool.length ? freePool : candidates);
+
+  const vipPool = candidates
+    .filter((candidate) => candidate.odds >= 1.2)
+    .sort((left, right) => {
+      const leftValue = Math.abs(left.odds - 1.65);
+      const rightValue = Math.abs(right.odds - 1.65);
+      return leftValue - rightValue || right.confidence - left.confidence;
+    });
+  while (selected.length < 3 && selectCandidate(vipPool.length ? vipPool : candidates)) {
+    // Keep selecting until we have one FREE and up to two VIP picks.
   }
-  return ['Over 1.5', '1X', 'X2', 'GG', 'Over 2.5', '1', '2'];
+
+  return selected;
 };
 
 export const buildWorldCupPicks = (fixtures: ApiFixture[], odds: ApiOddsItem[]) => {
-  const picks: Array<Omit<WorldCupPick, 'access' | 'sortOrder'>> = fixtures
+  const marketOrder = rotatedMarketCategories(fixtures[0]?.fixture?.date?.slice(0, 10) || '');
+  const candidates = fixtures
     .filter((fixture) => fixture.fixture?.id && fixture.teams?.home?.name && fixture.teams?.away?.name && fixture.fixture?.date)
-    .flatMap((fixture) => {
-      const fixtureId = fixture.fixture!.id!;
-      const prediction = choosePredictionCandidates(fixture)
-        .map((candidate) => ({ prediction: candidate, odds: findOddForPrediction(odds, fixtureId, candidate) }))
-        .find((candidate) => candidate.odds && candidate.odds > 1.01);
-      if (!prediction?.odds) return [];
-      return [{
-        fixture,
-        prediction: prediction.prediction,
-        odds: prediction.odds,
-        confidence: prediction.prediction === 'Over 1.5' ? 72 : prediction.prediction.includes('X') ? 68 : 64,
-        riskLevel: prediction.odds <= 1.65 ? 'LOW' as const : prediction.odds <= 1.9 ? 'MEDIUM' as const : 'HIGH' as const,
-      }];
-    })
-    .sort((a, b) => a.odds - b.odds);
+    .flatMap((fixture) => buildCandidatesForFixture(fixture, odds, marketOrder));
 
+  const picks = pickDiverseCandidates(candidates);
   const free = picks.slice(0, 1).map((pick, index) => ({ ...pick, access: 'FREE' as const, sortOrder: index }));
   const vip = picks.slice(1, 3).map((pick, index) => ({ ...pick, access: 'VIP' as const, sortOrder: index + 1 }));
   return [...free, ...vip];
@@ -332,6 +498,7 @@ export const upsertWorldCupPicks = async (date: string) => {
   const odds = await fetchWorldCupOdds(date, fixtures);
   const picks = buildWorldCupPicks(fixtures, odds);
   let created = 0;
+  let updatedExisting = 0;
   let skippedExisting = 0;
 
   for (const pick of picks) {
@@ -339,7 +506,48 @@ export const upsertWorldCupPicks = async (date: string) => {
     const ref = db.collection(DAILY_ANALYSES_COLLECTION).doc(id);
     const existing = await ref.get();
     if (existing.exists) {
-      skippedExisting += 1;
+      const existingData = existing.data() || {};
+      const canRefreshAutoPick = existingData.source === 'api-football'
+        && existingData.competition === 'World Cup 2026'
+        && existingData.manualOverride !== true
+        && existingData.resultManualOverride !== true
+        && ['ACTIVE', 'PENDING_REVIEW'].includes(String(existingData.status || 'ACTIVE'));
+
+      if (!canRefreshAutoPick) {
+        skippedExisting += 1;
+        continue;
+      }
+
+      const refreshPayload = {
+        prediction: pick.prediction,
+        marketCategory: pick.marketCategory,
+        odds: pick.odds,
+        confidence: pick.confidence,
+        riskLevel: pick.riskLevel,
+        access: pick.access,
+        status: 'ACTIVE',
+        enabled: true,
+        hidden: false,
+        badges: pick.access === 'VIP' ? ['WORLD CUP', 'VIP PICK'] : ['WORLD CUP', 'FREE PICK'],
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      await ref.set(refreshPayload, { merge: true });
+      await syncDailyPublicIndexesForStatus({ id, ...existingData, ...refreshPayload } as StoredDailyAnalysis, 'ACTIVE');
+      await logCron({
+        action: 'seed',
+        status: 'success',
+        message: `World Cup auto pick refreshed: ${existingData.homeTeam || pick.fixture.teams?.home?.name} - ${existingData.awayTeam || pick.fixture.teams?.away?.name}.`,
+        details: {
+          id,
+          date,
+          fixtureId: pick.fixture.fixture?.id,
+          access: pick.access,
+          marketCategory: pick.marketCategory,
+          prediction: pick.prediction,
+          odds: pick.odds,
+        },
+      });
+      updatedExisting += 1;
       continue;
     }
 
@@ -366,6 +574,7 @@ export const upsertWorldCupPicks = async (date: string) => {
       homeLogo: pick.fixture.teams?.home?.logo || '',
       awayLogo: pick.fixture.teams?.away?.logo || '',
       prediction: pick.prediction,
+      marketCategory: pick.marketCategory,
       odds: pick.odds,
       confidence: pick.confidence,
       riskLevel: pick.riskLevel,
@@ -403,6 +612,7 @@ export const upsertWorldCupPicks = async (date: string) => {
         date,
         fixtureId: analysis.fixtureId,
         access: pick.access,
+        marketCategory: pick.marketCategory,
         prediction: pick.prediction,
         odds: pick.odds,
       },
@@ -414,13 +624,18 @@ export const upsertWorldCupPicks = async (date: string) => {
     action: 'seed',
     status: 'success',
     message: `World Cup seed completed for ${date}.`,
-    details: { date, fixtures: fixtures.length, odds: odds.length, selected: picks.length, created, skippedExisting },
+    details: { date, fixtures: fixtures.length, odds: odds.length, selected: picks.length, created, updatedExisting, skippedExisting },
   });
 
-  return { date, fixtures: fixtures.length, odds: odds.length, selected: picks.length, created, skippedExisting };
+  return { date, fixtures: fixtures.length, odds: odds.length, selected: picks.length, created, updatedExisting, skippedExisting };
 };
 
-const evaluatePrediction = (prediction: string, homeScore: number, awayScore: number) => {
+const evaluatePrediction = (
+  prediction: string,
+  homeScore: number,
+  awayScore: number,
+  fixture?: ApiFixture,
+) => {
   const normalized = prediction.trim().toUpperCase();
   const total = homeScore + awayScore;
   if (normalized === 'GG') return homeScore > 0 && awayScore > 0 ? 'WON' : 'LOST';
@@ -431,6 +646,22 @@ const evaluatePrediction = (prediction: string, homeScore: number, awayScore: nu
   if (normalized === 'X2') return awayScore >= homeScore ? 'WON' : 'LOST';
   if (normalized === '3+' || normalized === 'OVER 2.5') return total >= 3 ? 'WON' : 'LOST';
   if (normalized === '2+' || normalized === 'OVER 1.5') return total >= 2 ? 'WON' : 'LOST';
+  if (normalized === 'UNDER 3.5') return total < 4 ? 'WON' : 'LOST';
+  if (normalized.includes('POLUVREME') && normalized.includes('OVER 0.5')) {
+    const halfHome = fixture?.score?.halftime?.home;
+    const halfAway = fixture?.score?.halftime?.away;
+    if (halfHome === null || halfHome === undefined || halfAway === null || halfAway === undefined) {
+      return 'PENDING_REVIEW';
+    }
+    return halfHome + halfAway >= 1 ? 'WON' : 'LOST';
+  }
+  if (normalized.includes('DAJE GOL')) {
+    const homeTeam = normalizeOutcomeName(fixture?.teams?.home?.name).toUpperCase();
+    const awayTeam = normalizeOutcomeName(fixture?.teams?.away?.name).toUpperCase();
+    if (homeTeam && normalized.includes(homeTeam)) return homeScore > 0 ? 'WON' : 'LOST';
+    if (awayTeam && normalized.includes(awayTeam)) return awayScore > 0 ? 'WON' : 'LOST';
+    return 'PENDING_REVIEW';
+  }
   const overMatch = normalized.match(/^OVER\s*(\d+(?:\.\d+)?)$/);
   if (overMatch) {
     const threshold = Number(overMatch[1]);
@@ -552,7 +783,7 @@ export const updateWorldCupResults = async () => {
       continue;
     }
 
-    const status = evaluatePrediction(String(analysis.prediction || ''), homeScore, awayScore);
+    const status = evaluatePrediction(String(analysis.prediction || ''), homeScore, awayScore, fixture);
     const result = `${homeScore}:${awayScore}`;
     await docSnapshot.ref.update({
       fixtureStatus: shortStatus,
