@@ -923,7 +923,7 @@ export const updateWorldCupResults = async () => {
 
   for (const docSnapshot of snapshot.docs) {
     const analysis = { id: docSnapshot.id, ...docSnapshot.data() } as StoredDailyAnalysis;
-    if (analysis.resultManualOverride === true || analysis.manualOverride === true) {
+    if (analysis.resultManualOverride === true) {
       skipped += 1;
       continue;
     }
@@ -931,6 +931,16 @@ export const updateWorldCupResults = async () => {
     if (!resolved) {
       providerUnavailable += 1;
       skipped += 1;
+      const isPastFixture = String(analysis.date || '') < dateInBelgrade();
+      if (isPastFixture && analysis.status !== 'PENDING_REVIEW') {
+        await docSnapshot.ref.update({
+          status: 'PENDING_REVIEW',
+          fixtureStatus: 'RESULT_UNAVAILABLE',
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        await syncDailyPublicIndexesForStatus({ ...analysis, status: 'PENDING_REVIEW' }, 'PENDING_REVIEW');
+        pendingReview += 1;
+      }
       continue;
     }
     const fixture = resolved.fixture;
