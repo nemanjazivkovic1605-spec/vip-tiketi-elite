@@ -29,6 +29,35 @@ type ApiOddsItem = {
   bookmakers?: ApiOddsBookmaker[];
 };
 
+type ResolvedFixture = {
+  fixture: ApiFixture;
+  provider: 'api-football' | 'football-data.org' | 'TheSportsDB';
+};
+
+type FootballDataMatch = {
+  id?: number;
+  utcDate?: string;
+  status?: string;
+  competition?: { id?: number; name?: string };
+  homeTeam?: { id?: number; name?: string };
+  awayTeam?: { id?: number; name?: string };
+  score?: {
+    halfTime?: { home?: number | null; away?: number | null };
+    fullTime?: { home?: number | null; away?: number | null };
+  };
+};
+
+type SportsDbEvent = {
+  idEvent?: string;
+  strTimestamp?: string;
+  strStatus?: string;
+  strLeague?: string;
+  strHomeTeam?: string;
+  strAwayTeam?: string;
+  intHomeScore?: string | null;
+  intAwayScore?: string | null;
+};
+
 type WorldCupPick = {
   fixture: ApiFixture;
   access: 'FREE' | 'VIP';
@@ -184,6 +213,161 @@ const requestApiFootball = async <T>(path: string, params: Record<string, string
     throw new Error(`API-Football ${path} returned errors: ${JSON.stringify(payload.errors)}`);
   }
   return payload.response || [];
+};
+
+const normalizeTeam = (value?: string) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/\b(fc|cf|afc|sc|national team)\b/g, '')
+  .replace(/[^a-z0-9]/g, '');
+
+const teamsMatch = (
+  expectedHome?: string,
+  expectedAway?: string,
+  candidateHome?: string,
+  candidateAway?: string,
+) => {
+  const home = normalizeTeam(expectedHome);
+  const away = normalizeTeam(expectedAway);
+  const candidateHomeKey = normalizeTeam(candidateHome);
+  const candidateAwayKey = normalizeTeam(candidateAway);
+  if (!home || !away || !candidateHomeKey || !candidateAwayKey) return false;
+  return (home === candidateHomeKey || home.includes(candidateHomeKey) || candidateHomeKey.includes(home))
+    && (away === candidateAwayKey || away.includes(candidateAwayKey) || candidateAwayKey.includes(away));
+};
+
+const numberOrNull = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const footballDataStatus = (status?: string) => {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'FINISHED') return 'FT';
+  if (normalized === 'POSTPONED') return 'PST';
+  if (normalized === 'CANCELLED') return 'CANC';
+  if (normalized === 'SUSPENDED') return 'ABD';
+  if (normalized === 'IN_PLAY' || normalized === 'PAUSED') return '2H';
+  return normalized;
+};
+
+const sportsDbStatus = (status?: string, hasScore = false) => {
+  const normalized = String(status || '').toUpperCase();
+  if (/FINISH|FT|AFTER EXTRA TIME|PENALT/.test(normalized) || (!normalized && hasScore)) return 'FT';
+  if (/POSTPON/.test(normalized)) return 'PST';
+  if (/CANCEL/.test(normalized)) return 'CANC';
+  if (/ABANDON|SUSPEND/.test(normalized)) return 'ABD';
+  return normalized;
+};
+
+const fetchFootballDataFixture = async (analysis: StoredDailyAnalysis): Promise<ApiFixture | null> => {
+  const key = getEnv('FOOTBALL_DATA_API_KEY');
+  if (!key || !analysis.date) return null;
+  const url = new URL('https://api.football-data.org/v4/matches');
+  url.searchParams.set('dateFrom', String(analysis.date));
+  url.searchParams.set('dateTo', String(analysis.date));
+  const response = await fetch(url, { headers: { 'X-Auth-Token': key } });
+  if (!response.ok) throw new Error(`football-data.org matches failed: ${response.status}`);
+  const payload = await response.json() as { matches?: FootballDataMatch[] };
+  const match = (payload.matches || []).find((candidate) => teamsMatch(
+    analysis.homeTeam,
+    analysis.awayTeam,
+    candidate.homeTeam?.name,
+    candidate.awayTeam?.name,
+  ));
+  if (!match) return null;
+  return {
+    fixture: {
+      id: match.id,
+      date: match.utcDate,
+      status: { short: footballDataStatus(match.status), long: match.status },
+    },
+    league: { id: match.competition?.id, name: match.competition?.name },
+    teams: {
+      home: { id: match.homeTeam?.id, name: match.homeTeam?.name },
+      away: { id: match.awayTeam?.id, name: match.awayTeam?.name },
+    },
+    goals: {
+      home: numberOrNull(match.score?.fullTime?.home),
+      away: numberOrNull(match.score?.fullTime?.away),
+    },
+    score: {
+      halftime: {
+        home: numberOrNull(match.score?.halfTime?.home),
+        away: numberOrNull(match.score?.halfTime?.away),
+      },
+      fulltime: {
+        home: numberOrNull(match.score?.fullTime?.home),
+        away: numberOrNull(match.score?.fullTime?.away),
+      },
+    },
+  };
+};
+
+const fetchSportsDbFixture = async (analysis: StoredDailyAnalysis): Promise<ApiFixture | null> => {
+  const key = getEnv('THESPORTSDB_API_KEY');
+  if (!key || !analysis.date) return null;
+  const url = new URL(`https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/eventsday.php`);
+  url.searchParams.set('d', String(analysis.date));
+  url.searchParams.set('s', 'Soccer');
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`TheSportsDB events failed: ${response.status}`);
+  const payload = await response.json() as { events?: SportsDbEvent[] | null };
+  const event = (payload.events || []).find((candidate) => teamsMatch(
+    analysis.homeTeam,
+    analysis.awayTeam,
+    candidate.strHomeTeam,
+    candidate.strAwayTeam,
+  ));
+  if (!event) return null;
+  const home = numberOrNull(event.intHomeScore);
+  const away = numberOrNull(event.intAwayScore);
+  return {
+    fixture: {
+      id: numberOrNull(event.idEvent) || undefined,
+      date: event.strTimestamp,
+      status: {
+        short: sportsDbStatus(event.strStatus, home !== null && away !== null),
+        long: event.strStatus,
+      },
+    },
+    league: { name: event.strLeague },
+    teams: {
+      home: { name: event.strHomeTeam },
+      away: { name: event.strAwayTeam },
+    },
+    goals: { home, away },
+    score: { fulltime: { home, away } },
+  };
+};
+
+const resolveFixtureForResult = async (analysis: StoredDailyAnalysis): Promise<ResolvedFixture | null> => {
+  const fixtureId = String(analysis.fixtureId || '');
+  if (fixtureId) {
+    try {
+      const fixtures = await requestApiFootball<ApiFixture>('/fixtures', { id: fixtureId });
+      if (fixtures[0]) return { fixture: fixtures[0], provider: 'api-football' };
+    } catch {
+      // Continue through the configured result providers.
+    }
+  }
+
+  try {
+    const fixture = await fetchFootballDataFixture(analysis);
+    if (fixture) return { fixture, provider: 'football-data.org' };
+  } catch {
+    // Continue to TheSportsDB.
+  }
+
+  try {
+    const fixture = await fetchSportsDbFixture(analysis);
+    if (fixture) return { fixture, provider: 'TheSportsDB' };
+  } catch {
+    // The caller leaves the ticket unresolved when every provider fails.
+  }
+  return null;
 };
 
 const isWorldCupFixture = (fixture: ApiFixture) =>
@@ -734,6 +918,8 @@ export const updateWorldCupResults = async () => {
   let updated = 0;
   let pendingReview = 0;
   let skipped = 0;
+  let providerUnavailable = 0;
+  const providerUsage: Record<string, number> = {};
 
   for (const docSnapshot of snapshot.docs) {
     const analysis = { id: docSnapshot.id, ...docSnapshot.data() } as StoredDailyAnalysis;
@@ -741,21 +927,15 @@ export const updateWorldCupResults = async () => {
       skipped += 1;
       continue;
     }
-    const fixtureId = String(analysis.fixtureId || '');
-    if (!fixtureId) {
-      pendingReview += 1;
-      await docSnapshot.ref.update({ status: 'PENDING_REVIEW', updatedAt: FieldValue.serverTimestamp() });
-      await syncDailyPublicIndexesForStatus({ ...analysis, status: 'PENDING_REVIEW' }, 'PENDING_REVIEW');
-      await logCron({
-        action: 'results',
-        status: 'success',
-        message: `World Cup pick moved to pending review: ${analysis.homeTeam} - ${analysis.awayTeam}.`,
-        details: { id: analysis.id, fixtureId: analysis.fixtureId, reason: 'missing_fixture_id' },
-      });
+    const resolved = await resolveFixtureForResult(analysis);
+    if (!resolved) {
+      providerUnavailable += 1;
+      skipped += 1;
       continue;
     }
-    const fixtures = await requestApiFootball<ApiFixture>('/fixtures', { id: fixtureId });
-    const fixture = fixtures[0];
+    const fixture = resolved.fixture;
+    const fixtureId = String(analysis.fixtureId || fixture.fixture?.id || '');
+    providerUsage[resolved.provider] = (providerUsage[resolved.provider] || 0) + 1;
     const shortStatus = fixture?.fixture?.status?.short || '';
     const homeScore = fixture?.score?.fulltime?.home ?? fixture?.goals?.home ?? null;
     const awayScore = fixture?.score?.fulltime?.away ?? fixture?.goals?.away ?? null;
@@ -772,7 +952,7 @@ export const updateWorldCupResults = async () => {
         action: 'results',
         status: 'success',
         message: `World Cup pick marked REFUND: ${analysis.homeTeam} - ${analysis.awayTeam}.`,
-        details: { id: analysis.id, fixtureId, fixtureStatus: shortStatus },
+        details: { id: analysis.id, fixtureId, fixtureStatus: shortStatus, provider: resolved.provider },
       });
       updated += 1;
       continue;
@@ -801,7 +981,7 @@ export const updateWorldCupResults = async () => {
         action: 'results',
         status: 'success',
         message: `World Cup pick needs manual review: ${analysis.homeTeam} - ${analysis.awayTeam}.`,
-        details: { id: analysis.id, fixtureId, result, prediction: analysis.prediction },
+        details: { id: analysis.id, fixtureId, result, prediction: analysis.prediction, provider: resolved.provider },
       });
       pendingReview += 1;
     } else {
@@ -811,7 +991,7 @@ export const updateWorldCupResults = async () => {
         action: 'results',
         status: 'success',
         message: `World Cup pick marked ${status}: ${analysis.homeTeam} - ${analysis.awayTeam}.`,
-        details: { id: analysis.id, fixtureId, result, prediction: analysis.prediction },
+        details: { id: analysis.id, fixtureId, result, prediction: analysis.prediction, provider: resolved.provider },
       });
       updated += 1;
     }
@@ -819,12 +999,12 @@ export const updateWorldCupResults = async () => {
 
   await logCron({
     action: 'results',
-    status: 'success',
+    status: providerUnavailable === snapshot.size && snapshot.size > 0 ? 'skipped' : 'success',
     message: 'World Cup result update completed.',
-    details: { checked: snapshot.size, updated, pendingReview, skipped },
+    details: { checked: snapshot.size, updated, pendingReview, skipped, providerUnavailable, providerUsage },
   });
 
-  return { checked: snapshot.size, updated, pendingReview, skipped };
+  return { checked: snapshot.size, updated, pendingReview, skipped, providerUnavailable, providerUsage };
 };
 
 export const logCron = async (payload: CronLogPayload) => {
