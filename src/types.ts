@@ -52,7 +52,7 @@ export enum MatchStatus {
 export interface MatchResult {
   id: string;
   competitionCode?: string;
-  source?: 'football-data.org' | 'mock';
+  source?: 'football-data.org' | 'api-football' | 'mock';
   homeTeam: string;
   awayTeam: string;
   league: string;
@@ -259,6 +259,8 @@ export interface DailyAnalysisItem {
   topPick?: boolean;
   units?: number;
   fixtureId?: number;
+  kickoffAt?: string;
+  analysisSource?: 'api-predictions';
   date: string;
   matchTime?: string;
   kickoffTime?: string;
