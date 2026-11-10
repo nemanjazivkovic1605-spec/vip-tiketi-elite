@@ -1,4 +1,4 @@
-import { TicketStatus, type ImportedMatch } from '../types';
+import { TicketStatus, type ImportedMatch } from '../types.js';
 
 export const evaluateFullTimePrediction = (prediction: string, homeScore?: number, awayScore?: number): TicketStatus.WON | TicketStatus.LOST | TicketStatus.REFUND | undefined => {
   if (![homeScore, awayScore].every((score) => Number.isInteger(score) && Number(score) >= 0)) return undefined;
