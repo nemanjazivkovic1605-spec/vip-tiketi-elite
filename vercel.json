@@ -22,13 +22,19 @@
       "destination": "/index.html"
     }
   ],
+  "functions": {
+    "api/daily-picks.ts": { "maxDuration": 300 },
+    "api/daily-results.ts": { "maxDuration": 300 },
+    "api/fetch-daily-sports.ts": { "maxDuration": 120 },
+    "api/football-data.ts": { "maxDuration": 120 }
+  },
   "crons": [
     {
-      "path": "/api/world-cup-seed",
+      "path": "/api/daily-picks",
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/world-cup-results",
+      "path": "/api/daily-results",
       "schedule": "30 23 * * *"
     }
   ]
