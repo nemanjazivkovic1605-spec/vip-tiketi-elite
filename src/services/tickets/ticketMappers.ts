@@ -1,7 +1,7 @@
 import { type Tip, TicketStatus } from '../../types';
 
 export const mapTicketForPublic = (tip: Tip): Tip => {
-  if (tip.status === TicketStatus.PENDING) {
+  if (tip.status === TicketStatus.PENDING || tip.status === TicketStatus.POSTPONED) {
     return {
       ...tip,
       locked: true,
