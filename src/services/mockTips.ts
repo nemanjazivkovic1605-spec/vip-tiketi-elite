@@ -720,6 +720,38 @@ export const mockTipsService = {
       ...updatedTip,
       updatedAt: new Date().toISOString(),
     });
+    if (normalized.id.startsWith('daily-')) {
+      const analysisId = normalized.id.slice('daily-'.length);
+      const linked = await getDoc(doc(db, DAILY_ANALYSES_COLLECTION, analysisId));
+      if (linked.exists()) {
+        if (normalized.matches.length !== 1) throw new Error('Dnevni predlog sadrži jedan meč. Za kombinaciju napravite poseban tiket.');
+        const { dailyAnalysesService } = await import('./dailyAnalysesService');
+        const match = normalized.matches[0];
+        const status = normalized.status === TicketStatus.PENDING ? 'ACTIVE' : normalized.status;
+        const text = match.analysis || normalized.analysis || '';
+        const result = match.result || normalized.result || '';
+        const current = linked.data();
+        const changedResult = String(current.result || '') !== result || String(current.status || 'ACTIVE') !== status;
+        await dailyAnalysesService.updateManualAnalysis(analysisId, {
+          date: match.eventDate || normalized.date, time: match.eventTime || match.time,
+          matchTime: match.eventTime || match.time, kickoffTime: match.eventTime || match.time,
+          homeTeam: match.homeTeam, awayTeam: match.awayTeam, league: match.league,
+          prediction: match.prediction, odds: match.odds, units: normalized.unitsStake,
+          access: normalized.isVip ? 'VIP' : 'FREE', reasoning: text, analysis: text,
+          ...(normalized.isVip ? { vipAnalysis: text } : { freeAnalysis: text }),
+          publishedAt: normalized.publishedAt, publishedDate: normalized.publishedDate, publishedTime: normalized.publishedTime,
+          status, enabled: normalized.publicationStatus === TipPublicationStatus.PUBLISHED,
+          hidden: normalized.publicationStatus !== TipPublicationStatus.PUBLISHED,
+          ...(changedResult ? {
+            result, resultManualOverride: true,
+            ...(result.match(/^\s*(\d+)\s*[:-]\s*(\d+)\s*$/) ? {
+              homeScore: Number(result.match(/\d+/g)![0]), awayScore: Number(result.match(/\d+/g)![1]),
+            } : {}),
+          } : {}),
+        });
+        return;
+      }
+    }
     const [privateSnapshot, publicSnapshot, publicStatsSnapshot] = await Promise.all([
       getDoc(getTicketDoc(normalized.id)),
       getDoc(getPublicTicketDoc(normalized.id)),
@@ -735,6 +767,14 @@ export const mockTipsService = {
   },
 
   deleteTip: async (id: string): Promise<void> => {
+    if (id.startsWith('daily-')) {
+      const analysisId = id.slice('daily-'.length);
+      await Promise.all([
+        deleteDoc(doc(db, DAILY_ANALYSES_COLLECTION, analysisId)),
+        deleteDocIfExists(doc(db, 'publicDailyAnalyses', analysisId)),
+        deleteDocIfExists(doc(db, 'freeDailyAnalyses', analysisId)),
+      ]);
+    }
     await Promise.all([
       deleteDoc(getTicketDoc(id)),
       deleteDocIfExists(getPublicTicketDoc(id)),
@@ -744,6 +784,17 @@ export const mockTipsService = {
   },
 
   publishTip: async (id: string): Promise<void> => {
+    if (id.startsWith('daily-')) {
+      const analysisId = id.slice('daily-'.length);
+      const linked = await getDoc(doc(db, DAILY_ANALYSES_COLLECTION, analysisId));
+      if (linked.exists()) {
+        const { dailyAnalysesService } = await import('./dailyAnalysesService');
+        await dailyAnalysesService.updateManualAnalysis(analysisId, {
+          enabled: true, hidden: false, ...(linked.data().status === 'HIDDEN' ? { status: 'ACTIVE' } : {}),
+        });
+        return;
+      }
+    }
     const snapshot = await getDoc(getTicketDoc(id));
     if (snapshot.exists()) {
       const existingTip = {
@@ -757,7 +808,16 @@ export const mockTipsService = {
     }
   },
 
-  unpublishTip: async (id: string): Promise<void> => {
+  unpublishTip: async (id: string, options?: { syncDaily: boolean }): Promise<void> => {
+    if (options?.syncDaily !== false && id.startsWith('daily-')) {
+      const analysisId = id.slice('daily-'.length);
+      const linked = await getDoc(doc(db, DAILY_ANALYSES_COLLECTION, analysisId));
+      if (linked.exists()) {
+        const { dailyAnalysesService } = await import('./dailyAnalysesService');
+        await dailyAnalysesService.updateManualAnalysis(analysisId, { enabled: false, hidden: true });
+        return;
+      }
+    }
     await updateDoc(getTicketDoc(id), {
       publicationStatus: TipPublicationStatus.DRAFT,
       publishedAt: '',
