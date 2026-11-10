@@ -814,23 +814,11 @@ export default function AdminDashboard() {
   };
 
   const handlePullDailyAnalyses = async (date: string, label: string) => {
-    const existingForDate = dailyAnalyses.filter((analysis) => analysis.date === date);
-    const hasManualOverrides = existingForDate.some((analysis) => analysis.manualOverride);
-    if (existingForDate.length > 0) {
-      const message = hasManualOverrides
-        ? 'Ovaj tiket je ručno izmenjen. Da li želiš osvežavanje iz API-ja? Ručno izmenjeni tipovi neće biti pregazeni.'
-        : 'Za ovaj dan već postoje dnevni tipovi. Da li želiš osvežavanje iz API-ja?';
-
-      if (!confirm(message)) {
-        return;
-      }
-    }
-
     setDailyPullMessage('');
     setDailyPullLoadingDate(date);
     try {
       const result = await dailyAnalysesService.pullFromApiForDate(date);
-      setDailyPullMessage(`${label}: povučeno ${result.fetched}, sačuvano ${result.saved}${result.skippedManualOverride ? `, preskočeno ručno izmenjenih ${result.skippedManualOverride}` : ''}${result.failed ? `, neuspešno ${result.failed}` : ''}. Analize se generišu samo ručnim klikom.`);
+      setDailyPullMessage(`${label}: dostupno ${result.fetched}, objavljeno ${result.saved}${result.skippedManualOverride ? `, zaštićeno ručno izmenjenih ${result.skippedManualOverride}` : ''}${result.failed ? `, neuspešno ${result.failed}` : ''}. ${result.message || 'Postojeći predlozi i ručne izmene su sačuvani.'}`);
       await refreshData();
       console.debug('[daily-admin-debug] pull finished and refreshed', {
         requestedDate: date,
@@ -2458,7 +2446,7 @@ export default function AdminDashboard() {
                   <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                       <h2 className="text-3xl font-display font-bold">Dnevni Tipovi</h2>
-                      <p className="mt-2 text-sm text-neutral-500">Poluautomatski sistem: API puni Firestore bazu, admin potvrđuje, menja i objavljuje finalnu verziju.</p>
+                      <p className="mt-2 text-sm text-neutral-500">Automatski izbor i objava do 1 FREE i 2 VIP predloga dnevno iz dostupnih liga. Ovde možete ručno menjati tipove, kvote i vidljivost.</p>
                       {dailyPullMessage && <p className="mt-3 rounded-xl border border-gold-500/20 bg-gold-500/10 px-4 py-3 text-xs font-bold text-gold-300">{dailyPullMessage}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
