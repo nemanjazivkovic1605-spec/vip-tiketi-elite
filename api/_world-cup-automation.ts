@@ -2,6 +2,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { initializeApp, cert, getApps, type App } from 'firebase-admin/app';
 import { getFirestore, FieldValue, type Firestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
+import { mapTicketForPublic } from '../src/services/tickets/ticketMappers.js';
+import { applyDailyResult } from '../server/dailyPublication.js';
+import { requestSports } from '../server/sportsApi.js';
+import { evaluateFullTimePrediction } from '../src/utils/predictionResults.js';
+import { footballDataRegularScore, fullTimeFixtureScore } from '../server/resultScores.js';
 
 type ApiFixture = {
   fixture?: {
@@ -42,6 +47,8 @@ type FootballDataMatch = {
   homeTeam?: { id?: number; name?: string };
   awayTeam?: { id?: number; name?: string };
   score?: {
+    duration?: string;
+    regularTime?: { home?: number | null; away?: number | null };
     halfTime?: { home?: number | null; away?: number | null };
     fullTime?: { home?: number | null; away?: number | null };
   };
@@ -168,7 +175,7 @@ export const getRequestUrl = (request: IncomingMessage) =>
 
 export const verifyCronRequest = (request: IncomingMessage) => {
   const secret = getEnv('CRON_SECRET');
-  if (!secret) return true;
+  if (!secret) return false;
   const headerSecret = request.headers['x-cron-secret'];
   const authHeader = request.headers.authorization;
   return headerSecret === secret || authHeader === `Bearer ${secret}`;
@@ -278,6 +285,7 @@ const fetchFootballDataFixture = async (analysis: StoredDailyAnalysis): Promise<
     candidate.awayTeam?.name,
   ));
   if (!match) return null;
+  const regularScore = footballDataRegularScore(match.score);
   return {
     fixture: {
       id: match.id,
@@ -289,19 +297,13 @@ const fetchFootballDataFixture = async (analysis: StoredDailyAnalysis): Promise<
       home: { id: match.homeTeam?.id, name: match.homeTeam?.name },
       away: { id: match.awayTeam?.id, name: match.awayTeam?.name },
     },
-    goals: {
-      home: numberOrNull(match.score?.fullTime?.home),
-      away: numberOrNull(match.score?.fullTime?.away),
-    },
+    goals: regularScore,
     score: {
       halftime: {
         home: numberOrNull(match.score?.halfTime?.home),
         away: numberOrNull(match.score?.halfTime?.away),
       },
-      fulltime: {
-        home: numberOrNull(match.score?.fullTime?.home),
-        away: numberOrNull(match.score?.fullTime?.away),
-      },
+      fulltime: regularScore,
     },
   };
 };
@@ -343,12 +345,12 @@ const fetchSportsDbFixture = async (analysis: StoredDailyAnalysis): Promise<ApiF
   };
 };
 
-const resolveFixtureForResult = async (analysis: StoredDailyAnalysis): Promise<ResolvedFixture | null> => {
+const resolveFixtureForResult = async (analysis: StoredDailyAnalysis, allowSportsDb = true): Promise<ResolvedFixture | null> => {
   const fixtureId = String(analysis.fixtureId || '');
   if (fixtureId) {
     try {
-      const fixtures = await requestApiFootball<ApiFixture>('/fixtures', { id: fixtureId });
-      if (fixtures[0]) return { fixture: fixtures[0], provider: 'api-football' };
+      const fixtures = (await requestSports<ApiFixture>('/fixtures', { id: fixtureId }, { ttlMs: 2 * 60_000 })).response;
+      if (fixtures[0] && teamsMatch(analysis.homeTeam, analysis.awayTeam, fixtures[0].teams?.home?.name, fixtures[0].teams?.away?.name)) return { fixture: fixtures[0], provider: 'api-football' };
     } catch {
       // Continue through the configured result providers.
     }
@@ -362,7 +364,7 @@ const resolveFixtureForResult = async (analysis: StoredDailyAnalysis): Promise<R
   }
 
   try {
-    const fixture = await fetchSportsDbFixture(analysis);
+    const fixture = allowSportsDb ? await fetchSportsDbFixture(analysis) : null;
     if (fixture) return { fixture, provider: 'TheSportsDB' };
   } catch {
     // The caller leaves the ticket unresolved when every provider fails.
@@ -821,16 +823,8 @@ const evaluatePrediction = (
   fixture?: ApiFixture,
 ) => {
   const normalized = prediction.trim().toUpperCase();
-  const total = homeScore + awayScore;
-  if (normalized === 'GG') return homeScore > 0 && awayScore > 0 ? 'WON' : 'LOST';
-  if (normalized === '1') return homeScore > awayScore ? 'WON' : 'LOST';
-  if (normalized === 'X') return homeScore === awayScore ? 'WON' : 'LOST';
-  if (normalized === '2') return awayScore > homeScore ? 'WON' : 'LOST';
-  if (normalized === '1X') return homeScore >= awayScore ? 'WON' : 'LOST';
-  if (normalized === 'X2') return awayScore >= homeScore ? 'WON' : 'LOST';
-  if (normalized === '3+' || normalized === 'OVER 2.5') return total >= 3 ? 'WON' : 'LOST';
-  if (normalized === '2+' || normalized === 'OVER 1.5') return total >= 2 ? 'WON' : 'LOST';
-  if (normalized === 'UNDER 3.5') return total < 4 ? 'WON' : 'LOST';
+  const fullTime = evaluateFullTimePrediction(prediction, homeScore, awayScore);
+  if (fullTime) return fullTime;
   if (normalized.includes('POLUVREME') && normalized.includes('OVER 0.5')) {
     const halfHome = fixture?.score?.halftime?.home;
     const halfAway = fixture?.score?.halftime?.away;
@@ -845,18 +839,6 @@ const evaluatePrediction = (
     if (homeTeam && normalized.includes(homeTeam)) return homeScore > 0 ? 'WON' : 'LOST';
     if (awayTeam && normalized.includes(awayTeam)) return awayScore > 0 ? 'WON' : 'LOST';
     return 'PENDING_REVIEW';
-  }
-  const overMatch = normalized.match(/^OVER\s*(\d+(?:\.\d+)?)$/);
-  if (overMatch) {
-    const threshold = Number(overMatch[1]);
-    if (Number.isInteger(threshold) && total === threshold) return 'REFUND';
-    return total > threshold ? 'WON' : 'LOST';
-  }
-  const underMatch = normalized.match(/^UNDER\s*(\d+(?:\.\d+)?)$/);
-  if (underMatch) {
-    const threshold = Number(underMatch[1]);
-    if (Number.isInteger(threshold) && total === threshold) return 'REFUND';
-    return total < threshold ? 'WON' : 'LOST';
   }
   return 'PENDING_REVIEW';
 };
@@ -903,13 +885,22 @@ const publishHistoryTicket = async (analysis: StoredDailyAnalysis, status: strin
     updatedAt: new Date().toISOString(),
   };
   await db.collection('tickets').doc(ticketId).set(ticket, { merge: true });
-  await db.collection('publicTickets').doc(ticketId).set(ticket, { merge: true });
-  await db.collection('publicStatsTickets').doc(ticketId).set(ticket, { merge: true });
+  const safeTicket = mapTicketForPublic(ticket as any);
+  await db.collection('publicTickets').doc(ticketId).set(safeTicket);
+  await db.collection('publicStatsTickets').doc(ticketId).set(safeTicket);
 };
 
-export const updateWorldCupResults = async () => {
+export const updateWorldCupResults = async (allDailyPicks = false) => {
   const db = initAdminDb();
-  const snapshot = await db.collection(DAILY_ANALYSES_COLLECTION)
+  const cutoff = dateInBelgrade();
+  const since = new Date(`${cutoff}T12:00:00Z`);
+  since.setUTCDate(since.getUTCDate() - 6);
+  const snapshot = allDailyPicks
+    ? await db.collection(DAILY_ANALYSES_COLLECTION)
+      .where('date', '>=', since.toISOString().slice(0, 10))
+      .where('date', '<=', cutoff)
+      .get()
+    : await db.collection(DAILY_ANALYSES_COLLECTION)
     .where('source', '==', 'api-football')
     .where('competition', '==', 'World Cup 2026')
     .where('status', 'in', ['ACTIVE', 'PENDING_REVIEW'])
@@ -921,18 +912,24 @@ export const updateWorldCupResults = async () => {
   let providerUnavailable = 0;
   const providerUsage: Record<string, number> = {};
 
-  for (const docSnapshot of snapshot.docs) {
+  const eligibleDocs = snapshot.docs.filter((item) => {
+    const data = item.data();
+    return data.source === 'api-football' && data.sport !== 'basketball'
+      && ['ACTIVE', 'PENDING_REVIEW', 'POSTPONED'].includes(String(data.status)) && data.resultManualOverride !== true
+      && data.enabled !== false && data.hidden !== true;
+  }).slice(0, 30);
+  for (const docSnapshot of eligibleDocs) {
     const analysis = { id: docSnapshot.id, ...docSnapshot.data() } as StoredDailyAnalysis;
     if (analysis.resultManualOverride === true) {
       skipped += 1;
       continue;
     }
-    const resolved = await resolveFixtureForResult(analysis);
+    const resolved = await resolveFixtureForResult(analysis, !allDailyPicks);
     if (!resolved) {
       providerUnavailable += 1;
       skipped += 1;
       const isPastFixture = String(analysis.date || '') < dateInBelgrade();
-      if (isPastFixture && analysis.status !== 'PENDING_REVIEW') {
+      if (!allDailyPicks && isPastFixture && analysis.status !== 'PENDING_REVIEW') {
         await docSnapshot.ref.update({
           status: 'PENDING_REVIEW',
           fixtureStatus: 'RESULT_UNAVAILABLE',
@@ -947,8 +944,17 @@ export const updateWorldCupResults = async () => {
     const fixtureId = String(analysis.fixtureId || fixture.fixture?.id || '');
     providerUsage[resolved.provider] = (providerUsage[resolved.provider] || 0) + 1;
     const shortStatus = fixture?.fixture?.status?.short || '';
-    const homeScore = fixture?.score?.fulltime?.home ?? fixture?.goals?.home ?? null;
-    const awayScore = fixture?.score?.fulltime?.away ?? fixture?.goals?.away ?? null;
+    const { homeScore, awayScore } = fullTimeFixtureScore(fixture);
+
+    if (allDailyPicks) {
+      const changed = await applyDailyResult(db, analysis as any, {
+        fixtureStatus: shortStatus, homeScore, awayScore,
+        finished: FINISHED_STATUSES.has(shortStatus), postponed: POSTPONED_STATUSES.has(shortStatus),
+      }, (prediction, home, away) => evaluatePrediction(prediction, home, away, fixture));
+      if (changed) updated += 1;
+      else skipped += 1;
+      continue;
+    }
 
     if (POSTPONED_STATUSES.has(shortStatus)) {
       await docSnapshot.ref.update({
@@ -1011,10 +1017,10 @@ export const updateWorldCupResults = async () => {
     action: 'results',
     status: providerUnavailable === snapshot.size && snapshot.size > 0 ? 'skipped' : 'success',
     message: 'World Cup result update completed.',
-    details: { checked: snapshot.size, updated, pendingReview, skipped, providerUnavailable, providerUsage },
+    details: { checked: eligibleDocs.length, updated, pendingReview, skipped, providerUnavailable, providerUsage },
   });
 
-  return { checked: snapshot.size, updated, pendingReview, skipped, providerUnavailable, providerUsage };
+  return { checked: eligibleDocs.length, updated, pendingReview, skipped, providerUnavailable, providerUsage };
 };
 
 export const logCron = async (payload: CronLogPayload) => {
