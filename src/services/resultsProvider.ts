@@ -3,12 +3,7 @@ import { footballApiService } from './footballApiService';
 
 export const resultsProvider = {
   getMatchesForDate: async (date: string): Promise<MatchResult[]> => {
-    try {
-      return footballApiService.fetchMatches({ dateFrom: date, dateTo: date });
-    } catch (error) {
-      console.error('Error fetching matches for date:', error);
-      return [];
-    }
+    return footballApiService.fetchMatches({ dateFrom: date, dateTo: date });
   },
 
   getTodayMatches: async (): Promise<MatchResult[]> => {
