@@ -3,46 +3,25 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv, type Plugin} from 'vite';
 
-const dailySportsDevApi = (apiKey: string): Plugin => ({
-  name: 'daily-sports-dev-api',
+const serverApis = (): Plugin => ({
+  name: 'server-apis',
   configureServer(server) {
-    server.middlewares.use('/api/fetch-daily-sports', async (request, response) => {
+    const routes: Record<string, string> = {
+      '/api/fetch-daily-sports': '/api/fetch-daily-sports.ts',
+      '/api/football-data': '/api/football-data.ts',
+      '/api/daily-picks': '/api/daily-picks.ts',
+      '/api/daily-results': '/api/daily-results.ts',
+    };
+    server.middlewares.use(async (request, response, next) => {
+      const route = routes[new URL(request.url || '/', 'http://localhost').pathname];
+      if (!route) return next();
       try {
-        if (!apiKey) {
-          response.statusCode = 502;
-          response.setHeader('Content-Type', 'application/json; charset=utf-8');
-          response.end(JSON.stringify({ error: 'API_FOOTBALL_KEY is not configured.' }));
-          return;
-        }
-
-        const requestUrl = new URL(request.url || '/', 'http://localhost');
-        const sport = requestUrl.searchParams.get('sport') === 'basketball' ? 'basketball' : 'football';
-        const date = requestUrl.searchParams.get('date') || '';
-        const timezone = requestUrl.searchParams.get('timezone') || 'Europe/Belgrade';
-
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          response.statusCode = 400;
-          response.setHeader('Content-Type', 'application/json; charset=utf-8');
-          response.end(JSON.stringify({ error: 'Valid date is required.' }));
-          return;
-        }
-
-        const baseUrl = sport === 'basketball'
-          ? 'https://v1.basketball.api-sports.io/games'
-          : 'https://v3.football.api-sports.io/fixtures';
-        const apiUrl = new URL(baseUrl);
-        apiUrl.searchParams.set('date', date);
-        apiUrl.searchParams.set('timezone', timezone);
-
-        const apiResponse = await fetch(apiUrl, { headers: { 'x-apisports-key': apiKey } });
-        const payload = await apiResponse.text();
-        response.statusCode = apiResponse.status;
-        response.setHeader('Content-Type', 'application/json; charset=utf-8');
-        response.end(payload);
-      } catch (error) {
+        const module = await server.ssrLoadModule(route);
+        await module.default(request, response);
+      } catch {
         response.statusCode = 502;
         response.setHeader('Content-Type', 'application/json; charset=utf-8');
-        response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Daily sports dev request failed.' }));
+        response.end(JSON.stringify({ error: 'Sportski API trenutno nije dostupan.' }));
       }
     });
   },
@@ -50,10 +29,12 @@ const dailySportsDevApi = (apiKey: string): Plugin => ({
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const apiFootballKey = env.API_FOOTBALL_KEY || env.VITE_FOOTBALL_API_KEY || '';
+  for (const [key, value] of Object.entries(env)) {
+    if (!process.env[key]) process.env[key] = value;
+  }
 
   return {
-    plugins: [dailySportsDevApi(apiFootballKey), react(), tailwindcss()],
+    plugins: [serverApis(), react(), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
