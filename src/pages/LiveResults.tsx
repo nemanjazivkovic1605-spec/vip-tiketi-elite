@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { resultsProvider } from '../services/resultsProvider';
 import { MatchResult, MatchStatus } from '../types';
@@ -8,18 +8,28 @@ import { formatLeagueName } from '../utils/leagueMapper';
 export default function LiveResults() {
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [error, setError] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Belgrade' }).format(new Date()));
+  const requestId = useRef(0);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    const id = ++requestId.current;
     setLoading(true);
-    const matchesForDate = await resultsProvider.getMatchesForDate(selectedDate);
-    setMatches(matchesForDate);
-    setLoading(false);
-  };
+    setError('');
+    try {
+      const matchesForDate = await resultsProvider.getMatchesForDate(selectedDate);
+      if (id === requestId.current) setMatches(matchesForDate);
+    } catch (failure) {
+      if (id === requestId.current) setError(failure instanceof Error ? failure.message : 'Rezultati trenutno nisu dostupni.');
+    } finally {
+      if (id === requestId.current) setLoading(false);
+    }
+  }, [selectedDate]);
 
   useEffect(() => {
-    fetchData();
-  }, [selectedDate]);
+    void fetchData();
+    return () => { requestId.current++; };
+  }, [fetchData]);
 
   const getStatusColor = (status: MatchStatus) => {
     switch (status) {
@@ -44,7 +54,7 @@ export default function LiveResults() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
         <div className="max-w-2xl">
           <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">UZIVO <span className="gold-text">REZULTATI</span></h1>
-          <p className="text-neutral-400">Pratite najnovije rezultate i stats direktno sa terena. Podaci se azuriraju u realnom vremenu.</p>
+          <p className="text-neutral-400">Raspored i rezultati dostupnih fudbalskih liga. Osvežite prikaz za najnovije podatke.</p>
         </div>
 
         <div className="flex items-center gap-4 bg-white/[0.02] p-2 rounded-2xl border border-white/5">
@@ -53,7 +63,11 @@ export default function LiveResults() {
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="bg-transparent border-none text-sm font-bold text-neutral-200 outline-none p-2 cursor-pointer"
+            aria-label="Datum utakmica"
           />
+          <button onClick={() => void fetchData()} disabled={loading} aria-label="Osveži rezultate" className="p-2 text-gold-500 disabled:opacity-50">
+            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
@@ -61,6 +75,13 @@ export default function LiveResults() {
         <div className="flex flex-col items-center justify-center py-40">
            <div className="w-12 h-12 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mb-4"></div>
            <p className="text-neutral-500 font-bold uppercase tracking-widest text-xs">Ucitavanje rezultata...</p>
+        </div>
+      ) : error ? (
+        <div role="alert" className="text-center py-24 glass rounded-[3rem] px-6">
+          <AlertCircle className="text-gold-500 mx-auto mb-4" size={40} />
+          <h3 className="text-xl font-bold mb-2">Rezultati trenutno nisu dostupni</h3>
+          <p className="text-neutral-400">{error}</p>
+          <button onClick={() => void fetchData()} className="mt-6 text-gold-500 font-bold hover:underline">Pokušaj ponovo</button>
         </div>
       ) : matches.length > 0 ? (
         <div className="space-y-4">
@@ -111,7 +132,7 @@ export default function LiveResults() {
            <h3 className="text-xl font-bold mb-2">Trenutno nema dostupnih rezultata.</h3>
            <p className="text-neutral-500 max-w-sm mx-auto">Za izabrani datum ({selectedDate}) nema dostupnih rezultata.</p>
            <button
-             onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+             onClick={() => setSelectedDate(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Belgrade' }).format(new Date()))}
              className="mt-8 text-gold-500 font-bold uppercase text-xs tracking-widest hover:underline"
            >
              Vrati se na danasnje rezultate
