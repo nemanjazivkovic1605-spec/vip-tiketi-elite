@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
+import { isAdminRequest } from '../server/adminAuth.js';
+import { requestSports } from '../server/sportsApi.js';
+import { fullTimeFixtureScore } from '../server/resultScores.js';
 
 type ApiRequest = IncomingMessage & { body?: unknown };
 type FixtureLookup = {
@@ -21,8 +23,6 @@ type ApiFixture = {
   score?: { fulltime?: { home?: number | null; away?: number | null } };
 };
 
-const API_BASE = 'https://v3.football.api-sports.io';
-const TRUSTED_ADMIN_EMAILS = new Set(['nemanjazivkovic1605@gmail.com']);
 const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
 const POSTPONED_STATUSES = new Set(['PST', 'CANC', 'ABD', 'AWD', 'WO']);
 const MATCH_TIMEZONE = 'Europe/Belgrade';
@@ -72,32 +72,8 @@ const parseLookup = (input: unknown): FixtureLookup | null => {
   };
 };
 
-const verifyAdmin = async (authorization?: string) => {
-  const token = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
-  if (!token) return false;
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseConfig.apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken: token }),
-    },
-  );
-  if (!response.ok) return false;
-  const body = await response.json() as { users?: Array<{ email?: string }> };
-  return TRUSTED_ADMIN_EMAILS.has((body.users?.[0]?.email || '').toLowerCase());
-};
-
-const requestFixtures = async (params: Record<string, string>) => {
-  const apiKey = process.env.API_FOOTBALL_KEY?.trim();
-  if (!apiKey) throw new Error('API_FOOTBALL_KEY is not configured.');
-  const url = new URL(`${API_BASE}/fixtures`);
-  Object.entries(params).forEach(([key, value]) => value && url.searchParams.set(key, value));
-  const response = await fetch(url, { headers: { 'x-apisports-key': apiKey } });
-  if (!response.ok) throw new Error(`API-Football request failed: ${response.status}`);
-  const payload = await response.json() as { response?: ApiFixture[] };
-  return payload.response || [];
-};
+const requestFixtures = async (params: Record<string, string>) =>
+  (await requestSports<ApiFixture>('/fixtures', params, { ttlMs: 2 * 60_000 })).response;
 
 export const selectFixture = (fixtures: ApiFixture[], lookup: FixtureLookup) => {
   const expectedLeague = normalize(lookup.league);
@@ -113,7 +89,7 @@ export const selectFixture = (fixtures: ApiFixture[], lookup: FixtureLookup) => 
 
 export const findFixtureResult = async (lookup: FixtureLookup) => {
   let fixtures = lookup.fixtureId ? await requestFixtures({ id: lookup.fixtureId }) : [];
-  let fixture = fixtures[0];
+  let fixture = selectFixture(fixtures, lookup);
   let lookupMethod = fixture ? 'fixture_id' : 'teams_date_league';
 
   if (!fixture && lookup.date) {
@@ -123,8 +99,7 @@ export const findFixtureResult = async (lookup: FixtureLookup) => {
   if (!fixture) return null;
 
   const shortStatus = fixture.fixture?.status?.short || '';
-  const homeScore = fixture.score?.fulltime?.home ?? fixture.goals?.home ?? null;
-  const awayScore = fixture.score?.fulltime?.away ?? fixture.goals?.away ?? null;
+  const { homeScore, awayScore } = fullTimeFixtureScore(fixture);
   return {
     fixtureId: fixture.fixture?.id,
     lookupMethod,
@@ -149,7 +124,7 @@ export default async function handler(request: ApiRequest, response: ServerRespo
   }
 
   try {
-    if (!await verifyAdmin(request.headers.authorization)) {
+    if (!await isAdminRequest(request)) {
       sendJson(response, 403, { error: 'Admin authorization required.' });
       return;
     }
