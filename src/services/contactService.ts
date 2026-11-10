@@ -5,8 +5,7 @@ export interface ContactFormPayload {
   message: string;
 }
 
-const getEnvValue = (key: string) => {
-  const value = import.meta.env[key];
+const getEnvValue = (value: unknown) => {
   return typeof value === 'string' ? value.trim() : '';
 };
 
@@ -15,10 +14,10 @@ const normalizeDisplayEmail = (email: string) =>
   email === `support@${'elite'}tips.com` ? PUBLIC_CONTACT_EMAIL : email;
 
 export const CONTACT_DISPLAY_EMAIL =
-  normalizeDisplayEmail(getEnvValue('VITE_CONTACT_DISPLAY_EMAIL') || PUBLIC_CONTACT_EMAIL);
+  normalizeDisplayEmail(getEnvValue(import.meta.env.VITE_CONTACT_DISPLAY_EMAIL) || PUBLIC_CONTACT_EMAIL);
 
 export const CONTACT_TO_EMAIL =
-  getEnvValue('VITE_CONTACT_TO_EMAIL') || 'nemanjazivkovic1605@gmail.com';
+  getEnvValue(import.meta.env.VITE_CONTACT_TO_EMAIL) || 'nemanjazivkovic1605@gmail.com';
 
 export const isContactServiceConfigured = () => true;
 
