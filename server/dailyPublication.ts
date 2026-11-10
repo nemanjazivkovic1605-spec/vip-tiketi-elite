@@ -6,6 +6,7 @@ import { mapTicketForPublic } from '../src/services/tickets/ticketMappers.js';
 import { selectDailyPicks, type Candidate } from './dailyPickSelection.js';
 import { localDate, numberSetting } from './sportsApi.js';
 import { preparePublicStatsUpdate } from '../src/utils/publicStats.js';
+import { generateTicketCode } from '../src/utils/tickets.js';
 
 type Reservation = { id: string; fixtureId?: number; access: 'FREE' | 'VIP' };
 export const publicationSlots = (existing: Reservation[]) => {
@@ -22,6 +23,7 @@ export function analysisTicket(analysis: DailyAnalysisItem): Tip {
   return {
     id: `daily-${analysis.id}`, source: 'admin', type: 'vip_monthly', publicationStatus: TipPublicationStatus.PUBLISHED,
     date: analysis.date, publishedDate: analysis.publishedDate, publishedTime: analysis.publishedTime, publishedAt: analysis.publishedAt,
+    ticketCode: generateTicketCode(analysis.access === 'VIP', analysis.publishedDate || analysis.date, analysis.publishedTime || '12:00'),
     sourceProvider: analysis.source, fixtureId: String(analysis.providerFixtureId || analysis.fixtureId || ''),
     matches: [{ id: `${analysis.id}-match`, externalMatchId: String(analysis.fixtureId || ''),
       teams: `${analysis.homeTeam} - ${analysis.awayTeam}`, homeTeam: analysis.homeTeam, awayTeam: analysis.awayTeam,

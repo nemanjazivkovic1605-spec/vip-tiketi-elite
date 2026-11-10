@@ -1,5 +1,5 @@
 import { getSportsKey, requestSports, SportsApiError, validDate, localDate } from './sportsApi.js';
-import { freeFixturesForDate } from './freeFootballFeeds.js';
+import { cachedSportsJson, freeFixturesForDate } from './freeFootballFeeds.js';
 
 const LEAGUES: Record<string, number> = { PL: 39, EL1: 40, PD: 140, SA: 135, BL1: 78, FL1: 61, CL: 2, PPL: 94, DED: 88, BSA: 71, WC: 1, EC: 4 };
 const completed = new Set(['FT', 'AET', 'PEN']);
@@ -81,8 +81,8 @@ export async function resolveFootballData(path: string, params: Record<string, s
       const url = new URL(path, 'https://api.football-data.org/v4/');
       url.pathname = `/v4${path}`;
       Object.entries(params).forEach(([name, value]) => url.searchParams.set(name, value));
-      const response = await fetch(url, { headers: { 'X-Auth-Token': key }, signal: AbortSignal.timeout(12000) });
-      if (response.ok) return response.json();
+      const payload = await cachedSportsJson(url, { 'X-Auth-Token': key }, 120000);
+      if (path !== '/matches' || payload.matches?.length || params.dateTo && params.dateTo !== params.dateFrom) return payload;
     } catch { /* Free fixture sources follow. */ }
     if (path !== '/matches') throw apiSportsError || new SportsApiError('Izabrano takmicenje ili tabela trenutno nisu dostupni.', 503);
     const date = params.dateFrom || localDate();

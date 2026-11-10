@@ -4,6 +4,7 @@ import { mapOpenLigaMatch, mapSportsDbEvent, mapFootballDataMatch, cachedSportsJ
 import { loadIndependentOdds, mapVerifiedOdds, oddsSportForFixture } from '../server/oddsProvider.ts';
 import { getSportsKey } from '../server/sportsApi.ts';
 import { resultQueueCursor } from '../server/resultsQueue.ts';
+import { resolveFootballData } from '../server/footballData.ts';
 
 const fixture = mapOpenLigaMatch({ matchID: 12, matchDateTimeUTC: '2099-11-10T19:00:00Z', leagueName: '1. Bundesliga', leagueShortcut: 'bl1',
   team1: { teamName: 'Bayern Munich' }, team2: { teamName: 'Borussia Dortmund' }, matchIsFinished: false, matchResults: [] })!;
@@ -67,4 +68,25 @@ test('result pagination does not skip the second half of a due window or a timed
   assert.equal(resultQueueCursor(ids, ids, ids[4]), ids[4]);
   assert.equal(resultQueueCursor(ids, ids.slice(0, 20), ids[19]), ids[59]);
   assert.equal(resultQueueCursor(ids.slice(0, 3), ids.slice(0, 3), ids[2]), '');
+});
+
+test('an empty successful fixture response falls through to another real match source', async () => {
+  const original = globalThis.fetch, enabled = process.env.API_FOOTBALL_ENABLED, key = process.env.FOOTBALL_DATA_API_KEY;
+  process.env.API_FOOTBALL_ENABLED = 'false';
+  process.env.FOOTBALL_DATA_API_KEY = 'test-only-no-real-credential';
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    return new Response(JSON.stringify(url.includes('football-data.org') ? { matches: [] } : url.includes('thesportsdb.com') ? { events: [{
+      idEvent: '42', strHomeTeam: 'Home', strAwayTeam: 'Away', strLeague: 'League', strTimestamp: '2098-11-10T19:00:00Z', strStatus: 'NS',
+    }] } : []));
+  };
+  try {
+    const result = await resolveFootballData('/matches', { dateFrom: '2098-11-10', dateTo: '2098-11-10' });
+    assert.equal(result.matches.length, 1);
+    assert.equal(result.matches[0].source, 'TheSportsDB');
+  } finally {
+    globalThis.fetch = original;
+    if (enabled === undefined) delete process.env.API_FOOTBALL_ENABLED; else process.env.API_FOOTBALL_ENABLED = enabled;
+    if (key === undefined) delete process.env.FOOTBALL_DATA_API_KEY; else process.env.FOOTBALL_DATA_API_KEY = key;
+  }
 });
