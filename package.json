@@ -10,6 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
+    "stats:rebuild": "tsx scripts/rebuild-public-stats.ts",
+    "stats:rebuild:write": "tsx scripts/rebuild-public-stats.ts --write",
     "import:history:feb-2026": "tsx scripts/import-february-2026-history.ts",
     "import:history:feb-2026:write": "tsx scripts/import-february-2026-history.ts --write",
     "rebalance:history:feb-2026": "tsx scripts/rebalance-february-2026-history.ts",

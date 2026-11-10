@@ -1,4 +1,4 @@
-import { type Tip, type TicketProductType } from '../types';
+import { type Tip, type TicketProductType } from '../types.js';
 
 export const TICKET_PRODUCT_LABELS: Record<TicketProductType, string> = {
   elite_ticket: 'ELITE TIKET',
@@ -12,12 +12,13 @@ export const TICKET_PRODUCT_DESCRIPTIONS: Record<TicketProductType, string> = {
   vip_monthly: 'Dnevni i mesecni VIP tipovi sa odvojenom statistikom.',
 };
 
-export const getTicketProductType = (tip: Pick<Tip, 'type' | 'id' | 'isVip' | 'ticketType' | 'matches'>): TicketProductType => {
+export const getTicketProductType = (tip: Pick<Tip, 'type' | 'id' | 'isVip' | 'ticketType' | 'matches' | 'categoryManualOverride'>): TicketProductType => {
   const rawTicketType = String(tip.ticketType || '').toLowerCase();
   const rawId = String(tip.id || '').toLowerCase();
 
+  if (tip.type === 'safe_pick' || tip.type === 'vip_monthly' || tip.categoryManualOverride) return tip.type || 'vip_monthly';
   if (rawId.startsWith('history-') || rawId.startsWith('daily-')) return 'vip_monthly';
-  if (tip.type === 'safe_pick' || tip.type === 'elite_ticket' || tip.type === 'vip_monthly') return tip.type;
+  if (tip.type === 'elite_ticket') return tip.type;
 
   if (rawTicketType.includes('monthly') || rawTicketType.includes('mesec') || rawTicketType.includes('mese') || rawTicketType.includes('dnevni') || rawTicketType.includes('daily')) return 'vip_monthly';
   if (rawTicketType.includes('safe')) return 'safe_pick';

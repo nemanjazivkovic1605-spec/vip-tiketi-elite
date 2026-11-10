@@ -160,7 +160,7 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
 
   return ({
   id,
-  source: data.source === 'api-basketball' ? 'api-basketball' : data.source === 'api-football' ? 'api-football' : 'manual',
+  source: ['api-basketball', 'api-football', 'football-data.org', 'TheSportsDB', 'OpenLigaDB'].includes(data.source) ? data.source : 'manual',
   sport: data.sport === 'basketball' ? 'basketball' : 'football',
   status: normalizeDailyAnalysisStatus(String(data.status || 'ACTIVE')),
   manualOverride: data.manualOverride === true,
@@ -168,8 +168,10 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
   topPick: data.topPick === true,
   units: Number.isFinite(Number(data.units)) ? Number(data.units) : undefined,
   fixtureId: Number.isFinite(Number(data.fixtureId)) ? Number(data.fixtureId) : undefined,
+  providerFixtureId: typeof data.providerFixtureId === 'string' ? data.providerFixtureId : undefined,
+  oddsProvider: typeof data.oddsProvider === 'string' ? data.oddsProvider : undefined,
   kickoffAt: typeof data.kickoffAt === 'string' ? data.kickoffAt : undefined,
-  analysisSource: data.analysisSource === 'api-predictions' ? 'api-predictions' : undefined,
+  analysisSource: ['api-predictions', 'model-statistics'].includes(data.analysisSource) ? data.analysisSource : undefined,
   date,
   time,
   matchTime: data.matchTime || data.kickoffTime || data.time || time,

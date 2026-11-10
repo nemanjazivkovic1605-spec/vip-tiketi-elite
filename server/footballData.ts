@@ -1,4 +1,5 @@
 import { getSportsKey, requestSports, SportsApiError, validDate, localDate } from './sportsApi.js';
+import { freeFixturesForDate } from './freeFootballFeeds.js';
 
 const LEAGUES: Record<string, number> = { PL: 39, EL1: 40, PD: 140, SA: 135, BL1: 78, FL1: 61, CL: 2, PPL: 94, DED: 88, BSA: 71, WC: 1, EC: 4 };
 const completed = new Set(['FT', 'AET', 'PEN']);
@@ -76,13 +77,19 @@ export async function resolveFootballData(path: string, params: Record<string, s
       try { return await apiSportsData(path, params); } catch (error) { apiSportsError = error; }
     }
     const key = process.env.FOOTBALL_DATA_API_KEY?.trim();
-    if (!key) throw apiSportsError || new SportsApiError('Podesite API_FOOTBALL_KEY ili FOOTBALL_DATA_API_KEY na serveru.', 503);
-    const url = new URL(path, 'https://api.football-data.org/v4/');
-    url.pathname = `/v4${path}`;
-    Object.entries(params).forEach(([name, value]) => url.searchParams.set(name, value));
-    const response = await fetch(url, { headers: { 'X-Auth-Token': key }, signal: AbortSignal.timeout(12000) });
-    if (!response.ok) throw new SportsApiError(response.status === 429 ? 'football-data.org limit zahteva je dostignut.' : 'football-data.org ključ ili pristup izabranim podacima nije ispravan.', response.status === 429 ? 429 : 502);
-    return response.json();
+    if (key) try {
+      const url = new URL(path, 'https://api.football-data.org/v4/');
+      url.pathname = `/v4${path}`;
+      Object.entries(params).forEach(([name, value]) => url.searchParams.set(name, value));
+      const response = await fetch(url, { headers: { 'X-Auth-Token': key }, signal: AbortSignal.timeout(12000) });
+      if (response.ok) return response.json();
+    } catch { /* Free fixture sources follow. */ }
+    if (path !== '/matches') throw apiSportsError || new SportsApiError('Izabrano takmicenje ili tabela trenutno nisu dostupni.', 503);
+    const date = params.dateFrom || localDate();
+    if (params.dateTo && params.dateTo !== date) throw new SportsApiError('Rezervni izvor podrzava jedan datum po zahtevu.', 400);
+    return { matches: (await freeFixturesForDate(date)).map((item) => ({ ...mapFixture(item), source: item.sourceProvider }))
+      .filter((item) => !params.status || (['SCHEDULED', 'TIMED'].includes(params.status) ? item.status === 'SCHEDULED'
+        : ['LIVE', 'IN_PLAY'].includes(params.status) ? item.status === 'IN_PLAY' : item.status === params.status)) };
   })().catch((error) => { cache.delete(cacheKey); throw error; });
   if (cache.size > 200) cache.clear();
   cache.set(cacheKey, { until: Date.now() + (path === '/competitions' ? 3600_000 : 120_000), task });

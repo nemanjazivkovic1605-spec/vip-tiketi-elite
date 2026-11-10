@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Resend } from 'resend';
 import { initializeApp, cert, type App } from 'firebase-admin/app';
 import { getAuth as getAdminAuth, type Auth as AdminAuth } from 'firebase-admin/auth';
+import { sendCheckedEmail, escapeEmailHtml } from '../server/emailDelivery.js';
 
 const getEnvValue = (key: string, fallback = '') =>
   typeof process.env[key] === 'string' && process.env[key]?.trim()
@@ -230,7 +231,7 @@ const buildContactHtml = (name: string, email: string, subject: string, message:
 
 const sendEmail = async (options: Record<string, unknown>) => {
   const client = resend();
-  return client.emails.send(options as any);
+  return sendCheckedEmail(client, options);
 };
 
 const safeString = (value?: unknown) => String(value ?? '').trim();
@@ -271,7 +272,7 @@ export default async function handler(request: IncomingMessage, response: Server
         from: RESEND_FROM_EMAIL,
         to: email,
         subject: 'Potvrdite email adresu - Elite VIP Tips',
-        html: buildVerificationHtml(displayName, verificationLink),
+        html: buildVerificationHtml(escapeEmailHtml(displayName), verificationLink),
       };
 
       await sendEmail(payload);
@@ -326,7 +327,7 @@ export default async function handler(request: IncomingMessage, response: Server
         };
       } else {
         payload.subject = 'Dobrodošli u Elite VIP Tips';
-        payload.html = buildWelcomeHtml(name, planName);
+        payload.html = buildWelcomeHtml(escapeEmailHtml(name), escapeEmailHtml(planName));
       }
 
       await sendEmail(payload);
@@ -348,6 +349,7 @@ export default async function handler(request: IncomingMessage, response: Server
       const payload: Record<string, unknown> = {
         from: RESEND_FROM_EMAIL,
         to: RESEND_CONTACT_TO_EMAIL,
+        replyTo: email,
       };
 
       if (templateId) {
@@ -361,7 +363,7 @@ export default async function handler(request: IncomingMessage, response: Server
         };
       } else {
         payload.subject = `Nova kontakt poruka: ${subject}`;
-        payload.html = buildContactHtml(name, email, subject, message);
+        payload.html = buildContactHtml(...[name, email, subject, message].map(escapeEmailHtml) as [string, string, string, string]);
       }
 
       await sendEmail(payload);
@@ -372,7 +374,7 @@ export default async function handler(request: IncomingMessage, response: Server
     sendJson(response, 400, { error: 'Unsupported email type.' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('Resend email handler error:', message, error);
-    sendJson(response, 500, { error: 'Email delivery failed.' });
+    console.error('Resend email handler error:', message);
+    sendJson(response, 502, { error: 'Slanje emaila nije uspelo. Pokusajte ponovo.' });
   }
 }

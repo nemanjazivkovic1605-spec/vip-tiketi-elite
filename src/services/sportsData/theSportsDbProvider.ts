@@ -17,7 +17,7 @@ type SportsDbEvent = {
   strVenue?: string;
 };
 
-const getKey = () => process.env.THESPORTSDB_API_KEY?.trim();
+const getKey = () => process.env.THESPORTSDB_API_KEY?.trim() || '123';
 
 const requestSportsDb = async <T>(key: string, path: string, params: Record<string, string>) => {
   const url = new URL(`https://www.thesportsdb.com/api/v1/json/${encodeURIComponent(key)}/${path}`);

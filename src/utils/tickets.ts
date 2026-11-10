@@ -1,4 +1,4 @@
-import { Tip, TicketStatus, Match, User } from '../types';
+import { Tip, TicketStatus, Match, User } from '../types.js';
 
 export const UNIT_VALUE_RSD = 1000;
 

@@ -25,13 +25,20 @@ service cloud.firestore {
 
     function hasVerifiedEmail() {
       return isAdmin() || (
-        isSignedIn() && (
+        isSignedIn() && !isBlocked() && (
           request.auth.token.email_verified == true ||
           (
             exists(userPath(request.auth.uid)) &&
             get(userPath(request.auth.uid)).data.emailVerified == true
           )
         )
+      );
+    }
+
+    function isBlocked() {
+      return isSignedIn() && exists(userPath(request.auth.uid)) && (
+        currentUser().get('status', 'active') == 'blocked' ||
+        currentUser().get('accountStatus', 'active') == 'blocked'
       );
     }
 
@@ -146,9 +153,11 @@ service cloud.firestore {
         isAdmin() ||
         (
           incoming().uid == userId &&
+          incoming().email == request.auth.token.email &&
           incoming().role == 'user' &&
           incoming().isAdmin == false &&
-          incoming().emailVerified == false &&
+          incoming().emailVerified == request.auth.token.email_verified &&
+          incoming().get('verified', false) == false &&
             incoming().status == 'active' &&
             incoming().vipAccess == false &&
             incoming().vipApproved == false &&
@@ -168,6 +177,7 @@ service cloud.firestore {
         (!request.resource.data.keys().hasAny(['verified']) || incoming().verified == request.auth.token.email_verified)
       ) || (
         isOwner(userId) &&
+        !isBlocked() &&
         (request.auth.token.email_verified == true || existing().emailVerified == true) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'emailVerified',
@@ -233,6 +243,7 @@ service cloud.firestore {
           'uid',
           'email',
           'emailVerified',
+          'verified',
           'role',
           'isAdmin',
           'status',

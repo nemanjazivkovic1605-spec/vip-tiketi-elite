@@ -15,6 +15,7 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -247,10 +248,49 @@ const getFreePlanPayload = () => {
   };
 };
 
+const initialUserPayload = (firebaseUser: FirebaseUser, displayName?: string) => {
+  const email = normalizeEmail(firebaseUser.email);
+  const isAdmin = isTrustedAdminEmail(email);
+  const plan = getPlanById(isAdmin ? ADMIN_PLAN_ID : 'free');
+  return {
+    uid: firebaseUser.uid, email, displayName: displayName?.trim() || firebaseUser.displayName || email.split('@')[0],
+    selectedPlan: plan.id, planName: plan.name, planDurationDays: plan.durationDays,
+    role: isAdmin ? 'admin' : 'user', isAdmin, status: 'active', accountStatus: 'active',
+    membershipStatus: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.FREE,
+    plan: plan.id, vipAccess: isAdmin, vipApproved: isAdmin, vipStatus: isAdmin ? 'approved' : 'inactive',
+    approved: isAdmin, emailVerified: isAdmin || firebaseUser.emailVerified,
+    vipExpiresAt: isAdmin ? getExpiryDate(3650) : null, vip_expires_at: isAdmin ? getExpiryDate(3650) : null,
+    approvedAt: isAdmin ? serverTimestamp() : null, approvedBy: isAdmin ? email : null,
+    adminNote: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  };
+};
+
+const createUserProfile = async (firebaseUser: FirebaseUser, displayName?: string) => {
+  const payload = initialUserPayload(firebaseUser, displayName);
+  const reference = doc(db, 'users', firebaseUser.uid);
+  const notification = doc(collection(db, 'adminNotifications'));
+  await runTransaction(db, async (transaction) => {
+    const existing = await transaction.get(reference);
+    if (existing.exists()) return;
+    transaction.set(reference, payload);
+    transaction.set(notification, {
+      type: 'new_user_registration', userEmail: payload.email, username: payload.displayName,
+      selectedPlan: payload.selectedPlan, createdAt: serverTimestamp(),
+      read: false, isRead: false, readAt: null, readBy: null,
+    });
+  });
+  return payload;
+};
+
 const ensureUserDocument = async (firebaseUser: FirebaseUser): Promise<User> => {
-  await reload(firebaseUser);
   const userRef = doc(db, 'users', firebaseUser.uid);
   const snapshot = await getDoc(userRef);
+  if (!snapshot.exists()) {
+    // Recovery is called only by an explicit login/refresh action, never by a page read.
+    await createUserProfile(firebaseUser);
+    const recovered = await getDoc(userRef);
+    return mapUserDoc(firebaseUser, recovered.data() || {}, firebaseUser.uid);
+  }
   return mapUserDoc(firebaseUser, snapshot.data() || {}, firebaseUser.uid);
 };
 
@@ -272,20 +312,43 @@ const hydrateUserDocument = (firebaseUser: FirebaseUser) => {
   return hydratingUserPromise;
 };
 
+const userSubscribers = new Set<(user: User | null) => void>();
+let stopAuthListener: (() => void) | undefined;
+let stopProfileListener: (() => void) | undefined;
+let currentUserState: User | null | undefined;
+const emitUser = (user: User | null) => {
+  currentUserState = user;
+  userSubscribers.forEach((subscriber) => subscriber(user));
+};
+
 export const authService = {
   onUserChanged: (callback: (user: User | null) => void) => {
-    return onAuthStateChanged(auth, (firebaseUser) => {
+    userSubscribers.add(callback);
+    if (currentUserState !== undefined) callback(currentUserState);
+    if (!stopAuthListener) stopAuthListener = onAuthStateChanged(auth, (firebaseUser) => {
+      stopProfileListener?.();
+      stopProfileListener = undefined;
       if (!firebaseUser) {
-        callback(null);
+        emitUser(null);
         return;
       }
 
-      // Authentication should unlock the UI immediately; Firestore enriches access state afterwards.
-      callback(mapUserDoc(firebaseUser, {}, firebaseUser.uid));
-      void hydrateUserDocument(firebaseUser).then(callback).catch((error) => {
+      emitUser(mapUserDoc(firebaseUser, {}, firebaseUser.uid));
+      stopProfileListener = onSnapshot(doc(db, 'users', firebaseUser.uid), (snapshot) => {
+        if (auth.currentUser?.uid === firebaseUser.uid) emitUser(mapUserDoc(firebaseUser, snapshot.data() || {}, firebaseUser.uid));
+      }, (error) => {
         console.error('Firebase user profile error:', error);
       });
     });
+    return () => {
+      userSubscribers.delete(callback);
+      if (!userSubscribers.size) {
+        stopAuthListener?.();
+        stopProfileListener?.();
+        stopAuthListener = stopProfileListener = undefined;
+        currentUserState = undefined;
+      }
+    };
   },
 
   login: async (email: string, password: string): Promise<User> => {
@@ -294,10 +357,7 @@ export const authService = {
       'Prijava traje predugo. Proverite internet vezu i pokušajte ponovo.',
       AUTH_REQUEST_TIMEOUT_MS,
     );
-    void hydrateUserDocument(credential.user).catch((error) => {
-      console.error('Firebase user profile hydration failed:', error);
-    });
-    return mapUserDoc(credential.user, {}, credential.user.uid);
+    return withTimeout(hydrateUserDocument(credential.user), 'Nalog je prijavljen, ali profil nije dostupan. Pokusajte ponovo.', AUTH_REQUEST_TIMEOUT_MS);
   },
 
   register: async ({ email, password, displayName }: RegisterPayload): Promise<User> => {
@@ -323,49 +383,13 @@ export const authService = {
 
     const normalizedEmail = normalizeEmail(credential.user.email);
     const isAdmin = isTrustedAdminEmail(normalizedEmail);
-    const activePlan = isAdmin ? getPlanById(ADMIN_PLAN_ID) : getPlanById('free');
-    const payload = {
-      uid: credential.user.uid,
-      email: normalizedEmail,
-      displayName: displayName?.trim() || normalizedEmail.split('@')[0],
-      selectedPlan: activePlan.id,
-      planName: activePlan.name,
-      planDurationDays: activePlan.durationDays,
-      role: isAdmin ? 'admin' : 'user',
-      isAdmin,
-      status: 'active',
-      membershipStatus: isAdmin ? MembershipStatus.APPROVED : MembershipStatus.FREE,
-      plan: isAdmin ? ADMIN_PLAN_ID : 'free',
-      vipAccess: isAdmin,
-      vipApproved: isAdmin,
-      vipStatus: isAdmin ? 'approved' : 'inactive',
-      approved: isAdmin,
-      emailVerified: isAdmin || credential.user.emailVerified,
-      vipExpiresAt: isAdmin ? getExpiryDate(3650) : null,
-      vip_expires_at: isAdmin ? getExpiryDate(3650) : null,
-      approvedAt: isAdmin ? serverTimestamp() : null,
-      approvedBy: isAdmin ? normalizedEmail : null,
-      adminNote: '',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
-    const profileWrite = (async () => {
-      const batch = writeBatch(db);
-      batch.set(doc(db, 'users', credential.user.uid), payload);
-      batch.set(doc(collection(db, 'adminNotifications')), {
-        type: 'new_user_registration',
-        userEmail: normalizedEmail,
-        username: payload.displayName,
-        selectedPlan: activePlan.id,
-        createdAt: serverTimestamp(),
-        read: false,
-        isRead: false,
-        readAt: null,
-        readBy: null,
-      });
-      await batch.commit();
-    })();
+    const activePlan = getPlanById(isAdmin ? ADMIN_PLAN_ID : 'free');
+    let payload;
+    try {
+      payload = await withTimeout(createUserProfile(credential.user, displayName), 'Nalog je kreiran, ali cuvanje profila nije zavrseno. Prijavite se ponovo da oporavite profil.', AUTH_REQUEST_TIMEOUT_MS);
+    } catch (error) {
+      throw createDetailedError('Cuvanje korisnickog profila nije uspelo', error);
+    }
 
     try {
       if (!isAdmin && !credential.user.emailVerified && credential.user.email) {
@@ -379,10 +403,6 @@ export const authService = {
     } catch (error) {
       throw createDetailedError('Slanje verifikacionog emaila nije uspelo', error);
     }
-
-    void profileWrite.catch((error) => {
-      console.error('Firestore users profile write delayed or failed:', getFirebaseErrorDetails(error));
-    });
 
     sendWelcomeEmail({
       email: normalizedEmail,
@@ -420,10 +440,9 @@ export const authService = {
       'Provera email statusa traje predugo. Pokušajte ponovo.',
       AUTH_REQUEST_TIMEOUT_MS,
     );
-    const refreshedUser = mapUserDoc(auth.currentUser, {}, auth.currentUser.uid);
-    void hydrateUserDocument(auth.currentUser).catch((error) => {
-      console.error('Firebase user refresh hydration failed:', error);
-    });
+    await auth.currentUser.getIdToken(true);
+    const refreshedUser = await withTimeout(hydrateUserDocument(auth.currentUser), 'Profil trenutno nije dostupan. Pokusajte ponovo.', AUTH_REQUEST_TIMEOUT_MS);
+    emitUser(refreshedUser);
     return refreshedUser;
   },
 

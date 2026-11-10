@@ -1,62 +1,68 @@
-import { type GlobalStats, type TicketProductType } from '../types';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import type { GlobalStats, TicketProductType } from '../types';
+import { STATS_SCHEMA, STATS_SUMMARY_PATH, type PublicStatsSummary } from '../utils/publicStats';
+import { withTimeout } from '../utils/async';
 
-const PUBLIC_STATS_SUMMARY_PATH = '/public-stats-summary.json';
+type Summary = Omit<PublicStatsSummary, 'schemaVersion' | 'version' | 'months'> & Partial<Pick<PublicStatsSummary, 'schemaVersion' | 'version' | 'months'>>;
+let cached: Summary | null = null;
+let expiresAt = 0;
+let pending: Promise<Summary | null> | null = null;
+let stopListener: (() => void) | undefined;
+let observedVersion = '';
+const subscribers = new Set<() => void>();
+const CACHE_KEY = 'elite:public-stats:v1';
 
-type PublicStatsSummary = {
-  generatedAt: string;
-  source: string;
-  all: GlobalStats;
-  categories: Partial<Record<TicketProductType, GlobalStats>>;
+const valid = (value: any): value is Summary => value?.all && typeof value.all.completedCount === 'number' && value.categories;
+const remember = (value: Summary) => {
+  const changed = cached?.generatedAt !== value.generatedAt || cached?.version !== value.version;
+  cached = value;
+  expiresAt = Date.now() + 30000;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(value)); } catch { /* Storage can be disabled. */ }
+  if (changed) subscribers.forEach((subscriber) => subscriber());
+  return value;
+};
+try {
+  const value = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+  if (valid(value) && value.schemaVersion === STATS_SCHEMA) cached = value;
+} catch { /* Use the server/CDN when storage is unavailable. */ }
+
+export const readPublicStatsSummary = (): Promise<Summary | null> => {
+  if (cached && expiresAt > Date.now()) return Promise.resolve(cached);
+  if (pending) return cached ? Promise.resolve(cached) : pending;
+  const fallback = async () => {
+    if (cached) return cached;
+    const response = await fetch('/public-stats-summary.json', { cache: 'no-cache' });
+    const value = response.ok ? await response.json() : null;
+    return valid(value) ? remember(value) : null;
+  };
+  pending = withTimeout(getDoc(doc(db, STATS_SUMMARY_PATH)), 'Public stats timeout.', 6000).then(async (snapshot) => {
+    const data = snapshot.data();
+    return valid(data) && data.schemaVersion === STATS_SCHEMA ? remember(data) : fallback();
+  }).catch(async (error) => {
+    console.warn('Public aggregate read failed; keeping the last public cache.', error);
+    return fallback().catch(() => cached);
+  }).finally(() => { pending = null; });
+  return cached ? Promise.resolve(cached) : pending;
 };
 
-let summaryPromise: Promise<PublicStatsSummary | null> | null = null;
-
-const isStatsShape = (value: unknown): value is GlobalStats => {
-  if (!value || typeof value !== 'object') return false;
-  const stats = value as Partial<GlobalStats>;
-  return typeof stats.completedCount === 'number'
-    && typeof stats.hitRate === 'number'
-    && Array.isArray(stats.monthlyBreakdown);
+export const subscribePublicStatsSummary = (callback: () => void) => {
+  subscribers.add(callback);
+  if (!stopListener) stopListener = onSnapshot(doc(db, STATS_SUMMARY_PATH), (snapshot) => {
+    const value = snapshot.data();
+    if (!valid(value) || value.schemaVersion !== STATS_SCHEMA) return;
+    const version = `${value.version}:${value.generatedAt}`;
+    if (version === observedVersion) return;
+    observedVersion = version;
+    remember(value);
+  }, (error) => console.warn('Public aggregate subscription failed.', error));
+  return () => {
+    subscribers.delete(callback);
+    if (!subscribers.size) { stopListener?.(); stopListener = undefined; observedVersion = ''; }
+  };
 };
 
-const normalizeStats = (stats: GlobalStats): GlobalStats => ({
-  ...stats,
-  monthlyBreakdown: stats.monthlyBreakdown.map((month) => ({
-    ...month,
-    tickets: Array.isArray(month.tickets) ? month.tickets : [],
-  })),
-});
-
-export const readPublicStatsSummary = async (): Promise<PublicStatsSummary | null> => {
-  if (summaryPromise) return summaryPromise;
-
-  summaryPromise = fetch(PUBLIC_STATS_SUMMARY_PATH, { cache: 'force-cache' })
-    .then(async (response) => {
-      if (!response.ok) return null;
-      const payload = await response.json() as PublicStatsSummary;
-      if (!isStatsShape(payload.all)) return null;
-
-      return {
-        generatedAt: payload.generatedAt,
-        source: payload.source,
-        all: normalizeStats(payload.all),
-        categories: Object.fromEntries(
-          Object.entries(payload.categories || {})
-            .filter(([, stats]) => isStatsShape(stats))
-            .map(([key, stats]) => [key, normalizeStats(stats as GlobalStats)]),
-        ) as Partial<Record<TicketProductType, GlobalStats>>,
-      };
-    })
-    .catch((error) => {
-      console.warn('Public stats summary is not available. Falling back to ticket calculation.', error);
-      return null;
-    });
-
-  return summaryPromise;
-};
-
-export const getStatsFromSummary = async (filter: 'all' | TicketProductType = 'all') => {
+export const getStatsFromSummary = async (filter: 'all' | TicketProductType = 'all'): Promise<GlobalStats | null> => {
   const summary = await readPublicStatsSummary();
-  if (!summary) return null;
-  return filter === 'all' ? summary.all : summary.categories[filter] || null;
+  return summary ? filter === 'all' ? summary.all : summary.categories[filter] || null : null;
 };

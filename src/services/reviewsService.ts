@@ -4,6 +4,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit,
   orderBy,
   query,
   updateDoc,
@@ -155,12 +156,13 @@ export const reviewsService = {
         reviewsCollection(),
         where('status', '==', 'approved'),
         orderBy('createdAt', 'desc'),
+        limit(60),
       ));
       const firestoreReviews = snapshot.docs.map((review) => normalizeReview(review.id, review.data()));
-      return sortReviews([...firestoreReviews, ...seedReviews]);
+      return sortReviews(firestoreReviews);
     } catch (error) {
-      console.warn('Approved reviews load failed. Using bundled reviews.', error);
-      return sortReviews(seedReviews);
+      console.warn('Approved reviews load failed.', error);
+      return [];
     }
   },
 

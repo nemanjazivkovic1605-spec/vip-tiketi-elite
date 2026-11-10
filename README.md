@@ -51,6 +51,37 @@ Validation: `npm test`, `npm run lint`, `npm run build`. Tests cover real-price 
 
 ## Resend email setup
 
+## Free fixture sources and independent odds
+
+`server/freeFootballFeeds.ts` reads schedules/results from the configured football-data.org account, the official public TheSportsDB key `123`, and OpenLigaDB (Bundesliga divisions). Missing or failed providers are skipped. API-Football/API-Basketball can be disabled with `API_FOOTBALL_ENABLED=false` / `API_BASKETBALL_ENABLED=false`; disabled accounts are not called. No third-party/private keys are bundled.
+
+Bookmaker prices are separate from fixtures. Set server-only `ODDS_API_KEY` from a personal [The Odds API](https://the-odds-api.com/) free account. The starter tier advertises 500 credits/month. The adapter requests at most two leagues and two featured markets, caches each league response for 30 minutes, and verifies both team names, competition and kickoff before joining a price. It never derives a bookmaker price from a probability. A prediction additionally requires at least five actual completed matches per team. Missing prices/statistics produce no automatic publication; admin receives an explanation and can enter a verified price manually.
+
+Free services have limited coverage, delayed scores and no availability guarantee. TheSportsDB's free day endpoint is limited to three events. The independent odds feed does not supply all markets: unsupported offers are skipped, not reconstructed. Football-data.co.uk CSV files are not used for automated commercial fetching: their current fair-use policy does not grant this usage.
+
+Source attribution: [TheSportsDB](https://www.thesportsdb.com/), [OpenLigaDB](https://www.openligadb.de/) ([ODbL](https://opendatacommons.org/licenses/odbl/1-0/)). Team images/logos have separate rights; the new free adapters do not import artwork.
+
+## Incremental public statistics and history
+
+Public pages only read `publicStats/summary`, `publicMonthlyStats` and up to 50 selected `publicStatsTickets` per page. The compact monthly ledger provides ordering/category/status filters without downloading every ticket. The summary and page cache persist locally; a public CDN export remains available if Firestore is unavailable. All roles use the same aggregate totals.
+
+Explicit admin mutations and result settlement update the affected month and summary transactionally. No page refresh initiates a write or sync. Bootstrap/repair is manual:
+
+```powershell
+$env:FIREBASE_SERVICE_ACCOUNT_PATH = 'C:\path\to\service-account.json'
+npm run stats:rebuild
+# Review plannedWrites first. No ticket data is modified by these commands.
+npm run stats:rebuild:write
+# Read-only database export to deploy-time public files:
+npm run stats:rebuild -- --snapshot
+```
+
+The rebuild is incremental, defaults to dry-run and stops above 500 planned writes. Repeating it unchanged plans zero writes. Deploy the refreshed local snapshots when making a manual export.
+
+Result checking also runs through `.github/workflows/daily-results.yml` every 30 minutes, independent of the once-daily Vercel cron. It uses signed, short-lived GitHub OIDC tokens restricted to this exact repository, workflow and `main` ref; no cron/API secret is stored in GitHub. Unavailable results remain pending with backoff and a rotating cursor, never guessed. GitHub schedules can be delayed. `workflow_dispatch` runs the same protected check manually.
+
+## Resend configuration
+
 The app now sends verification, password reset, welcome, and contact emails through a secure backend endpoint using Resend.
 
 1. Create a Resend account at https://resend.com/.

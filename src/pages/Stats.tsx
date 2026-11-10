@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Award, BarChart3, ChevronRight, Lock, Target, TrendingUp, Zap } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
@@ -29,7 +29,7 @@ const getFormatStats = (stats: GlobalStats | null) => {
   const tickets = stats?.monthlyBreakdown.flatMap((month) => month.tickets) || [];
   return (['singl', 'dubl', 'tripl', 'combo'] as const).map((format) => ({
     format,
-    stats: calculateStats(tickets.filter((tip) => getTicketFormat(tip) === format)),
+    stats: stats?.formatStats?.[format] || calculateStats(tickets.filter((tip) => getTicketFormat(tip) === format)),
   }));
 };
 
@@ -59,6 +59,12 @@ export default function Stats() {
   const [loading, setLoading] = useState(true);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [loadError, setLoadError] = useState('');
+  const [monthTips, setMonthTips] = useState<Tip[]>([]);
+  const [monthCursor, setMonthCursor] = useState<string | undefined>();
+  const [monthHasMore, setMonthHasMore] = useState(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [monthLoading, setMonthLoading] = useState(false);
+  const monthRequest = useRef(0);
 
   const fetchData = async (showLoading = false, filter: StatsFilter = statsFilter) => {
     if (showLoading) setLoading(true);
@@ -71,6 +77,7 @@ export default function Stats() {
       const nextStats = statsBundle.selected;
 
       setStats(nextStats);
+      setRefreshVersion((version) => version + 1);
       setComparisonStats({
         elite: statsBundle.elite,
         safe: statsBundle.safe,
@@ -102,7 +109,31 @@ export default function Stats() {
     }
   };
 
-  const selectedTicketRows = useMemo(() => ticketRows(selectedMonth?.tickets || []), [selectedMonth]);
+  useEffect(() => {
+    const version = ++monthRequest.current;
+    let active = true;
+    setMonthTips([]);
+    setMonthHasMore(false);
+    setMonthLoading(Boolean(selectedMonth));
+    if (selectedMonth) void mockTipsService.getHistoryPage({ month: selectedMonth.key, category: statsFilter }).then((page) => {
+      if (active) { setMonthTips(page.tips); setMonthCursor(page.cursor); setMonthHasMore(page.hasMore); }
+    }).catch((error) => { if (active) setLoadError(error instanceof Error ? error.message : 'Pregled meseca nije dostupan.'); })
+      .finally(() => { if (active && version === monthRequest.current) setMonthLoading(false); });
+    return () => { active = false; monthRequest.current++; };
+  }, [selectedMonth?.key, statsFilter, refreshVersion]);
+  const loadMonthPage = async () => {
+    if (!selectedMonth || monthLoading) return;
+    const version = monthRequest.current;
+    setMonthLoading(true);
+    try {
+      const page = await mockTipsService.getHistoryPage({ month: selectedMonth.key, category: statsFilter, cursor: monthCursor });
+      if (version !== monthRequest.current) return;
+      setMonthTips((current) => [...current, ...page.tips.filter((tip) => !current.some((item) => item.id === tip.id))]);
+      setMonthCursor(page.cursor);
+      setMonthHasMore(page.hasMore);
+    } finally { if (version === monthRequest.current) setMonthLoading(false); }
+  };
+  const selectedTicketRows = useMemo(() => ticketRows(monthTips), [monthTips]);
   const hasPublicStats = Boolean(stats?.completedCount);
 
   const overviewCards = useMemo(() => [
@@ -491,6 +522,11 @@ export default function Stats() {
 
           {!selectedMonth && (
             <div className="text-center py-16 text-neutral-500 font-bold">Izaberi mesec za detalje.</div>
+          )}
+          {monthHasMore && (
+            <button type="button" disabled={monthLoading} onClick={() => void loadMonthPage().catch((error) => setLoadError(String(error)))} className="mt-5 rounded-full border border-gold-500/30 px-5 py-2 text-sm text-gold-300 disabled:opacity-50">
+              Ucitaj jos tiketa
+            </button>
           )}
       </div>
       {isAdmin && editingTip && (

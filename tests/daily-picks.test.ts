@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCandidate, isUpcomingFixture, selectDailyPicks, type Fixture, type Odds, type Prediction } from '../server/dailyPickSelection.ts';
+import { buildCandidate, buildCandidates, isUpcomingFixture, selectDailyPicks, type Fixture, type Odds, type Prediction } from '../server/dailyPickSelection.ts';
 import { applyDailyResult, publicationSlots, publishDailyCandidates } from '../server/dailyPublication.ts';
 import { evaluateFullTimePrediction } from '../src/utils/predictionResults.ts';
 import { isCronRequest } from '../server/adminAuth.ts';
@@ -64,7 +64,8 @@ test('accepts lower leagues and uses the provider prediction and actual bookmake
   assert.equal(value.confidence, 75);
   assert.equal(value.date, '2099-11-10');
   assert.equal(value.time, '19:00');
-  assert.match(value.reasoning, /API-Football/);
+  assert.match(value.reasoning, /Home 1 - Away 1/);
+  assert.match(value.reasoning, /75%/);
 });
 
 test('excludes started, completed, postponed and imminent fixtures', () => {
@@ -98,6 +99,35 @@ test('chooses one FREE and two VIP picks with unique fixtures and league diversi
   assert.equal(new Set(picks.map((item) => item.fixtureId)).size, 3);
   assert.equal(new Set(picks.map((item) => item.leagueId)).size, 3);
   assert.equal(selectDailyPicks([candidate()], ['FREE', 'VIP', 'VIP']).length, 1);
+});
+
+test('goal and BTTS markets require real averages, real odds and positive model value', () => {
+  const prediction = model();
+  for (const team of [prediction.teams!.home!, prediction.teams!.away!]) team.league = {
+    fixtures: { played: { total: 10 } }, goals: { for: { average: { total: '1.7' } }, against: { average: { total: '1.4' } } },
+  };
+  const prices = odds();
+  prices[0].bookmakers[0].bets.push(
+    { name: 'Goals Over/Under', values: [{ value: 'Over 1.5', odd: '1.40' }, { value: 'Over 2.5', odd: '1.85' }, { value: 'Under 3.5', odd: '1.90' }] },
+    { name: 'Both Teams Score', values: [{ value: 'Yes', odd: '1.90' }] },
+  );
+  const candidates = buildCandidates(fixture(), prices, prediction, now);
+  assert.ok(candidates.some((item) => item.prediction === 'GG'));
+  assert.ok(candidates.some((item) => item.prediction === 'Over 2.5'));
+  assert.ok(candidates.every((item) => item.selectionScore > 0));
+  assert.deepEqual(buildCandidates(fixture(), prices, model(), now).map((item) => item.prediction), ['1X']);
+  assert.equal(buildCandidates(fixture(), [], prediction, now).length, 0);
+});
+
+test('VIP slots reject prices below 1.20 and prefer different available market categories', () => {
+  const candidates = [
+    { ...candidate(1), marketCategory: 'goals' }, { ...candidate(2), marketCategory: 'goals' },
+    { ...candidate(3), marketCategory: 'btts' }, { ...candidate(4), marketCategory: 'double_chance' },
+    { ...candidate(5), marketCategory: 'result', odds: 1.18, confidence: 95, selectionScore: 0 },
+  ];
+  const picks = selectDailyPicks(candidates, ['FREE', 'VIP', 'VIP']);
+  assert.equal(new Set(picks.map((item) => item.marketCategory)).size, 3);
+  assert.ok(picks.filter((item) => item.access === 'VIP').every((item) => item.odds >= 1.2));
 });
 
 test('publishes consistent private, FREE and locked public projections atomically', async () => {

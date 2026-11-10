@@ -5,6 +5,7 @@ import { TicketStatus, TipPublicationStatus } from '../src/types.js';
 import { mapTicketForPublic } from '../src/services/tickets/ticketMappers.js';
 import { selectDailyPicks, type Candidate } from './dailyPickSelection.js';
 import { localDate, numberSetting } from './sportsApi.js';
+import { preparePublicStatsUpdate } from '../src/utils/publicStats.js';
 
 type Reservation = { id: string; fixtureId?: number; access: 'FREE' | 'VIP' };
 export const publicationSlots = (existing: Reservation[]) => {
@@ -21,7 +22,7 @@ export function analysisTicket(analysis: DailyAnalysisItem): Tip {
   return {
     id: `daily-${analysis.id}`, source: 'admin', type: 'vip_monthly', publicationStatus: TipPublicationStatus.PUBLISHED,
     date: analysis.date, publishedDate: analysis.publishedDate, publishedTime: analysis.publishedTime, publishedAt: analysis.publishedAt,
-    sourceProvider: 'api-football', fixtureId: String(analysis.fixtureId || ''),
+    sourceProvider: analysis.source, fixtureId: String(analysis.providerFixtureId || analysis.fixtureId || ''),
     matches: [{ id: `${analysis.id}-match`, externalMatchId: String(analysis.fixtureId || ''),
       teams: `${analysis.homeTeam} - ${analysis.awayTeam}`, homeTeam: analysis.homeTeam, awayTeam: analysis.awayTeam,
       league: analysis.league, prediction: analysis.prediction, odds: analysis.odds,
@@ -30,6 +31,7 @@ export function analysisTicket(analysis: DailyAnalysisItem): Tip {
     }],
     ticketType: 'SINGL', totalOdds: analysis.odds, unitsStake: analysis.units || 3, status,
     analysis: analysis.reasoning || '', isVip: analysis.access === 'VIP',
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -69,9 +71,18 @@ export async function applyDailyResult(
         homeScore: result.homeScore, awayScore: result.awayScore, result: `${result.homeScore}:${result.awayScore}`,
       } : {}),
     };
+    const ticket = withoutUndefined(analysisTicket(updated));
+    const publicTicket = mapTicketForPublic(ticket);
+    const applyStats = await preparePublicStatsUpdate(transaction, (path) => {
+      const [name, id] = path.split('/');
+      return db.collection(name).doc(id);
+    }, ticket.id, settled ? publicTicket : null);
     transaction.update(ref, withoutUndefined({ fixtureStatus: result.fixtureStatus, status, isFinished: result.finished,
       ...(result.homeScore !== null && result.awayScore !== null ? { homeScore: result.homeScore, awayScore: result.awayScore } : {}),
-      ...(updated.result ? { result: updated.result } : {}), updatedAt: FieldValue.serverTimestamp() }));
+      ...(updated.result ? { result: updated.result } : {}), updatedAt: FieldValue.serverTimestamp(),
+      lastResultCheckAt: new Date().toISOString(),
+      nextResultCheckAt: !settled ? new Date(Date.now() + 6 * 3600000).toISOString() : null,
+    }));
     if (status === 'WON' && current.enabled && !current.hidden) {
       if (current.access === 'VIP') {
         transaction.set(db.collection('publicDailyAnalyses').doc(current.id), lockedDailyIndex(updated));
@@ -86,11 +97,11 @@ export async function applyDailyResult(
       transaction.delete(db.collection('publicDailyAnalyses').doc(current.id));
       transaction.delete(db.collection('freeDailyAnalyses').doc(current.id));
     }
-    const ticket = withoutUndefined(analysisTicket(updated));
     transaction.set(db.collection('tickets').doc(ticket.id), ticket);
-    transaction.set(db.collection('publicTickets').doc(ticket.id), mapTicketForPublic(ticket));
-    if (settled) transaction.set(db.collection('publicStatsTickets').doc(ticket.id), mapTicketForPublic(ticket));
+    transaction.set(db.collection('publicTickets').doc(ticket.id), publicTicket);
+    if (settled) transaction.set(db.collection('publicStatsTickets').doc(ticket.id), publicTicket);
     else transaction.delete(db.collection('publicStatsTickets').doc(ticket.id));
+    applyStats(transaction);
     return true;
   });
 }

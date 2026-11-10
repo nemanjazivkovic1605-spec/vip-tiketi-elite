@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, X, XCircle } from 'lucide-react';
@@ -108,48 +108,39 @@ export default function Tickets() {
   const [accessMessage, setAccessMessage] = useState('');
   const [loadError, setLoadError] = useState('');
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
+  const [pageCursor, setPageCursor] = useState<string | undefined>();
+  const [hasMoreTips, setHasMoreTips] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const requestVersion = useRef(0);
 
   useEffect(() => {
     void fetchData(true);
     return mockTipsService.subscribePublicStats(() => void fetchData());
-  }, [canAccessFree, canAccessVip]);
+  }, [filter, typeFilter]);
 
   useEffect(() => {
     setVisibleCount(HISTORY_PAGE_SIZE);
   }, [filter, typeFilter]);
 
   const fetchData = async (showLoading = false) => {
+    const request = ++requestVersion.current;
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
-      const allTips = await withTimeout(
-        mockTipsService.getVisibleHistoryTips({ canAccessVip }),
+      const page = await withTimeout(
+        mockTipsService.getHistoryPage({ category: typeFilter, status: filter }),
         'Istorija se učitava predugo. Pokušajte ponovo.',
       );
-      setTips(allTips);
-      if (showLoading) {
-        void mockTipsService.refreshVisibleHistoryTips()
-          .then((freshTips) => {
-            if (
-              freshTips.length
-              && (
-                freshTips.length !== allTips.length
-                || freshTips[0]?.id !== allTips[0]?.id
-                || freshTips[0]?.publishedAt !== allTips[0]?.publishedAt
-                || freshTips[0]?.ticketCode !== allTips[0]?.ticketCode
-                || freshTips[0]?.status !== allTips[0]?.status
-              )
-            ) {
-              setTips(freshTips);
-            }
-          })
-          .catch((error) => console.warn('History background refresh failed:', error));
-      }
+      if (request !== requestVersion.current) return;
+      setTips(page.tips);
+      setPageCursor(page.cursor);
+      setHasMoreTips(page.hasMore);
+      setVisibleCount(HISTORY_PAGE_SIZE);
     } catch (error) {
       console.error('History tickets load failed:', error);
-      setLoadError(error instanceof Error ? error.message : 'Istorija trenutno nije dostupna.');
+      if (request === requestVersion.current) setLoadError(error instanceof Error ? error.message : 'Istorija trenutno nije dostupna.');
     } finally {
-      if (showLoading) setLoading(false);
+      if (request === requestVersion.current) setLoading(false);
     }
   };
 
@@ -159,7 +150,20 @@ export default function Tickets() {
     return matchesStatus && matchesType;
   }), [tips, filter, typeFilter]);
   const visibleTips = useMemo(() => filteredTips.slice(0, visibleCount), [filteredTips, visibleCount]);
-  const hasMoreTips = visibleCount < filteredTips.length;
+  const loadMore = async () => {
+    if (loadingMore) return;
+    const request = requestVersion.current;
+    setLoadingMore(true);
+    try {
+      const page = await mockTipsService.getHistoryPage({ category: typeFilter, status: filter, cursor: pageCursor });
+      if (request !== requestVersion.current) return;
+      setTips((current) => [...current, ...page.tips.filter((tip) => !current.some((existing) => existing.id === tip.id))]);
+      setVisibleCount((count) => count + HISTORY_PAGE_SIZE);
+      setPageCursor(page.cursor);
+      setHasMoreTips(page.hasMore);
+    } catch (error) { setLoadError(error instanceof Error ? error.message : 'Istorija trenutno nije dostupna.'); }
+    finally { setLoadingMore(false); }
+  };
 
   const showVipPopup = (message: string) => {
     setAccessMessage(message);
@@ -481,10 +485,11 @@ export default function Tickets() {
         <div className="mt-8 flex justify-center">
           <button
             type="button"
-            onClick={() => setVisibleCount((current) => current + HISTORY_PAGE_SIZE)}
+            onClick={() => void loadMore()}
+            disabled={loadingMore}
             className="rounded-full border border-gold-500/30 bg-gold-500/10 px-6 py-3 text-xs font-black uppercase tracking-widest text-gold-200 transition hover:border-gold-500/60 hover:bg-gold-500/15"
           >
-            Ucitaj jos {Math.min(HISTORY_PAGE_SIZE, filteredTips.length - visibleCount)} tiketa
+            {loadingMore ? 'Ucitavanje...' : 'Ucitaj jos tiketa'}
           </button>
         </div>
       )}

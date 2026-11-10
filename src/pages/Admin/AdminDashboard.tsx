@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { coalesceRefresh } from '../../utils/coalesceRefresh';
 import { 
   BarChart3, Users, FileText, Settings, LogOut, ChevronRight, 
   Menu, X, ShieldCheck, TrendingUp, AlertTriangle, Clock, Link as LinkIcon, RefreshCw, CheckCircle2, XCircle, Upload, Database, Trash2, Plus, MinusCircle, Bell, Sparkles, Star
@@ -279,7 +280,7 @@ export default function AdminDashboard() {
     setReviews(await reviewsService.getAllReviews());
   }, []);
 
-  const refreshData = useCallback(async (options: { includeUsers?: boolean; includeNotifications?: boolean } = {}) => {
+  const loadAdminData = useCallback(async (options: { includeUsers?: boolean; includeNotifications?: boolean } = {}) => {
     const includeUsers = options.includeUsers ?? true;
     const includeNotifications = options.includeNotifications ?? true;
 
@@ -342,6 +343,12 @@ export default function AdminDashboard() {
     if (includeUsers) setUserList(fetchedUsers);
     if (includeNotifications) setNotifications(mergedNotifications);
   }, []);
+
+  const queuedRefresh = useMemo(() => coalesceRefresh<{ includeUsers?: boolean; includeNotifications?: boolean }>(loadAdminData, (previous, next) => ({
+    includeUsers: previous?.includeUsers === true || next.includeUsers !== false,
+    includeNotifications: previous?.includeNotifications === true || next.includeNotifications !== false,
+  })), [loadAdminData]);
+  const refreshData = useCallback((options: { includeUsers?: boolean; includeNotifications?: boolean } = {}) => queuedRefresh(options), [queuedRefresh]);
 
   useEffect(() => {
     void refreshData({ includeUsers: true, includeNotifications: true });

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAdminRequest } from '../server/adminAuth.js';
 import { requestSports } from '../server/sportsApi.js';
 import { fullTimeFixtureScore } from '../server/resultScores.js';
+import { findFreeFixture } from '../server/freeFootballFeeds.js';
 
 type ApiRequest = IncomingMessage & { body?: unknown };
 type FixtureLookup = {
@@ -88,13 +89,19 @@ export const selectFixture = (fixtures: ApiFixture[], lookup: FixtureLookup) => 
 };
 
 export const findFixtureResult = async (lookup: FixtureLookup) => {
-  let fixtures = lookup.fixtureId ? await requestFixtures({ id: lookup.fixtureId }) : [];
+  let fixtures: ApiFixture[] = [];
+  try { if (lookup.fixtureId) fixtures = await requestFixtures({ id: lookup.fixtureId }); } catch { /* Independent result sources follow. */ }
   let fixture = selectFixture(fixtures, lookup);
   let lookupMethod = fixture ? 'fixture_id' : 'teams_date_league';
 
   if (!fixture && lookup.date) {
-    fixtures = await requestFixtures({ date: lookup.date.slice(0, 10), timezone: MATCH_TIMEZONE });
-    fixture = selectFixture(fixtures, lookup);
+    try {
+      fixtures = await requestFixtures({ date: lookup.date.slice(0, 10), timezone: MATCH_TIMEZONE });
+      fixture = selectFixture(fixtures, lookup);
+    } catch { /* Continue with free sources. */ }
+    if (!fixture) {
+      fixture = await findFreeFixture({ ...lookup, date: lookup.date }) || undefined;
+    }
   }
   if (!fixture) return null;
 

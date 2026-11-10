@@ -1,6 +1,7 @@
 import { apiFootballProvider } from './apiFootballProvider.js';
 import { footballDataProvider } from './footballDataProvider.js';
 import { theSportsDbProvider } from './theSportsDbProvider.js';
+import { openLigaProvider } from './openLigaProvider.js';
 import { normalizeComparableText } from './providerUtils.js';
 
 export type EnrichedMatchStats = {
@@ -55,12 +56,14 @@ const providers: SportsDataProvider[] = [
   apiFootballProvider,
   footballDataProvider,
   theSportsDbProvider,
+  openLigaProvider,
 ];
 
 export const getConfiguredSportsProviderIds = () => [
-  ...(process.env.API_FOOTBALL_KEY?.trim() ? ['API-Football'] : []),
+  ...(process.env.API_FOOTBALL_ENABLED !== 'false' && process.env.API_FOOTBALL_KEY?.trim() ? ['API-Football'] : []),
   ...(process.env.FOOTBALL_DATA_API_KEY?.trim() ? ['football-data.org'] : []),
-  ...(process.env.THESPORTSDB_API_KEY?.trim() ? ['TheSportsDB'] : []),
+  'TheSportsDB',
+  'OpenLigaDB',
 ];
 
 const hasObjectData = (value: unknown) => {

@@ -16,6 +16,7 @@ let nextRequestAt = 0;
 let requestQueue = Promise.resolve();
 
 export const getSportsKey = (sport: 'football' | 'basketball' = 'football') => {
+  if (process.env[sport === 'football' ? 'API_FOOTBALL_ENABLED' : 'API_BASKETBALL_ENABLED'] === 'false') return '';
   const key = sport === 'basketball'
     ? process.env.API_BASKETBALL_KEY || process.env.VITE_BASKETBALL_API_KEY || process.env.API_FOOTBALL_KEY
     : process.env.API_FOOTBALL_KEY || process.env.VITE_FOOTBALL_API_KEY;

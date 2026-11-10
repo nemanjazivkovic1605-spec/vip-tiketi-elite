@@ -3,6 +3,7 @@ import { isAdminRequest } from '../server/adminAuth.js';
 import { loadDailyCandidates } from '../server/dailyPickProvider.js';
 import { selectDailyPicks } from '../server/dailyPickSelection.js';
 import { requestSports, SportsApiError, validDate } from '../server/sportsApi.js';
+import { freeFixturesForDate } from '../server/freeFootballFeeds.js';
 
 export const maxDuration = 120;
 
@@ -25,7 +26,12 @@ export default async function handler(request: IncomingMessage, response: Server
       const data = await loadDailyCandidates(date);
       return send(200, { response: selectDailyPicks(data.candidates, ['FREE', 'VIP', 'VIP']), warnings: data.warnings });
     }
-    return send(200, await requestSports(sport === 'basketball' ? '/games' : '/fixtures', { date, timezone: 'Europe/Belgrade' }, { sport: sport as 'football' | 'basketball' }));
+    try {
+      return send(200, await requestSports(sport === 'basketball' ? '/games' : '/fixtures', { date, timezone: 'Europe/Belgrade' }, { sport: sport as 'football' | 'basketball' }));
+    } catch (error) {
+      if (sport !== 'football') throw error;
+      return send(200, { response: await freeFixturesForDate(date) });
+    }
   } catch (error) {
     return send(error instanceof SportsApiError ? error.status : 502, { error: error instanceof SportsApiError ? error.message : 'Preuzimanje sportskih podataka nije uspelo.' });
   }

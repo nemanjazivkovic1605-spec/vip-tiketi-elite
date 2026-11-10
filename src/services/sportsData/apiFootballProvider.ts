@@ -20,7 +20,7 @@ type BasketballGame = {
 const FOOTBALL_BASE_URL = 'https://v3.football.api-sports.io';
 const BASKETBALL_BASE_URL = 'https://v1.basketball.api-sports.io';
 
-const getKey = () => process.env.API_FOOTBALL_KEY?.trim();
+const getKey = () => process.env.API_FOOTBALL_ENABLED === 'false' ? undefined : process.env.API_FOOTBALL_KEY?.trim();
 
 const requestApiSports = async <T>(
   baseUrl: string,

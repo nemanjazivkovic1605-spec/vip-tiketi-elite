@@ -103,8 +103,9 @@ export interface FootballStanding {
 export interface Tip {
   id: string;
   type?: TicketProductType;
+  categoryManualOverride?: boolean;
   source?: 'admin' | 'demo';
-  sourceProvider?: 'api-football' | 'football-data.org';
+  sourceProvider?: DailyAnalysisSource;
   fixtureId?: string;
   publicationStatus?: TipPublicationStatus;
   publishedDate?: string;
@@ -170,6 +171,7 @@ export interface AdminNotification {
 }
 
 export interface GlobalStats {
+  formatStats?: Partial<Record<'singl' | 'dubl' | 'tripl' | 'combo', GlobalStats>>;
   totalTips: number;
   winCount: number;
   lossCount: number;
@@ -243,12 +245,13 @@ export interface AppSettings {
 }
 
 export type DailyAnalysisAccess = 'FREE' | 'VIP';
-export type DailyAnalysisSource = 'api-football' | 'api-basketball' | 'manual';
+export type DailyAnalysisSource = 'api-football' | 'api-basketball' | 'football-data.org' | 'TheSportsDB' | 'OpenLigaDB' | 'manual';
 export type DailyAnalysisSport = 'football' | 'basketball';
 export type DailyAnalysisRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export type DailyAnalysisStatus = 'ACTIVE' | 'WON' | 'LOST' | 'POSTPONED' | 'REFUND' | 'PENDING_REVIEW' | 'HIDDEN';
 
 export interface DailyAnalysisItem {
+  marketCategory?: string;
   id: string;
   type?: DailyAnalysisAccess;
   locked?: boolean;
@@ -259,8 +262,10 @@ export interface DailyAnalysisItem {
   topPick?: boolean;
   units?: number;
   fixtureId?: number;
+  providerFixtureId?: string;
+  oddsProvider?: string;
   kickoffAt?: string;
-  analysisSource?: 'api-predictions';
+  analysisSource?: 'api-predictions' | 'model-statistics';
   date: string;
   matchTime?: string;
   kickoffTime?: string;

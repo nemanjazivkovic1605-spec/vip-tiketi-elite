@@ -1,0 +1,40 @@
+name: Refresh daily results
+on:
+  schedule:
+    - cron: '27,57 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/daily-results.yml'
+      - 'server/resultsRunnerAuth.ts'
+      - 'api/daily-results.ts'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: daily-results-production
+  cancel-in-progress: false
+jobs:
+  results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check settled matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Short-lived OIDC is restricted to this repository, workflow and main branch.
+          for attempt in $(seq 1 16); do
+            token=$(curl --fail --silent --show-error --max-time 20 \
+              -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https%3A%2F%2Feliteviptips.com%2Fapi%2Fdaily-results" | jq -er '.value')
+            code=$(curl --silent --show-error --max-time 285 --output result.json --write-out '%{http_code}' \
+              --request POST -H "Authorization: Bearer $token" https://eliteviptips.com/api/daily-results)
+            if [ "$code" = 200 ]; then jq '{checked, updated, pendingReview, skipped, providerUnavailable}' result.json; exit 0; fi
+            if [ "$code" != 403 ] && [ "$code" != 404 ] && [ "$code" != 405 ]; then echo "Result update failed with HTTP $code"; exit 1; fi
+            # Git pushes can reach the runner shortly before Vercel promotes the new build.
+            sleep 15
+          done
+          echo 'Production did not accept the result runner.'
+          exit 1

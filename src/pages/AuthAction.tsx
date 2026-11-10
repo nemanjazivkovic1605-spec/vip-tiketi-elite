@@ -72,6 +72,10 @@ export default function AuthAction() {
               const userRef = doc(db, 'users', currentUser.uid);
               const userSnapshot = await getDoc(userRef);
               const data = userSnapshot.data() || {};
+              if (data.status === 'blocked' || data.accountStatus === 'blocked') {
+                await setDoc(userRef, { emailVerified: true, verified: true, updatedAt: serverTimestamp() }, { merge: true });
+                return;
+              }
               const vipExpiresAt = data.vipExpiresAt?.toDate ? data.vipExpiresAt.toDate().toISOString() : data.vipExpiresAt;
               const hasActiveVip = data.membershipStatus === MembershipStatus.APPROVED
                 && (data.vipAccess === true || data.vipApproved === true)

@@ -41,6 +41,9 @@ import { formatLeagueName } from '../utils/leagueMapper';
 import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot, refreshPublicHistorySnapshot } from './publicHistorySnapshot';
 import { getTicketProductType } from '../utils/ticketProduct';
 import { getStatsFromSummary, readPublicStatsSummary } from './publicStatsSummary';
+import { subscribePublicStatsSummary } from './publicStatsSummary';
+import { updatePublicStatsTicket } from './firestore/publicStatsWrite';
+import { readHistoryPage } from './historyPageService';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -366,7 +369,7 @@ const syncPublicTicket = async (tip: Tip) => {
   if (normalized.publicationStatus !== TipPublicationStatus.PUBLISHED) {
     await Promise.all([
       deleteDocIfExists(getPublicTicketDoc(normalized.id)),
-      deleteDocIfExists(getPublicStatsTicketDoc(normalized.id)),
+      updatePublicStatsTicket(normalized.id, null),
     ]);
     invalidatePublicTicketCache();
     return;
@@ -375,9 +378,9 @@ const syncPublicTicket = async (tip: Tip) => {
   await setDocIfChanged(getPublicTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
 
   if (isFinishedForStats(normalized.status) && hasRealTicketOdds(normalized)) {
-    await setDocIfChanged(getPublicStatsTicketDoc(normalized.id), removeUndefined(mapTicketForPublic(normalized)));
+    await updatePublicStatsTicket(normalized.id, removeUndefined(mapTicketForPublic(normalized)));
   } else {
-    await deleteDocIfExists(getPublicStatsTicketDoc(normalized.id));
+    await updatePublicStatsTicket(normalized.id, null);
   }
   invalidatePublicTicketCache();
 };
@@ -532,6 +535,7 @@ const readPublishedTips = async (): Promise<Tip[]> => {
 };
 
 export const mockTipsService = {
+  getHistoryPage: readHistoryPage,
   getAdminTipById: async (id: string): Promise<Tip | null> => {
     const snapshot = await getDoc(getTicketDoc(id));
     if (!snapshot.exists()) return null;
@@ -601,6 +605,8 @@ export const mockTipsService = {
   },
 
   getStats: async (filter: StatsFilter = 'all'): Promise<GlobalStats> => {
+    const summary = await getStatsFromSummary(filter === 'all' || filter === 'elite_ticket' || filter === 'safe_pick' || filter === 'vip_monthly' ? filter : 'all');
+    if (summary && ['all', 'elite_ticket', 'safe_pick', 'vip_monthly'].includes(filter)) return summary;
     return calculateStats(filterTipsByType(await readPublicStatsTips(), filter));
   },
 
@@ -651,14 +657,15 @@ export const mockTipsService = {
   getPublicHomepageData: async (): Promise<PublicHomepageData> => {
     return getCachedQuery(PUBLIC_HOMEPAGE_DATA_CACHE_KEY, async () => {
       const summaryStats = await getStatsFromSummary('all');
-      const tips = await readPublicStatsTips();
+      const tips = summaryStats ? (await readHistoryPage({ limit: 5 })).tips : await readPublicStatsTips();
       const stats = summaryStats || calculateStats(tips);
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayDate = formatLocalIsoDate(yesterday);
       const sortedTips = sortTicketsByDate(tips);
-      const yesterdayWinner = sortedTips
-        .find((tip) => tip.date === yesterdayDate && tip.status === TicketStatus.WON);
+      const yesterdayWinner = summaryStats
+        ? (await readHistoryPage({ date: yesterdayDate, status: TicketStatus.WON, limit: 1 })).tips[0]
+        : sortedTips.find((tip) => tip.date === yesterdayDate && tip.status === TicketStatus.WON);
 
       return {
         stats,
@@ -762,6 +769,9 @@ export const mockTipsService = {
       throw new Error(`Tiket ${normalized.id} ne postoji u bazi. Update je prekinut da se ne bi kreirao duplikat.`);
     }
 
+    const previous = privateSnapshot.data() as Tip | undefined;
+    if (updatedTip.type && previous && updatedTip.type !== getTicketProductType(previous)) normalized.categoryManualOverride = true;
+
     await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
     await syncPublicTicket(normalized);
   },
@@ -778,7 +788,7 @@ export const mockTipsService = {
     await Promise.all([
       deleteDoc(getTicketDoc(id)),
       deleteDocIfExists(getPublicTicketDoc(id)),
-      deleteDocIfExists(getPublicStatsTicketDoc(id)),
+      updatePublicStatsTicket(id, null),
     ]);
     invalidatePublicTicketCache();
   },
@@ -824,22 +834,16 @@ export const mockTipsService = {
     });
     await Promise.all([
       deleteDocIfExists(getPublicTicketDoc(id)),
-      deleteDocIfExists(getPublicStatsTicketDoc(id)),
+      updatePublicStatsTicket(id, null),
     ]);
     invalidatePublicTicketCache();
   },
 
   subscribePublicStats: (callback: () => void): (() => void) => {
-    if (isPublicHistorySnapshotEnabled()) return () => undefined;
-
-    return onSnapshot(
-      query(getPublicStatsTicketsCollection(), orderBy('date', 'desc'), queryLimit(PUBLIC_READ_PAGE_SIZE)),
-      () => {
-        invalidateCachedQueries(PUBLIC_STATS_CACHE_KEY);
-        callback();
-      },
-      () => undefined,
-    );
+    return subscribePublicStatsSummary(() => {
+      invalidatePublicTicketCache();
+      callback();
+    });
   },
 
   subscribe: (callback: () => void, access?: { canAccessFree: boolean; canAccessVip: boolean }): (() => void) => {

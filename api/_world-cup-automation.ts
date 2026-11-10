@@ -1,12 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { initializeApp, cert, getApps, type App } from 'firebase-admin/app';
-import { getFirestore, FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, FieldPath, type Firestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
 import { mapTicketForPublic } from '../src/services/tickets/ticketMappers.js';
 import { applyDailyResult } from '../server/dailyPublication.js';
-import { requestSports } from '../server/sportsApi.js';
+import { getSportsKey, requestSports } from '../server/sportsApi.js';
+import { findFreeFixture } from '../server/freeFootballFeeds.js';
 import { evaluateFullTimePrediction } from '../src/utils/predictionResults.js';
 import { footballDataRegularScore, fullTimeFixtureScore } from '../server/resultScores.js';
+import { preparePublicStatsUpdate } from '../src/utils/publicStats.js';
+import { resultQueueCursor } from '../server/resultsQueue.js';
 
 type ApiFixture = {
   fixture?: {
@@ -36,7 +39,7 @@ type ApiOddsItem = {
 
 type ResolvedFixture = {
   fixture: ApiFixture;
-  provider: 'api-football' | 'football-data.org' | 'TheSportsDB';
+  provider: 'api-football' | 'football-data.org' | 'TheSportsDB' | 'OpenLigaDB';
 };
 
 type FootballDataMatch = {
@@ -196,7 +199,7 @@ const timeInBelgrade = (value?: string) => {
   }).format(date);
 };
 
-const apiKey = () => getEnv('API_FOOTBALL_KEY') || getEnv('VITE_FOOTBALL_API_KEY');
+const apiKey = () => getSportsKey();
 const hasApiErrors = (errors: unknown) => {
   if (!errors) return false;
   if (Array.isArray(errors)) return errors.length > 0;
@@ -347,7 +350,7 @@ const fetchSportsDbFixture = async (analysis: StoredDailyAnalysis): Promise<ApiF
 
 const resolveFixtureForResult = async (analysis: StoredDailyAnalysis, allowSportsDb = true): Promise<ResolvedFixture | null> => {
   const fixtureId = String(analysis.fixtureId || '');
-  if (fixtureId) {
+  if (fixtureId && getSportsKey() && (!analysis.source || analysis.source === 'api-football')) {
     try {
       const fixtures = (await requestSports<ApiFixture>('/fixtures', { id: fixtureId }, { ttlMs: 2 * 60_000 })).response;
       if (fixtures[0] && teamsMatch(analysis.homeTeam, analysis.awayTeam, fixtures[0].teams?.home?.name, fixtures[0].teams?.away?.name)) return { fixture: fixtures[0], provider: 'api-football' };
@@ -357,18 +360,9 @@ const resolveFixtureForResult = async (analysis: StoredDailyAnalysis, allowSport
   }
 
   try {
-    const fixture = await fetchFootballDataFixture(analysis);
-    if (fixture) return { fixture, provider: 'football-data.org' };
-  } catch {
-    // Continue to TheSportsDB.
-  }
-
-  try {
-    const fixture = allowSportsDb ? await fetchSportsDbFixture(analysis) : null;
-    if (fixture) return { fixture, provider: 'TheSportsDB' };
-  } catch {
-    // The caller leaves the ticket unresolved when every provider fails.
-  }
+    const fixture = await findFreeFixture({ date: String(analysis.date || ''), homeTeam: String(analysis.homeTeam || ''), awayTeam: String(analysis.awayTeam || '') });
+    if (fixture && (allowSportsDb || fixture.sourceProvider !== 'TheSportsDB')) return { fixture, provider: fixture.sourceProvider };
+  } catch { /* Keep unresolved when none of the independent sources can verify the match. */ }
   return null;
 };
 
@@ -884,58 +878,77 @@ const publishHistoryTicket = async (analysis: StoredDailyAnalysis, status: strin
     result,
     updatedAt: new Date().toISOString(),
   };
-  await db.collection('tickets').doc(ticketId).set(ticket, { merge: true });
   const safeTicket = mapTicketForPublic(ticket as any);
-  await db.collection('publicTickets').doc(ticketId).set(safeTicket);
-  await db.collection('publicStatsTickets').doc(ticketId).set(safeTicket);
+  await db.runTransaction(async (transaction) => {
+    const applyStats = await preparePublicStatsUpdate(transaction, (path) => db.doc(path), ticketId, safeTicket);
+    transaction.set(db.collection('tickets').doc(ticketId), ticket, { merge: true });
+    transaction.set(db.collection('publicTickets').doc(ticketId), safeTicket);
+    transaction.set(db.collection('publicStatsTickets').doc(ticketId), safeTicket);
+    applyStats(transaction);
+  });
 };
 
 export const updateWorldCupResults = async (allDailyPicks = false) => {
   const db = initAdminDb();
   const cutoff = dateInBelgrade();
-  const since = new Date(`${cutoff}T12:00:00Z`);
-  since.setUTCDate(since.getUTCDate() - 6);
-  const snapshot = allDailyPicks
-    ? await db.collection(DAILY_ANALYSES_COLLECTION)
-      .where('date', '>=', since.toISOString().slice(0, 10))
-      .where('date', '<=', cutoff)
-      .get()
-    : await db.collection(DAILY_ANALYSES_COLLECTION)
-    .where('source', '==', 'api-football')
-    .where('competition', '==', 'World Cup 2026')
-    .where('status', 'in', ['ACTIVE', 'PENDING_REVIEW'])
-    .limit(30)
-    .get();
+  const cursorRef = db.collection('automationState').doc('daily-results');
+  const cursorSnapshot = allDailyPicks ? await cursorRef.get() : null;
+  const cursor = String(cursorSnapshot?.data()?.cursorId || '');
+  const baseQuery = db.collection(DAILY_ANALYSES_COLLECTION)
+    .where('status', 'in', ['ACTIVE', 'PENDING_REVIEW', 'POSTPONED'])
+    .orderBy(FieldPath.documentId()).limit(60);
+  let snapshot = await (allDailyPicks && cursor ? baseQuery.startAfter(cursor) : baseQuery).get();
+  if (!snapshot.size && cursor) snapshot = await baseQuery.get();
   let updated = 0;
   let pendingReview = 0;
   let skipped = 0;
   let providerUnavailable = 0;
   const providerUsage: Record<string, number> = {};
 
-  const eligibleDocs = snapshot.docs.filter((item) => {
+  const dueDocs = snapshot.docs.filter((item) => {
     const data = item.data();
-    return data.source === 'api-football' && data.sport !== 'basketball'
+    return ['api-football', 'football-data.org', 'TheSportsDB', 'OpenLigaDB'].includes(data.source) && data.sport !== 'basketball'
+      && (allDailyPicks || data.competition === 'World Cup 2026') && String(data.date) <= cutoff
+      && (!data.nextResultCheckAt || Date.parse(data.nextResultCheckAt) <= Date.now())
       && ['ACTIVE', 'PENDING_REVIEW', 'POSTPONED'].includes(String(data.status)) && data.resultManualOverride !== true
       && data.enabled !== false && data.hidden !== true;
-  }).slice(0, 30);
+  });
+  const eligibleDocs = dueDocs.slice(0, 30);
+  let processedId: string | undefined;
+  const deadline = Date.now() + 220000;
   for (const docSnapshot of eligibleDocs) {
+    if (Date.now() >= deadline) break;
+    processedId = docSnapshot.id;
     const analysis = { id: docSnapshot.id, ...docSnapshot.data() } as StoredDailyAnalysis;
     if (analysis.resultManualOverride === true) {
       skipped += 1;
       continue;
     }
-    const resolved = await resolveFixtureForResult(analysis, !allDailyPicks);
+    const resolved = await resolveFixtureForResult(analysis);
     if (!resolved) {
       providerUnavailable += 1;
       skipped += 1;
       const isPastFixture = String(analysis.date || '') < dateInBelgrade();
-      if (!allDailyPicks && isPastFixture && analysis.status !== 'PENDING_REVIEW') {
-        await docSnapshot.ref.update({
-          status: 'PENDING_REVIEW',
-          fixtureStatus: 'RESULT_UNAVAILABLE',
-          updatedAt: FieldValue.serverTimestamp(),
+      const attempts = Number(analysis.resultCheckAttempts || 0) + 1;
+      const delayHours = Math.min(48, 2 ** Math.min(attempts - 1, 6));
+      const marked = await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(docSnapshot.ref);
+        const value = current.data();
+        if (!value || value.resultManualOverride || value.hidden || value.enabled === false
+          || value.fixtureId !== analysis.fixtureId || value.date !== analysis.date
+          || !['ACTIVE', 'PENDING_REVIEW', 'POSTPONED'].includes(value.status)) return false;
+        transaction.update(docSnapshot.ref, {
+          ...(isPastFixture ? { status: 'PENDING_REVIEW', fixtureStatus: 'RESULT_UNAVAILABLE' } : {}),
+          resultCheckAttempts: attempts, lastResultCheckAt: new Date().toISOString(),
+          nextResultCheckAt: new Date(Date.now() + delayHours * 3600000).toISOString(), updatedAt: FieldValue.serverTimestamp(),
         });
-        await syncDailyPublicIndexesForStatus({ ...analysis, status: 'PENDING_REVIEW' }, 'PENDING_REVIEW');
+        if (isPastFixture) {
+          transaction.delete(db.collection('publicDailyAnalyses').doc(analysis.id));
+          transaction.delete(db.collection('freeDailyAnalyses').doc(analysis.id));
+        }
+        return true;
+      });
+      if (isPastFixture && marked) {
         pendingReview += 1;
       }
       continue;
@@ -947,6 +960,11 @@ export const updateWorldCupResults = async (allDailyPicks = false) => {
     const { homeScore, awayScore } = fullTimeFixtureScore(fixture);
 
     if (allDailyPicks) {
+      if (!FINISHED_STATUSES.has(shortStatus) && !POSTPONED_STATUSES.has(shortStatus)) {
+        await docSnapshot.ref.update({ lastResultCheckAt: new Date().toISOString(), nextResultCheckAt: new Date(Date.now() + 30 * 60000).toISOString() });
+        skipped += 1;
+        continue;
+      }
       const changed = await applyDailyResult(db, analysis as any, {
         fixtureStatus: shortStatus, homeScore, awayScore,
         finished: FINISHED_STATUSES.has(shortStatus), postponed: POSTPONED_STATUSES.has(shortStatus),
@@ -1013,10 +1031,12 @@ export const updateWorldCupResults = async (allDailyPicks = false) => {
     }
   }
 
+  const nextCursor = resultQueueCursor(snapshot.docs.map((item) => item.id), dueDocs.map((item) => item.id), processedId);
+  if (allDailyPicks && nextCursor !== cursor) await cursorRef.set({ cursorId: nextCursor, updatedAt: FieldValue.serverTimestamp() });
   await logCron({
     action: 'results',
     status: providerUnavailable === snapshot.size && snapshot.size > 0 ? 'skipped' : 'success',
-    message: 'World Cup result update completed.',
+    message: allDailyPicks ? 'Daily result update completed.' : 'World Cup result update completed.',
     details: { checked: eligibleDocs.length, updated, pendingReview, skipped, providerUnavailable, providerUsage },
   });
 
