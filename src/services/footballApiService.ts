@@ -1,13 +1,12 @@
 import { FootballCompetition, FootballStanding, MatchResult, MatchStatus } from '../types';
 import { formatLeagueName } from '../utils/leagueMapper';
 
-const API_BASE_URL = 'https://api.football-data.org/v4';
-const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY as string | undefined;
+const API_BASE_URL = '/api/football-data';
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
-const CACHE_PREFIX = 'elite_football_api_v3_';
+const CACHE_PREFIX = 'elite_football_api_v4_';
 const FETCH_ISSUES_KEY = `${CACHE_PREFIX}issues`;
-const CACHE_TTL_MS = 1000 * 60 * 30;
+const CACHE_TTL_MS = 1000 * 60 * 2;
 
 export const SUPPORTED_COMPETITIONS: FootballCompetition[] = [
   { id: 2021, code: 'PL', name: 'Premier League', areaName: 'England' },
@@ -16,6 +15,12 @@ export const SUPPORTED_COMPETITIONS: FootballCompetition[] = [
   { id: 2002, code: 'BL1', name: 'Bundesliga', areaName: 'Germany' },
   { id: 2015, code: 'FL1', name: 'Ligue 1', areaName: 'France' },
   { id: 2001, code: 'CL', name: 'Champions League', areaName: 'Europe' },
+  { id: 2016, code: 'EL1', name: 'Championship', areaName: 'England' },
+  { id: 2017, code: 'PPL', name: 'Primeira Liga', areaName: 'Portugal' },
+  { id: 2003, code: 'DED', name: 'Eredivisie', areaName: 'Netherlands' },
+  { id: 2013, code: 'BSA', name: 'Serie A', areaName: 'Brazil' },
+  { id: 2000, code: 'WC', name: 'World Cup', areaName: 'World' },
+  { id: 2018, code: 'EC', name: 'European Championship', areaName: 'Europe' },
 ];
 
 type FetchMatchesOptions = {
@@ -53,7 +58,7 @@ const readCache = <T>(name: string): T | null => {
 };
 
 const writeCache = <T>(name: string, data: T) => {
-  localStorage.setItem(getCacheKey(name), JSON.stringify({ timestamp: Date.now(), data }));
+  try { localStorage.setItem(getCacheKey(name), JSON.stringify({ timestamp: Date.now(), data })); } catch { /* Optional browser cache. */ }
 };
 
 const readStoredIssues = (): FootballApiIssue[] => {
@@ -82,20 +87,13 @@ const readAnyCachedMatches = (): MatchResult[] => {
 };
 
 const requestJson = async <T>(path: string, params?: Record<string, string | undefined>): Promise<T> => {
-  if (!API_KEY) {
-    throw new Error('Football API key is not configured.');
-  }
-
-  const url = new URL(`${API_BASE_URL}${path}`);
+  const url = new URL(API_BASE_URL, window.location.origin);
+  url.searchParams.set('path', path);
   Object.entries(params || {}).forEach(([key, value]) => {
     if (value) url.searchParams.set(key, value);
   });
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      'X-Auth-Token': API_KEY,
-    },
-  });
+  const response = await fetch(url.toString());
 
   if (!response.ok) {
     if (response.status === 403) {
@@ -104,7 +102,8 @@ const requestJson = async <T>(path: string, params?: Record<string, string | und
     if (response.status === 429) {
       throw new Error('API limit je istekao za football-data.org.');
     }
-    throw new Error(`Football API request failed: ${response.status}`);
+    const payload = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(payload.error || `Football API request failed: ${response.status}`);
   }
 
   return response.json() as Promise<T>;
@@ -124,12 +123,12 @@ const mapMatch = (match: any): MatchResult => {
   return {
     id: String(match.id),
     competitionCode,
-    source: 'football-data.org',
+    source: match.source === 'api-football' ? 'api-football' : 'football-data.org',
     homeTeam: match.homeTeam?.name || 'TBD',
     awayTeam: match.awayTeam?.name || 'TBD',
     league: formatLeagueName(match.competition?.name || getCompetitionName(competitionCode)),
-    date: Number.isNaN(date.getTime()) ? new Date().toISOString().split('T')[0] : date.toISOString().split('T')[0],
-    time: Number.isNaN(date.getTime()) ? '--:--' : date.toISOString().slice(11, 16),
+    date: Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Belgrade' }).format(date),
+    time: Number.isNaN(date.getTime()) ? '--:--' : new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit' }).format(date),
     status: mapStatus(match.status),
     score: match.score?.fullTime?.home !== null && match.score?.fullTime?.home !== undefined
       ? {
@@ -154,11 +153,11 @@ export const footballApiService = {
 
   fetchCompetitions: async (): Promise<FootballCompetition[]> => {
     const cacheName = 'competitions';
+    const cached = readCache<FootballCompetition[]>(cacheName);
+    if (cached) return cached;
     try {
       const data = await requestJson<{ competitions: any[] }>('/competitions');
-      const supportedCodes = new Set(SUPPORTED_COMPETITIONS.map((competition) => competition.code));
       const competitions = data.competitions
-        .filter((competition) => supportedCodes.has(competition.code))
         .map((competition) => ({
           id: competition.id,
           code: competition.code,
@@ -174,12 +173,13 @@ export const footballApiService = {
 
   fetchMatches: async (options: FetchMatchesOptions = {}): Promise<MatchResult[]> => {
     const cacheName = `matches_${JSON.stringify(options)}`;
+    const cached = readCache<MatchResult[]>(cacheName);
+    if (cached) return cached;
     try {
       const params = {
         dateFrom: options.dateFrom,
         dateTo: options.dateTo,
         status: options.status,
-        competitions: options.competitionCode ? undefined : SUPPORTED_COMPETITIONS.map((competition) => competition.code).join(','),
       };
 
       const path = options.competitionCode ? `/competitions/${options.competitionCode}/matches` : '/matches';
@@ -187,8 +187,10 @@ export const footballApiService = {
       const matches = data.matches.map(mapMatch);
       writeCache(cacheName, matches);
       return matches;
-    } catch {
-      return USE_REAL_API ? [] : fallbackMatches(cacheName);
+    } catch (error) {
+      const fallback = fallbackMatches(cacheName);
+      if (fallback.length) return fallback;
+      throw error;
     }
   },
 
@@ -226,14 +228,7 @@ export const footballApiService = {
       }
     };
 
-    if (!API_KEY) {
-      writeStoredIssues(SUPPORTED_COMPETITIONS.map((competition) => ({
-        competitionCode: competition.code,
-        competitionName: competition.name,
-        message: 'Football API ključ nije podešen.',
-      })));
-      return USE_REAL_API ? cached || [] : fallbackMatches(cacheName);
-    }
+    if (cached) return cached;
 
     const results = await Promise.all(SUPPORTED_COMPETITIONS.map(fetchCompetition));
     const matches = results.flat().sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
@@ -249,6 +244,8 @@ export const footballApiService = {
 
   fetchStandings: async (competitionCode = 'PL'): Promise<FootballStanding[]> => {
     const cacheName = `standings_${competitionCode}`;
+    const cached = readCache<FootballStanding[]>(cacheName);
+    if (cached) return cached;
     try {
       const data = await requestJson<{ standings: any[] }>(`/competitions/${competitionCode}/standings`);
       const table = data.standings?.[0]?.table || [];
