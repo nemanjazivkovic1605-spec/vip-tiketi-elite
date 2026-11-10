@@ -1,4 +1,4 @@
-import { type Tip, TicketStatus } from '../../types';
+import { type Tip, TicketStatus } from '../../types.js';
 
 export const mapTicketForPublic = (tip: Tip): Tip => {
   if (tip.status === TicketStatus.PENDING || tip.status === TicketStatus.POSTPONED) {
