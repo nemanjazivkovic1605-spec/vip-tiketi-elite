@@ -8,20 +8,19 @@ type EliteFirebaseConfig = FirebaseOptions & {
   firestoreDatabaseId?: string;
 };
 
-const getEnvValue = (key: keyof ImportMetaEnv) => {
-  const value = import.meta.env[key];
+const getEnvValue = (value: unknown) => {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };
 
 const firebaseConfig: EliteFirebaseConfig = {
-  apiKey: getEnvValue('VITE_FIREBASE_API_KEY') || fallbackFirebaseConfig.apiKey,
-  authDomain: getEnvValue('VITE_FIREBASE_AUTH_DOMAIN') || fallbackFirebaseConfig.authDomain,
-  projectId: getEnvValue('VITE_FIREBASE_PROJECT_ID') || fallbackFirebaseConfig.projectId,
-  appId: getEnvValue('VITE_FIREBASE_APP_ID') || fallbackFirebaseConfig.appId,
-  storageBucket: getEnvValue('VITE_FIREBASE_STORAGE_BUCKET') || fallbackFirebaseConfig.storageBucket,
-  messagingSenderId: getEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID') || fallbackFirebaseConfig.messagingSenderId,
-  measurementId: getEnvValue('VITE_FIREBASE_MEASUREMENT_ID') || fallbackFirebaseConfig.measurementId,
-  firestoreDatabaseId: getEnvValue('VITE_FIRESTORE_DATABASE_ID') || fallbackFirebaseConfig.firestoreDatabaseId,
+  apiKey: getEnvValue(import.meta.env.VITE_FIREBASE_API_KEY) || fallbackFirebaseConfig.apiKey,
+  authDomain: getEnvValue(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN) || fallbackFirebaseConfig.authDomain,
+  projectId: getEnvValue(import.meta.env.VITE_FIREBASE_PROJECT_ID) || fallbackFirebaseConfig.projectId,
+  appId: getEnvValue(import.meta.env.VITE_FIREBASE_APP_ID) || fallbackFirebaseConfig.appId,
+  storageBucket: getEnvValue(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET) || fallbackFirebaseConfig.storageBucket,
+  messagingSenderId: getEnvValue(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID) || fallbackFirebaseConfig.messagingSenderId,
+  measurementId: getEnvValue(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID) || fallbackFirebaseConfig.measurementId,
+  firestoreDatabaseId: getEnvValue(import.meta.env.VITE_FIRESTORE_DATABASE_ID) || fallbackFirebaseConfig.firestoreDatabaseId,
 };
 
 const app = initializeApp(firebaseConfig);
