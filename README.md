@@ -105,3 +105,13 @@ The app now sends verification, password reset, welcome, and contact emails thro
 7. Production authentication action buttons always open `https://eliteviptips.com/auth-action`; Firebase default email templates are not used.
 
 Do not commit `.env`; it is ignored by git. Keep `RESEND_API_KEY` and `FIREBASE_SERVICE_ACCOUNT_KEY` secret.
+
+## Optional PitchAPI fixtures and match xG (preview integration)
+
+The /live-results page can merge PitchAPI fixtures with the existing match provider. It requests PitchAPI on the server through /api/pitch-matches, never from the browser. If PITCHAPI_API_KEY is missing or PitchAPI fails, existing fixtures remain available. PitchAPI is read-only here: no Firebase writes, automated picks or ticket changes.
+
+1. Get a free key from https://pitchapi.dev/ and review its terms before displaying external statistics commercially. The current free tier only offers the Big Five leagues; lower divisions require its paid Pro tier.
+2. Configure PITCHAPI_API_KEY as a server-only encrypted Vercel environment variable (do not use the VITE_ prefix and never commit it).
+3. Deploy a preview to verify the date feed and match stats with a real account, then consider enabling production. The xG button only appears for finished PitchAPI matches, retrieves the full-match xG on demand, and displays an unavailable message if no data exists.
+
+Match listings are cached on Vercel for 5 minutes and xG for 30 minutes. No minute-by-minute goal data is fetched. This feature is independent of the planned H2H statistics engine.
