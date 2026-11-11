@@ -7,6 +7,7 @@ import { publicationSlots, publishDailyCandidates } from '../server/dailyPublica
 import { addDays, localDate, numberSetting, validDate } from '../server/sportsApi.js';
 import { loadAdminDailyProposals } from '../server/dailyProposalProvider.js';
 import { saveDailyProposals } from '../server/dailyProposalsStore.js';
+import { runProductPublication } from '../server/productAutomation.js';
 
 export const maxDuration = 300;
 
@@ -40,7 +41,11 @@ export default async function handler(request: IncomingMessage, response: Server
           warnings: data.warnings, message: `${data.proposals.length} predloga za pregled (${data.priced} sa proverenom kvotom). Nijedan predlog nije automatski objavljen.` }],
       });
     }
-    // Authenticated read-only verification also works on previews without production database credentials.
+    const db = initAdminDb();
+    const dryRun = url.searchParams.get('dryRun') === 'true';
+    const products = await runProductPublication(db, requestedDate || today, dryRun, new Date(), Math.min(deadline, Date.now() + 120000));
+    if (url.searchParams.get('mode') === 'products') return sendJson(response, 200, products);
+    // Dry-run reads reservations but never publishes tickets or updates logs/statistics.
     if (url.searchParams.get('dryRun') === 'true') {
       for (const date of dates) {
         try {
@@ -51,9 +56,8 @@ export default async function handler(request: IncomingMessage, response: Server
           results.push({ date, failed: 1, error: error instanceof Error ? error.message : 'Provera sportskog API-ja nije uspela.' });
         }
       }
-      return sendJson(response, results.every((result) => result.failed) ? 502 : 200, { dryRun: true, saved: 0, results });
+      return sendJson(response, results.every((result) => result.failed) ? 502 : 200, { dryRun: true, saved: 0, products, results });
     }
-    const db = initAdminDb();
     for (const date of dates) {
       const [existing, manifest] = await Promise.all([
         db.collection('dailyAnalyses').where('date', '==', date).get(), db.collection('dailyAutomation').doc(date).get(),
@@ -79,7 +83,7 @@ export default async function handler(request: IncomingMessage, response: Server
     }
     const sum = (key: string) => results.reduce((total, result) => total + (Number(result[key]) || 0), 0);
     sendJson(response, results.every((result) => result.failed) ? 502 : 200, {
-      saved: sum('saved'), fetched: sum('fetched'), skippedManualOverride: sum('skippedManualOverride'), failed: sum('failed'), results,
+      saved: sum('saved') + products.saved, fetched: sum('fetched'), skippedManualOverride: sum('skippedManualOverride'), failed: sum('failed'), products, results,
     });
   } catch { sendJson(response, 503, { error: 'Automatska objava nije dostupna. Proverite serversku Firebase konfiguraciju.' }); }
 }

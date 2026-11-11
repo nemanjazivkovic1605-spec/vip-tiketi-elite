@@ -40,6 +40,12 @@ export interface Match {
   result?: string;
   status?: TicketStatus;
   analysis?: string;
+  sourceProvider?: DailyAnalysisSource;
+  providerFixtureId?: string;
+  kickoffAt?: string;
+  resultManualOverride?: boolean;
+  fixtureStatus?: string;
+  settledFor?: string;
 }
 
 export enum MatchStatus {
@@ -126,6 +132,13 @@ export interface Tip {
   analysis: string;
   isVip: boolean;
   result?: string;
+  automation?: 'product-tickets';
+  automationDate?: string;
+  manualOverride?: boolean;
+  resultManualOverride?: boolean;
+  resultReviewRequired?: boolean;
+  nextResultCheckAt?: string | null;
+  resultCheckAttempts?: number;
 }
 
 export interface User {

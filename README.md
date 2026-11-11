@@ -71,6 +71,29 @@ For a selected match and market, proposals use the highest eligible actual bookm
 
 Source attribution: [TheSportsDB](https://www.thesportsdb.com/), [OpenLigaDB](https://www.openligadb.de/) ([ODbL](https://opendatacommons.org/licenses/odbl/1-0/)). Team images/logos have separate rights; the new free adapters do not import artwork.
 
+## Automatic ELITE TIKET and SAFE PICK
+
+The existing `/api/daily-picks` morning cron now also creates one `elite_ticket` and one `safe_pick` for the current Europe/Belgrade date. It reuses the same fixture/real-price discovery as the admin proposal tool; no AI endpoint is called. It does not require admin approval. The existing monthly daily-pick workflow remains separate and unchanged in category.
+
+Elite selects 2-6 distinct fixtures, with a real combined price of at least 2.50 (selection target around 5.00, capped at 15.00). Safe selects 1-3 distinct fixtures with a combined price of 1.50-3.00. Existing basic statistics are preferred when available; unavailable statistics are not invented. Only unstarted football matches at least 30 minutes away, supported full-time markets and real feed prices are eligible. Missing data skips that category and records the reason in `automationLogs/products-seed-YYYY-MM-DD`.
+
+Publication is atomic across the existing `tickets`, sanitized `publicTickets` and `dailyAutomation/products-YYYY-MM-DD` reservation. Stable document IDs are `auto-elite_ticket-YYYY-MM-DD` and `auto-safe_pick-YYYY-MM-DD`. Existing manual products occupy the corresponding daily slot. Reservations survive admin deletion, so repeated/overlapping jobs neither duplicate nor recreate tickets. No old tickets or historical aggregates are migrated. Both active products use the existing VIP access rules and checkout prices (15 EUR / 10 EUR).
+
+The existing admin ticket editor handles all automated tickets. Admin edits preserve automation metadata; manual result/status changes are protected. Result polling uses the existing `/api/daily-results`, existing free result providers and existing GitHub runner. It checks a bounded active-ticket page, evaluates each leg from verified regular-time scores, and waits for the complete ticket before publishing the public result. Unsupported/unavailable results remain pending with `resultReviewRequired`, visible as `Provera rezultata` in admin. It never guesses a win/loss. Canceled legs are void, postponed legs remain postponed, and mixed win/void tickets use the actual remaining-leg price. Settlement updates the existing public history and incremental monthly/category statistics transactionally.
+
+No new credential is required: server-only `ODDS_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `CRON_SECRET`, and the existing optional fixture/result-provider keys are already supported. `PRODUCT_TICKETS_ENABLED=false` pauses new product publication without stopping results for existing tickets. Default is enabled. Preview deployments cannot write product tickets to production.
+
+The existing Vercel schedules stay daily: `0 8 * * *` for publication (09:00 Serbia in winter / 10:00 in summer), and `30 23 * * *` for results. This frequency is compatible with Hobby's once-daily limitation; Hobby can invoke within the configured hour rather than at an exact minute. The existing GitHub result workflow supplies the more frequent checks; no extra Vercel cron or paid API is introduced. Free-provider coverage and credits can still prevent publication and are logged rather than bypassed.
+
+Safe manual verification, with an admin Firebase bearer token:
+
+```text
+POST /api/daily-picks?mode=products&date=YYYY-MM-DD&dryRun=true
+Authorization: Bearer <Firebase admin ID token>
+```
+
+The date must be today, tomorrow or the day after in Serbia. Dry-run returns planned tickets, reasons and `plannedWrites`, and writes nothing. Omit `dryRun=true` only for an intentional real publication. Do not invoke `/api/daily-results` against production as a fake-result test: it performs real updates. `npm test` uses isolated transaction stores for publication, edits/deletion, real-score grading and aggregate tests, with no production test tickets.
+
 ## Incremental public statistics and history
 
 Public pages only read `publicStats/summary`, `publicMonthlyStats` and up to 50 selected `publicStatsTickets` per page. The compact monthly ledger provides ordering/category/status filters without downloading every ticket. The summary and page cache persist locally; a public CDN export remains available if Firestore is unavailable. All roles use the same aggregate totals.

@@ -95,7 +95,7 @@ export function buildDailyProposals(fixtures: Fixture[], odds: Odds[], now = new
   return proposals;
 }
 
-export async function loadAdminDailyProposals(date: string, now = new Date()) {
+export async function loadDailyMarketData(date: string, now = new Date()) {
   const warnings: string[] = [];
   let fixtures: Fixture[] = [];
   const key = process.env.ODDS_API_KEY?.trim();
@@ -130,7 +130,12 @@ export async function loadAdminDailyProposals(date: string, now = new Date()) {
   fixtures.sort((a, b) => leagueRank(oddsSportForFixture(a) || '') - leagueRank(oddsSportForFixture(b) || ''));
   const prices = await loadIndependentOdds(fixtures, now);
   if (prices.warning) warnings.push(prices.warning);
-  const proposals = buildDailyProposals(fixtures, prices.odds, now);
+  return { fixtures, odds: prices.odds, leaguesChecked, warnings };
+}
+
+export async function loadAdminDailyProposals(date: string, now = new Date()) {
+  const { fixtures, odds, leaguesChecked, warnings } = await loadDailyMarketData(date, now);
+  const proposals = buildDailyProposals(fixtures, odds, now);
   if (!proposals.length) warnings.push('Za izabrani dan nema buducih meceva u dostupnim izvorima.');
   return { proposals, fixtures: new Set(fixtures.map((fixture) => proposalIdentity(fixture.teams.home.name, fixture.teams.away.name, fixture.fixture.date))).size,
     priced: proposals.filter((proposal) => proposal.analysis.odds > 1).length, leaguesChecked, warnings };

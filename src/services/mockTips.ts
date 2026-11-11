@@ -44,6 +44,7 @@ import { getStatsFromSummary, readPublicStatsSummary } from './publicStatsSummar
 import { subscribePublicStatsSummary } from './publicStatsSummary';
 import { updatePublicStatsTicket } from './firestore/publicStatsWrite';
 import { readHistoryPage } from './historyPageService';
+import { preserveProductAdminEdits } from '../utils/productTicketAdminEdits';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -723,7 +724,7 @@ export const mockTipsService = {
   },
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
-    const normalized = normalizeTip({
+    let normalized = normalizeTip({
       ...updatedTip,
       updatedAt: new Date().toISOString(),
     });
@@ -770,6 +771,7 @@ export const mockTipsService = {
     }
 
     const previous = privateSnapshot.data() as Tip | undefined;
+    normalized = preserveProductAdminEdits(previous, normalized);
     if (updatedTip.type && previous && updatedTip.type !== getTicketProductType(previous)) normalized.categoryManualOverride = true;
 
     await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));

@@ -2332,7 +2332,7 @@ export default function AdminDashboard() {
                          >
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
+                                  <div className="flex flex-wrap items-center gap-2 mb-2">
                                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${tip.isVip ? 'bg-gold-500 text-black' : 'bg-neutral-800'}`}>
                                        {tip.isVip ? 'VIP' : 'FREE'}
                                      </span>
@@ -2355,6 +2355,7 @@ export default function AdminDashboard() {
                                      }`}>
                                        {tip.publicationStatus === TipPublicationStatus.PUBLISHED ? 'PUBLISHED' : 'DRAFT'}
                                      </span>
+                                     {tip.resultReviewRequired && <span className="inline-flex items-center gap-1 rounded bg-orange-500/10 px-2 py-0.5 text-[9px] font-bold text-orange-300"><AlertTriangle size={11} />Provera rezultata</span>}
                                   </div>
                                   <h3 className="text-xl font-bold">{tip.matches?.[0]?.teams} {tip.matches.length > 1 && `+${tip.matches.length - 1}`}</h3>
                                   <div className="flex flex-wrap items-center gap-2 mt-3">

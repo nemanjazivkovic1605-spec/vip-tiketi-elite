@@ -348,7 +348,7 @@ const fetchSportsDbFixture = async (analysis: StoredDailyAnalysis): Promise<ApiF
   };
 };
 
-const resolveFixtureForResult = async (analysis: StoredDailyAnalysis, allowSportsDb = true): Promise<ResolvedFixture | null> => {
+export const resolveFixtureForResult = async (analysis: StoredDailyAnalysis, allowSportsDb = true): Promise<ResolvedFixture | null> => {
   const fixtureId = String(analysis.fixtureId || '');
   if (fixtureId && getSportsKey() && (!analysis.source || analysis.source === 'api-football')) {
     try {
@@ -888,7 +888,7 @@ const publishHistoryTicket = async (analysis: StoredDailyAnalysis, status: strin
   });
 };
 
-export const updateWorldCupResults = async (allDailyPicks = false) => {
+export const updateWorldCupResults = async (allDailyPicks = false, deadline = Date.now() + 220000) => {
   const db = initAdminDb();
   const cutoff = dateInBelgrade();
   const cursorRef = db.collection('automationState').doc('daily-results');
@@ -907,7 +907,7 @@ export const updateWorldCupResults = async (allDailyPicks = false) => {
 
   const dueDocs = snapshot.docs.filter((item) => {
     const data = item.data();
-    return ['api-football', 'football-data.org', 'TheSportsDB', 'OpenLigaDB'].includes(data.source) && data.sport !== 'basketball'
+    return ['api-football', 'football-data.org', 'TheSportsDB', 'OpenLigaDB', 'the-odds-api'].includes(data.source) && data.sport !== 'basketball'
       && (allDailyPicks || data.competition === 'World Cup 2026') && String(data.date) <= cutoff
       && (!data.nextResultCheckAt || Date.parse(data.nextResultCheckAt) <= Date.now())
       && ['ACTIVE', 'PENDING_REVIEW', 'POSTPONED'].includes(String(data.status)) && data.resultManualOverride !== true
@@ -915,7 +915,6 @@ export const updateWorldCupResults = async (allDailyPicks = false) => {
   });
   const eligibleDocs = dueDocs.slice(0, 30);
   let processedId: string | undefined;
-  const deadline = Date.now() + 220000;
   for (const docSnapshot of eligibleDocs) {
     if (Date.now() >= deadline) break;
     processedId = docSnapshot.id;
