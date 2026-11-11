@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { resultsProvider } from '../services/resultsProvider';
+import { pitchMatchesService } from '../services/pitchMatchesService';
 import { MatchResult, MatchStatus } from '../types';
 import { Calendar, RefreshCw, Trophy, AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 import { formatLeagueName } from '../utils/leagueMapper';
@@ -9,6 +9,9 @@ export default function LiveResults() {
   const [matches, setMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pitchAvailable, setPitchAvailable] = useState(false);
+  const [xgByMatch, setXgByMatch] = useState<Record<string, { home: number; away: number } | null>>({});
+  const [xgLoading, setXgLoading] = useState<Record<string, boolean>>({});
   const [selectedDate, setSelectedDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Belgrade' }).format(new Date()));
   const requestId = useRef(0);
 
@@ -17,8 +20,11 @@ export default function LiveResults() {
     setLoading(true);
     setError('');
     try {
-      const matchesForDate = await resultsProvider.getMatchesForDate(selectedDate);
-      if (id === requestId.current) setMatches(matchesForDate);
+      const result = await pitchMatchesService.getMatchesForDate(selectedDate);
+      if (id === requestId.current) {
+        setMatches(result.matches);
+        setPitchAvailable(result.pitchAvailable);
+      }
     } catch (failure) {
       if (id === requestId.current) setError(failure instanceof Error ? failure.message : 'Rezultati trenutno nisu dostupni.');
     } finally {
@@ -30,6 +36,20 @@ export default function LiveResults() {
     void fetchData();
     return () => { requestId.current++; };
   }, [fetchData]);
+
+  const fetchXg = async (matchId: string) => {
+    const key = 'pitchapi:' + matchId;
+    if (xgLoading[key] || Object.prototype.hasOwnProperty.call(xgByMatch, key)) return;
+    setXgLoading((previous) => ({ ...previous, [key]: true }));
+    try {
+      const xg = await pitchMatchesService.getMatchXg(matchId);
+      setXgByMatch((previous) => ({ ...previous, [key]: xg }));
+    } catch {
+      setXgByMatch((previous) => ({ ...previous, [key]: null }));
+    } finally {
+      setXgLoading((previous) => ({ ...previous, [key]: false }));
+    }
+  };
 
   const getStatusColor = (status: MatchStatus) => {
     switch (status) {
@@ -53,8 +73,9 @@ export default function LiveResults() {
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
         <div className="max-w-2xl">
-          <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">UZIVO <span className="gold-text">REZULTATI</span></h1>
-          <p className="text-neutral-400">Raspored i rezultati dostupnih fudbalskih liga. Osvežite prikaz za najnovije podatke.</p>
+          <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">UTAKMICE I <span className="gold-text">REZULTATI</span></h1>
+          <p className="text-neutral-400">Raspored i rezultati dostupnih fudbalskih liga. PitchAPI dopunjava postojeće izvore kada je dostupan.</p>
+          {pitchAvailable && <p className="text-xs text-green-400 mt-3">PitchAPI je povezan · xG je dostupan za izabrane završene utakmice.</p>}
         </div>
 
         <div className="flex items-center gap-4 bg-white/[0.02] p-2 rounded-2xl border border-white/5">
@@ -122,6 +143,23 @@ export default function LiveResults() {
                      </div>
                    )}
                 </div>
+                {match.source === 'pitchapi' && match.id.startsWith('pitchapi:') && match.status === MatchStatus.FINISHED && (
+                  <div className="w-full border-t border-white/10 pt-3 flex justify-end text-xs">
+                    {Object.prototype.hasOwnProperty.call(xgByMatch, match.id) ? (
+                      xgByMatch[match.id] ? (
+                        <span className="font-bold text-gold-400">
+                          xG: {match.homeTeam} {xgByMatch[match.id]!.home.toFixed(2)} · {match.awayTeam} {xgByMatch[match.id]!.away.toFixed(2)}
+                        </span>
+                      ) : <span className="text-neutral-500">xG nije dostupan za ovaj meč.</span>
+                    ) : (
+                      <button type="button" disabled={Boolean(xgLoading[match.id])}
+                        onClick={() => void fetchXg(match.id.slice('pitchapi:'.length))}
+                        className="rounded-lg border border-gold-500/30 px-3 py-2 font-bold text-gold-400 disabled:opacity-50">
+                        {xgLoading[match.id] ? 'Učitavanje xG...' : 'Prikaži xG'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>
