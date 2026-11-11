@@ -120,7 +120,8 @@ export function buildCandidates(fixture: Fixture, odds: Odds[], model: Predictio
   return markets.flatMap(({ prediction, probability, category, names, outcomes, basis }) => {
   const confidence = Math.round(probability * 100);
   if (confidence < 55) return [];
-  const offer = odds.filter((item) => item.fixture?.id === fixture.fixture.id).flatMap((item) =>
+  const offer = odds.filter((item) => item.fixture?.id === fixture.fixture.id
+    && (!item.update || Number.isFinite(Date.parse(item.update)) && Math.abs(now.getTime() - Date.parse(item.update)) <= 3 * 3600_000)).flatMap((item) =>
     (item.bookmakers || []).flatMap((bookmaker) => bookmaker.bets.flatMap((bet) => {
       if (!names.includes(normalized(bet.name))) return [];
       const outcome = bet.values.find((value) => outcomes.includes(normalized(value.value)));
@@ -128,9 +129,9 @@ export function buildCandidates(fixture: Fixture, odds: Odds[], model: Predictio
       if (!Number.isFinite(value) || value < 1.15 || value > 3.5) return [];
       return [{ value, bookmaker: bookmaker.name, updatedAt: item.update }];
     })),
-  ).sort((a, b) => a.bookmaker.localeCompare(b.bookmaker))[0];
+  ).sort((a, b) => b.value - a.value || (b.updatedAt || '').localeCompare(a.updatedAt || '') || a.bookmaker.localeCompare(b.bookmaker))[0];
   if (!offer || probability <= 1 / offer.value) return [];
-  const text = `Za mec ${fixture.teams.home.name} - ${fixture.teams.away.name} izdvojen je tip ${prediction}, uz modelsku procenu ${confidence}%. ${basis} Dostupna kvota kod ${offer.bookmaker} iznosi ${offer.value.toFixed(2)}. Procena modela ne garantuje ishod; kvota se moze promeniti do pocetka utakmice.`;
+  const text = `Za mec ${fixture.teams.home.name} - ${fixture.teams.away.name} izdvojen je tip ${prediction}, uz modelsku procenu ${confidence}%. ${basis} Dostupna kvota iznosi ${offer.value.toFixed(2)}. Procena modela ne garantuje ishod; kvota se moze promeniti do pocetka utakmice.`;
   return [{
     id: `${fixture.sourceProvider || 'api-football'}-${fixture.providerId || fixture.fixture.id}`, source: fixture.sourceProvider || 'api-football', sport: 'football', fixtureId: fixture.fixture.id,
     ...(fixture.providerId ? { providerFixtureId: fixture.providerId, oddsProvider: 'The Odds API' } : {}),

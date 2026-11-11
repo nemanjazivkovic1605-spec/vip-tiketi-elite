@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDailyProposals, loadAdminDailyProposals, mapOddsFixture } from '../server/dailyProposalProvider.ts';
+import { bestProposalOffer, buildDailyProposals, loadAdminDailyProposals, mapOddsFixture, proposalOffers } from '../server/dailyProposalProvider.ts';
 import { saveDailyProposals } from '../server/dailyProposalsStore.ts';
 import { buildCandidates } from '../server/dailyPickSelection.ts';
 import { mapVerifiedOdds, oddsSportForFixture } from '../server/oddsProvider.ts';
@@ -43,6 +43,31 @@ test('offers diverse markets, caps at ten unique fixtures and never invents miss
   const stale = buildDailyProposals([fixtures[0]], odds, new Date('2099-11-10T14:00:00Z'))[0];
   assert.equal(stale.analysis.odds, 0);
   assert.equal(mapOddsFixture({ ...event(), sport_key: 'basketball_nba' }, sport), null);
+});
+
+test('keeps the chosen match and market but uses its highest actual bookmaker price', () => {
+  const fixture = mapOddsFixture(event(), sport)!;
+  const original = mapVerifiedOdds(fixture, [event()], sport.key, now);
+  const better = structuredClone(original[0]);
+  better.bookmakers[0].name = 'Higher quote bookmaker';
+  better.bookmakers[0].bets = [{ name: 'Match Winner', values: [{ value: 'Home', odd: '2.10' }] }];
+  const baseline = buildDailyProposals([fixture], original, now)[0];
+  const improved = buildDailyProposals([fixture], [...original, better], now)[0];
+  assert.equal(improved.id, baseline.id);
+  assert.equal(improved.analysis.prediction, baseline.analysis.prediction);
+  assert.equal(improved.analysis.prediction, '1');
+  assert.equal(improved.analysis.odds, 2.10);
+  assert.equal(improved.bookmaker, 'Higher quote bookmaker');
+  assert.equal(baseline.analysis.odds, 1.80, 'a single available price is never increased by a fixed margin');
+
+  const wrongPeriod = structuredClone(better);
+  wrongPeriod.bookmakers[0].bets[0].name = 'Match Winner First Half';
+  wrongPeriod.bookmakers[0].bets[0].values[0].odd = '2.80';
+  const stale = structuredClone(better);
+  stale.update = '2099-11-09T10:00:00Z';
+  const selected = bestProposalOffer(proposalOffers(fixture, [...original, better, wrongPeriod, stale], now), '1');
+  assert.equal(selected!.odds, 2.10);
+  assert.equal(bestProposalOffer(proposalOffers(fixture, original, now), 'Over 4.5'), undefined);
 });
 
 test('proposal writes are create-only, bounded, deduplicated, and never touch public/history/stats', async () => {

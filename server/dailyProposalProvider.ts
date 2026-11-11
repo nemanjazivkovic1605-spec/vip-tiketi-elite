@@ -32,15 +32,15 @@ export function proposalOffers(fixture: Fixture, odds: Odds[], now = new Date())
     for (const bookmaker of row.bookmakers) for (const bet of bookmaker.bets) for (const value of bet.values) {
       const price = Number(value.odd);
       if (!Number.isFinite(price) || price < 1.2 || price > 3) continue;
-      const market = bet.name.toLowerCase(), outcome = value.value.toLowerCase();
+      const market = bet.name.trim().toLowerCase().replace(/\s+/g, ' '), outcome = value.value.trim().toLowerCase();
       let prediction = '', category = '';
-      if (/match winner|fulltime result|1x2/.test(market)) {
+      if (['match winner', 'fulltime result', '1x2'].includes(market)) {
         prediction = ({ home: '1', away: '2', draw: 'X', '1': '1', '2': '2', x: 'X' } as Record<string, string>)[outcome] || '';
         category = 'result';
-      } else if (/goals over\/under|total goals|over\/under/.test(market) && /^(over|under) \d+\.5$/.test(outcome)) {
+      } else if (['goals over/under', 'total goals', 'over/under'].includes(market) && /^(over|under) \d+\.5$/.test(outcome)) {
         prediction = `${outcome[0].toUpperCase()}${outcome.slice(1)}`;
         category = outcome.startsWith('over') ? 'goals' : 'under';
-      } else if (/both teams|btts/.test(market) && ['yes', 'no'].includes(outcome)) {
+      } else if (['both teams score', 'both teams to score', 'btts'].includes(market) && ['yes', 'no'].includes(outcome)) {
         prediction = outcome === 'yes' ? 'GG' : 'NG'; category = 'btts';
       }
       if (prediction) offers.push({ prediction, category, odds: price, bookmaker: bookmaker.name, updatedAt: row.update });
@@ -48,6 +48,11 @@ export function proposalOffers(fixture: Fixture, odds: Odds[], now = new Date())
   }
   // Choose from actual bookmaker prices, never from invented probabilities or fair odds.
   return offers.sort((a, b) => Math.abs(a.odds - 1.8) - Math.abs(b.odds - 1.8) || a.prediction.localeCompare(b.prediction));
+}
+
+export function bestProposalOffer(offers: Offer[], prediction: string): Offer | undefined {
+  return offers.filter((offer) => offer.prediction === prediction)
+    .sort((a, b) => b.odds - a.odds || (b.updatedAt || '').localeCompare(a.updatedAt || '') || a.bookmaker.localeCompare(b.bookmaker))[0];
 }
 
 export function buildDailyProposals(fixtures: Fixture[], odds: Odds[], now = new Date(), limit = 10): DailyProposal[] {
@@ -62,8 +67,10 @@ export function buildDailyProposals(fixtures: Fixture[], odds: Odds[], now = new
     const id = proposalIdentity(fixture.teams.home.name, fixture.teams.away.name, fixture.fixture.date);
     if (seen.has(id)) continue;
     seen.add(id);
-    const offer = [...offers].sort((a, b) => (usedCategories.get(a.category) || 0) - (usedCategories.get(b.category) || 0)
+    const selectedMarket = [...offers].sort((a, b) => (usedCategories.get(a.category) || 0) - (usedCategories.get(b.category) || 0)
       || Math.abs(a.odds - 1.8) - Math.abs(b.odds - 1.8))[0];
+    // Keep match/market selection unchanged; improve only its actual quoted price.
+    const offer = selectedMarket ? bestProposalOffer(offers, selectedMarket.prediction) : undefined;
     if (offer) usedCategories.set(offer.category, (usedCategories.get(offer.category) || 0) + 1);
     const date = localDate(new Date(fixture.fixture.date));
     const time = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit' }).format(new Date(fixture.fixture.date));

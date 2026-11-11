@@ -67,6 +67,8 @@ Up to ten proposals per day are stored create-only in the admin-only `dailyPropo
 
 The manual proposal path does not call Gemini. Automated cron publication retains its original model/statistics requirements and does not publish these review proposals. Bet Better fair odds are model-derived, not bookmaker prices; no such prices or locked third-party picks are imported.
 
+For a selected match and market, proposals use the highest eligible actual bookmaker quote returned by the existing feed. This comparison never changes the selected fixture or market and never adds a fixed odds margin. Scheduled model picks also compare real prices for their exact market. Bookmaker provenance stays internal; generated public analysis does not name the bookmaker. Saved/published historical odds and manually edited prices are not repriced automatically.
+
 Source attribution: [TheSportsDB](https://www.thesportsdb.com/), [OpenLigaDB](https://www.openligadb.de/) ([ODbL](https://opendatacommons.org/licenses/odbl/1-0/)). Team images/logos have separate rights; the new free adapters do not import artwork.
 
 ## Incremental public statistics and history

@@ -92,6 +92,21 @@ test('does not confuse first half odds or another fixture with the full time mar
   assert.equal(buildCandidate(fixture(), odds(999), model(), now), null);
 });
 
+test('uses the best actual price for the same pick and omits bookmaker names from public analysis', () => {
+  const lower = odds(1, '1.80');
+  lower[0].bookmakers[0].name = 'Alpha bookmaker';
+  const higher = odds(1, '2.10');
+  higher[0].bookmakers[0].name = 'Zulu bookmaker';
+  const stale = odds(1, '2.50');
+  stale[0].update = '2099-11-09T08:00:00Z';
+  const pick = buildCandidate(fixture(), [...lower, ...higher, ...stale], model(), now)!;
+  assert.equal(pick.prediction, '1X');
+  assert.equal(pick.odds, 2.10);
+  assert.equal(pick.bookmaker, 'Zulu bookmaker');
+  assert.ok(!pick.reasoning.includes('Zulu bookmaker'));
+  assert.equal(buildCandidate(fixture(), lower, model(), now)!.odds, 1.80);
+});
+
 test('chooses one FREE and two VIP picks with unique fixtures and league diversity', () => {
   const values = [candidate(1, 912), candidate(2, 912), candidate(3, 41), candidate(4, 42)];
   const picks = selectDailyPicks(values, ['FREE', 'VIP', 'VIP']);
