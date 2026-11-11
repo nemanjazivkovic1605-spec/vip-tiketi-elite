@@ -31,6 +31,9 @@ test('odds are joined only to the same teams, sport and kickoff, never inferred'
   assert.deepEqual(mapVerifiedOdds(fixture, [event], event.sport_key, new Date('2099-11-11T10:00:00Z')), []);
   assert.equal(oddsSportForFixture(fixture), event.sport_key);
   assert.equal(oddsSportForFixture({ ...fixture, league: { id: 2, name: '2. Bundesliga' } }), 'soccer_germany_bundesliga2');
+  assert.equal(oddsSportForFixture({ ...fixture, league: { id: 2, name: 'Bundesliga 2' } }), 'soccer_germany_bundesliga2');
+  assert.equal(oddsSportForFixture({ ...fixture, league: { id: 1, name: '1. Fussball-Bundesliga 2026/2027' } }), 'soccer_germany_bundesliga');
+  assert.equal(oddsSportForFixture({ ...fixture, league: { id: 1, name: 'Bundesliga 2026' } }), 'soccer_germany_bundesliga');
   assert.equal(oddsSportForFixture({ ...fixture, league: { id: 3, name: 'Premier League', country: 'Bhutan' } }), null);
   assert.notEqual(teamKey('Australia U19'), teamKey('Australia'));
 });

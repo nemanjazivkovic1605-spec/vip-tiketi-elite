@@ -2,7 +2,7 @@ import { cachedSportsJson, teamKey } from './freeFootballFeeds.js';
 import type { Fixture, Odds } from './dailyPickSelection.js';
 
 const sportForLeague: Array<[RegExp, string]> = [
-  [/premier league|premiership/i, 'soccer_epl'], [/bundesliga 2|2\..*bundesliga/i, 'soccer_germany_bundesliga2'],
+  [/premier league|premiership/i, 'soccer_epl'], [/\bbundesliga\s+2(?!\d)|\b2\..*bundesliga/i, 'soccer_germany_bundesliga2'],
   [/bundesliga|1\. fussball/i, 'soccer_germany_bundesliga'], [/la liga|primera division/i, 'soccer_spain_la_liga'],
   [/serie a/i, 'soccer_italy_serie_a'], [/ligue 1/i, 'soccer_france_ligue_one'],
   [/champions league/i, 'soccer_uefa_champs_league'], [/europa league/i, 'soccer_uefa_europa_league'],
