@@ -245,7 +245,7 @@ export interface AppSettings {
 }
 
 export type DailyAnalysisAccess = 'FREE' | 'VIP';
-export type DailyAnalysisSource = 'api-football' | 'api-basketball' | 'football-data.org' | 'TheSportsDB' | 'OpenLigaDB' | 'manual';
+export type DailyAnalysisSource = 'api-football' | 'api-basketball' | 'football-data.org' | 'TheSportsDB' | 'OpenLigaDB' | 'the-odds-api' | 'manual';
 export type DailyAnalysisSport = 'football' | 'basketball';
 export type DailyAnalysisRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 export type DailyAnalysisStatus = 'ACTIVE' | 'WON' | 'LOST' | 'POSTPONED' | 'REFUND' | 'PENDING_REVIEW' | 'HIDDEN';
@@ -308,4 +308,16 @@ export interface DailyAnalysisItem {
   hidden?: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface DailyProposal {
+  id: string;
+  analysis: DailyAnalysisItem;
+  bookmaker?: string;
+  oddsUpdatedAt?: string;
+  reviewNote: string;
+  date: string;
+  createdAt: string;
+  dismissed?: boolean;
+  published?: boolean;
 }

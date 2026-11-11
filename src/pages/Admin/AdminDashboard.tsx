@@ -18,6 +18,9 @@ import { Tip, TicketStatus, ImportedMatch, MembershipStatus, GlobalStats, AppSet
 import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import AdminOverview from '../../components/admin/AdminOverview';
+import DailyProposalList from '../../components/admin/DailyProposalList';
+import { dailyProposalsService } from '../../services/admin/dailyProposalsService';
+import type { DailyProposal } from '../../types';
 import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, getStatusLabel, getTicketKind, isPublishedBeforeFirstMatch, normalizeOdds, unitsToRsd } from '../../utils/tickets';
 import { evaluateImportedMatchPrediction } from '../../utils/predictionResults';
 import { createDailyPublicationMeta, dailyPublicationMetaFromInput, formatDailyPublishedAt, getDailyPublicationInputValue, getDailyPublicationMeta, getKickoffTime } from '../../utils/dailyPublication';
@@ -102,6 +105,8 @@ export default function AdminDashboard() {
   const [dailyPullLoadingDate, setDailyPullLoadingDate] = useState('');
   const [dailyAiLoadingId, setDailyAiLoadingId] = useState('');
   const [dailyResultLoadingId, setDailyResultLoadingId] = useState('');
+  const [dailyProposalId, setDailyProposalId] = useState('');
+  const [dailySaveLoading, setDailySaveLoading] = useState(false);
   const [dailyLifecycleFilter, setDailyLifecycleFilter] = useState<DailyLifecycleFilter>('active');
   const [dailyAnalysisForm, setDailyAnalysisForm] = useState<DailyAnalysisItem>({
     id: '',
@@ -751,6 +756,7 @@ export default function AdminDashboard() {
   };
 
   const resetDailyAnalysisForm = () => {
+    setDailyProposalId('');
     setDailyAnalysisForm({
       id: '',
       source: 'manual',
@@ -790,28 +796,60 @@ export default function AdminDashboard() {
   };
 
   const handleEditDailyAnalysis = (analysis: DailyAnalysisItem) => {
+    setDailyProposalId('');
     setDailyAnalysisForm({ ...analysis });
   };
 
+  const handleEditDailyProposal = (proposal: DailyProposal) => {
+    setDailyProposalId(proposal.id);
+    setDailyAnalysisForm({ ...proposal.analysis, ...createDailyPublicationMeta(), enabled: true, hidden: false });
+    document.getElementById('daily-analysis-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const handleSaveDailyAnalysis = async () => {
+    if (dailySaveLoading) return;
     if (!dailyAnalysisForm.date || !dailyAnalysisForm.league || !dailyAnalysisForm.homeTeam || !dailyAnalysisForm.awayTeam) {
       alert('Popunite datum, ligu, domaćina i gosta.');
       return;
     }
 
-    await dailyAnalysesService.saveManualAnalysis({
-      ...dailyAnalysisForm,
-      id: dailyAnalysisForm.id || `manual-daily-${Date.now()}`,
-      odds: Number(dailyAnalysisForm.odds) || 1,
-      units: Number(dailyAnalysisForm.units) || 3,
-      confidence: Number(dailyAnalysisForm.confidence) || undefined,
-      sortOrder: Number(dailyAnalysisForm.sortOrder) || 0,
-      homeFormPercent: dailyAnalysisForm.homeFormPercent === null ? null : Number(dailyAnalysisForm.homeFormPercent),
-      awayFormPercent: dailyAnalysisForm.awayFormPercent === null ? null : Number(dailyAnalysisForm.awayFormPercent),
-      manualOverride: true,
-    });
-    resetDailyAnalysisForm();
-    await refreshData();
+    if (dailyProposalId && (!dailyAnalysisForm.prediction.trim() || !Number.isFinite(dailyAnalysisForm.odds) || dailyAnalysisForm.odds <= 1)) {
+      setDailyPullMessage('Pre objave predloga unesite tip i stvarnu kvotu vecu od 1.00.');
+      return;
+    }
+    if (dailyProposalId && !/^([01]\d|2[0-3]):[0-5]\d$/.test(getKickoffTime(dailyAnalysisForm))) {
+      setDailyPullMessage('Unesite ispravno vreme pocetka utakmice.');
+      return;
+    }
+    const proposalKickoff = dailyProposalId ? buildPublishedAt(dailyAnalysisForm.date, getKickoffTime(dailyAnalysisForm)) : undefined;
+    if (proposalKickoff && (Date.parse(proposalKickoff) <= Date.now() || Date.parse(getDailyPublicationMeta(dailyAnalysisForm).publishedAt) >= Date.parse(proposalKickoff))) {
+      setDailyPullMessage('Predlog ne moze biti objavljen nakon pocetka utakmice. Proverite datum i vreme.');
+      return;
+    }
+
+    setDailySaveLoading(true);
+    try {
+      await dailyAnalysesService.saveManualAnalysis({
+        ...dailyAnalysisForm,
+        id: dailyAnalysisForm.id || `manual-daily-${Date.now()}`,
+        odds: Number(dailyAnalysisForm.odds) || 1,
+        units: Number(dailyAnalysisForm.units) || 3,
+        confidence: Number(dailyAnalysisForm.confidence) || undefined,
+        sortOrder: Number(dailyAnalysisForm.sortOrder) || 0,
+        homeFormPercent: dailyAnalysisForm.homeFormPercent === null ? null : Number(dailyAnalysisForm.homeFormPercent),
+        awayFormPercent: dailyAnalysisForm.awayFormPercent === null ? null : Number(dailyAnalysisForm.awayFormPercent),
+        manualOverride: true,
+        ...(proposalKickoff ? { kickoffAt: proposalKickoff } : {}),
+      });
+      if (dailyProposalId) {
+        await dailyProposalsService.markPublished(dailyProposalId);
+        setDailyPullMessage('Predlog je sacuvan i objavljen. FREE/VIP pristup ostaje prema izabranom tipu.');
+      }
+      resetDailyAnalysisForm();
+      await refreshData();
+    } catch (error) {
+      setDailyPullMessage(error instanceof Error ? error.message : 'Cuvanje nije uspelo. Proverite stanje pre ponovnog pokretanja.');
+    } finally { setDailySaveLoading(false); }
   };
 
   const handleDeleteDailyAnalysis = async (id: string) => {
@@ -821,11 +859,12 @@ export default function AdminDashboard() {
   };
 
   const handlePullDailyAnalyses = async (date: string, label: string) => {
+    if (dailyPullLoadingDate) return;
     setDailyPullMessage('');
     setDailyPullLoadingDate(date);
     try {
       const result = await dailyAnalysesService.pullFromApiForDate(date);
-      setDailyPullMessage(`${label}: dostupno ${result.fetched}, objavljeno ${result.saved}${result.skippedManualOverride ? `, zaštićeno ručno izmenjenih ${result.skippedManualOverride}` : ''}${result.failed ? `, neuspešno ${result.failed}` : ''}. ${result.message || 'Postojeći predlozi i ručne izmene su sačuvani.'}`);
+      setDailyPullMessage(`${label}: pronadjeno ${result.fetched}, novih predloga ${result.saved}. ${result.message || 'Postojeci predlozi i rucne izmene su sacuvani.'}`);
       await refreshData();
       console.debug('[daily-admin-debug] pull finished and refreshed', {
         requestedDate: date,
@@ -2453,14 +2492,14 @@ export default function AdminDashboard() {
                   <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
                       <h2 className="text-3xl font-display font-bold">Dnevni Tipovi</h2>
-                      <p className="mt-2 text-sm text-neutral-500">Automatski izbor i objava do 1 FREE i 2 VIP predloga dnevno iz dostupnih liga. Ovde možete ručno menjati tipove, kvote i vidljivost.</p>
+                      <p className="mt-2 text-sm text-neutral-500">Povucite do 10 stvarnih predloga za izabrani dan, proverite ih i odlucite sta objavljujete. Automatska objava i dalje zahteva proverenu kvotu i dovoljno statistike.</p>
                       {dailyPullMessage && <p className="mt-3 rounded-xl border border-gold-500/20 bg-gold-500/10 px-4 py-3 text-xs font-bold text-gold-300">{dailyPullMessage}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {dailyPullDates.map((tab) => (
                         <button
                           key={tab.key}
-                          disabled={dailyPullLoadingDate === tab.date}
+                          disabled={Boolean(dailyPullLoadingDate)}
                           onClick={() => handlePullDailyAnalyses(tab.date, tab.label)}
                           className="rounded-2xl border border-gold-500/30 bg-gold-500/10 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gold-300 hover:bg-gold-500 hover:text-black disabled:opacity-50"
                         >
@@ -2474,8 +2513,8 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
-                    <div className="glass rounded-[2rem] border-white/5 p-6">
-                      <h3 className="mb-5 text-xl font-bold">{dailyAnalysisForm.id ? 'Izmeni analizu' : 'Dodaj ručnu analizu'}</h3>
+                    <div id="daily-analysis-form" className="glass scroll-mt-20 rounded-[2rem] border-white/5 p-6">
+                      <h3 className="mb-5 text-xl font-bold">{dailyProposalId ? 'Pregled i objava predloga' : dailyAnalysisForm.id ? 'Izmeni analizu' : 'Dodaj ručnu analizu'}</h3>
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block">
                           <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-neutral-500">Datum utakmice</span>
@@ -2615,12 +2654,13 @@ export default function AdminDashboard() {
                         </label>
                       </div>
                       <div className="mt-5 grid grid-cols-2 gap-3">
-                        <button onClick={handleSaveDailyAnalysis} className="rounded-2xl bg-gold-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black hover:bg-gold-600">Sačuvaj</button>
-                        <button onClick={resetDailyAnalysisForm} className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:bg-white/10">Novo</button>
+                        <button disabled={dailySaveLoading} onClick={handleSaveDailyAnalysis} className="rounded-2xl bg-gold-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black hover:bg-gold-600 disabled:opacity-50">{dailySaveLoading ? 'Cuvam...' : dailyProposalId ? 'Objavi predlog' : 'Sačuvaj'}</button>
+                        <button disabled={dailySaveLoading} onClick={resetDailyAnalysisForm} className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-neutral-300 hover:bg-white/10">Novo</button>
                       </div>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="min-w-0 space-y-4">
+                      <DailyProposalList onChoose={handleEditDailyProposal} />
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"

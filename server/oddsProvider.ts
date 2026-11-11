@@ -9,6 +9,7 @@ const sportForLeague: Array<[RegExp, string]> = [
   [/world cup|fifa wm/i, 'soccer_fifa_world_cup'],
 ];
 export const oddsSportForFixture = (fixture: Fixture) => {
+  if (fixture.sourceProvider === 'the-odds-api' && /^soccer_[a-z0-9_]+$/.test(fixture.oddsSportKey || '')) return fixture.oddsSportKey!;
   const league = fixture.league.name;
   // Do not confuse other countries' Premier Leagues with the English competition.
   if (/premier|premiership/i.test(league) && !/english|england/i.test(league) && fixture.league.country !== 'England') return null;

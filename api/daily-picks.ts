@@ -5,16 +5,21 @@ import { loadDailyCandidates } from '../server/dailyPickProvider.js';
 import { selectDailyPicks } from '../server/dailyPickSelection.js';
 import { publicationSlots, publishDailyCandidates } from '../server/dailyPublication.js';
 import { addDays, localDate, numberSetting, validDate } from '../server/sportsApi.js';
+import { loadAdminDailyProposals } from '../server/dailyProposalProvider.js';
+import { saveDailyProposals } from '../server/dailyProposalsStore.js';
 
 export const maxDuration = 300;
 
 export default async function handler(request: IncomingMessage, response: ServerResponse) {
   response.setHeader('Cache-Control', 'no-store');
   if (!['GET', 'POST'].includes(request.method || '')) return sendJson(response, 405, { error: 'Method not allowed.' });
-  if (!isCronRequest(request) && !(request.method === 'POST' && await isAdminRequest(request))) {
+  const cronRequest = isCronRequest(request);
+  const adminRequest = request.method === 'POST' && await isAdminRequest(request);
+  if (!cronRequest && !adminRequest) {
     return sendJson(response, 403, { error: 'Potrebna je cron ili administratorska autorizacija.' });
   }
   const url = new URL(request.url || '/', 'https://eliteviptips.com');
+  if (url.searchParams.get('mode') === 'proposals' && !adminRequest) return sendJson(response, 403, { error: 'Predloge moze povuci samo administrator.' });
   const requestedDate = url.searchParams.get('date');
   const today = localDate();
   if (requestedDate && (!validDate(requestedDate) || requestedDate < today || requestedDate > addDays(today, 2))) {
@@ -24,6 +29,17 @@ export default async function handler(request: IncomingMessage, response: Server
   const results: Array<Record<string, unknown>> = [];
   const deadline = Date.now() + 220_000;
   try {
+    if (url.searchParams.get('mode') === 'proposals') {
+      if (!requestedDate) return sendJson(response, 400, { error: 'Izaberite dan za predloge.' });
+      const data = await loadAdminDailyProposals(requestedDate);
+      const dryRun = url.searchParams.get('dryRun') === 'true';
+      const stored = dryRun ? { saved: 0, existing: 0 } : await saveDailyProposals(initAdminDb(), requestedDate, data.proposals);
+      return sendJson(response, 200, { dryRun, ...stored, fetched: data.proposals.length, failed: 0, skippedManualOverride: 0,
+        ...(dryRun ? { proposals: data.proposals } : {}),
+        results: [{ date: requestedDate, fixtures: data.fixtures, priced: data.priced, leaguesChecked: data.leaguesChecked,
+          warnings: data.warnings, message: `${data.proposals.length} predloga za pregled (${data.priced} sa proverenom kvotom). Nijedan predlog nije automatski objavljen.` }],
+      });
+    }
     // Authenticated read-only verification also works on previews without production database credentials.
     if (url.searchParams.get('dryRun') === 'true') {
       for (const date of dates) {

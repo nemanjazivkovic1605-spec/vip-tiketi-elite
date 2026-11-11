@@ -129,6 +129,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Unapproved discovery proposals are private even to ordinary VIP members.
+    match /dailyProposals/{proposalId} {
+      allow read, write: if isAdmin();
+    }
+
     // Locked VIP summaries contain no prediction, odds or analysis.
     match /publicDailyAnalyses/{analysisId} {
       allow read: if true;

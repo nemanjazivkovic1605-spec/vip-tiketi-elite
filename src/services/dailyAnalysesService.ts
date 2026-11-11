@@ -160,7 +160,7 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
 
   return ({
   id,
-  source: ['api-basketball', 'api-football', 'football-data.org', 'TheSportsDB', 'OpenLigaDB'].includes(data.source) ? data.source : 'manual',
+  source: ['api-basketball', 'api-football', 'football-data.org', 'TheSportsDB', 'OpenLigaDB', 'the-odds-api'].includes(data.source) ? data.source : 'manual',
   sport: data.sport === 'basketball' ? 'basketball' : 'football',
   status: normalizeDailyAnalysisStatus(String(data.status || 'ACTIVE')),
   manualOverride: data.manualOverride === true,
@@ -602,7 +602,7 @@ export const dailyAnalysesService = {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error('Administratorska prijava je potrebna.');
-      const response = await fetch(`/api/daily-picks?date=${encodeURIComponent(date)}`, {
+      const response = await fetch(`/api/daily-picks?mode=proposals&date=${encodeURIComponent(date)}`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
       });
       const payload = await response.json() as {

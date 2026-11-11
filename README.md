@@ -59,6 +59,14 @@ Bookmaker prices are separate from fixtures. Set server-only `ODDS_API_KEY` from
 
 Free services have limited coverage, delayed scores and no availability guarantee. TheSportsDB's free day endpoint is limited to three events. The independent odds feed does not supply all markets: unsupported offers are skipped, not reconstructed. Football-data.co.uk CSV files are not used for automated commercial fetching: their current fair-use policy does not grant this usage.
 
+### Admin proposal discovery
+
+Admin day buttons now POST to `/api/daily-picks?mode=proposals&date=YYYY-MM-DD`. This is separate from strict cron publication. The Odds API sports catalog and events endpoints discover upcoming football fixtures across up to `DAILY_DISCOVERY_LEAGUE_LIMIT=40` active competitions; these endpoints consume no odds credits. The existing price adapter reads at most two leagues, two markets and one region, with its existing 30-minute warm-instance cache. Free fixture sources are used if discovery returns no eligible fixtures. Only real future matches and actual bookmaker prices are offered. A market suggestion is a review aid, not a claim of statistical value; no confidence, form or analysis is fabricated. Without a price, the proposal has a blank pick and requires manual completion.
+
+Up to ten proposals per day are stored create-only in the admin-only `dailyProposals` collection. Guests, FREE and ordinary VIP users cannot read it. Pulls never update `tickets`, public indexes or statistics, and never overwrite existing proposals, dismissals or published daily analyses. `Uredi predlog` fills the existing form; `Objavi predlog` validates the pick, price and future kickoff, then saves through the existing daily publication lifecycle with a stable ID. Refreshing the admin panel only reads proposals. Add `dryRun=true` to the same admin-authorized POST for read-only verification.
+
+The manual proposal path does not call Gemini. Automated cron publication retains its original model/statistics requirements and does not publish these review proposals. Bet Better fair odds are model-derived, not bookmaker prices; no such prices or locked third-party picks are imported.
+
 Source attribution: [TheSportsDB](https://www.thesportsdb.com/), [OpenLigaDB](https://www.openligadb.de/) ([ODbL](https://opendatacommons.org/licenses/odbl/1-0/)). Team images/logos have separate rights; the new free adapters do not import artwork.
 
 ## Incremental public statistics and history

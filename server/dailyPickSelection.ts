@@ -1,8 +1,9 @@
 import type { DailyAnalysisItem } from '../src/types.js';
 
 export type Fixture = {
-  sourceProvider?: 'football-data.org' | 'TheSportsDB' | 'OpenLigaDB';
+  sourceProvider?: 'football-data.org' | 'TheSportsDB' | 'OpenLigaDB' | 'the-odds-api';
   providerId?: string;
+  oddsSportKey?: string;
   fixture: { id: number; date: string; status: { short: string } };
   league: { id: number; name: string; country?: string };
   teams: { home: { id: number; name: string; logo?: string }; away: { id: number; name: string; logo?: string } };
