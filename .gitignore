@@ -3,6 +3,7 @@ build/
 dist/
 .vercel/
 coverage/
+.local-backups/
 .DS_Store
 *.log
 .env*
