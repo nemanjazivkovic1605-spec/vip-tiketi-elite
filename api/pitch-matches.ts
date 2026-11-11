@@ -64,7 +64,7 @@ export default async function handler(request: IncomingMessage, response: Server
       return;
     }
     const days = [date!, previousDate(date!)];
-    const results = await Promise.allSettled(days.map((day) => readPitch('/v1/date/' + day + '?status=all', 5 * 60_000)));
+    const results = await Promise.allSettled(days.map((day) => readPitch('/v1/date/' + day, 5 * 60_000)));
     const fulfilled = results.filter((item): item is PromiseFulfilledResult<unknown> => item.status === 'fulfilled');
     if (!fulfilled.length) throw new Error('upstream_unavailable');
     const unique = new Map<string, ReturnType<typeof mapPitchMatch>>();
