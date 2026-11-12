@@ -7,6 +7,7 @@ export const DEFAULT_EUR_RSD_RATE = 117.2;
 export type SingleTicketProductId = keyof typeof SINGLE_TICKET_PRODUCTS;
 export type TicketPurchase = {
   id: string;
+  buyerType?: 'account' | 'guest';
   userId: string;
   userEmail: string;
   ticketId: string;
@@ -25,6 +26,9 @@ export type TicketPurchase = {
   approvedBy?: string;
   paymentAvailable?: boolean;
 };
+
+export const normalizePurchaseEmail = (value: string) => value.trim().toLowerCase();
+export const isPurchaseEmail = (value: string) => value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 export const isSingleTicketProduct = (id: string | null): id is SingleTicketProductId =>
   Boolean(id && Object.prototype.hasOwnProperty.call(SINGLE_TICKET_PRODUCTS, id));

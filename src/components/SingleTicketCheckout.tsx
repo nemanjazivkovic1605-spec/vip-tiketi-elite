@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import GuestTicketCheckout from './GuestTicketCheckout';
 import { useAuth } from '../hooks/useAuth';
 import { mockTipsService } from '../services/mockTips';
 import { ticketPurchasesService } from '../services/ticketPurchasesService';
@@ -12,6 +13,7 @@ import type { Tip } from '../types';
 export default function SingleTicketCheckout({ productId }: { productId: SingleTicketProductId }) {
   const { user, loading: authLoading, canAccessFree, canAccessVip } = useAuth();
   const [params] = useSearchParams();
+  const location = useLocation();
   const requestedId = params.get('ticketId') || '';
   const [offers, setOffers] = useState<Tip[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -26,7 +28,6 @@ export default function SingleTicketCheckout({ productId }: { productId: SingleT
   const activePath = `/tickets?active=1&category=${product.category}`;
   const purchase = ownerId === user?.id && canAccessFree ? purchases.find(row => row.ticketId === selectedId) : undefined;
   const selected = offers.find(tip => tip.id === selectedId);
-  const returnPath = `/checkout?product=${productId}${requestedId ? `&ticketId=${encodeURIComponent(requestedId)}` : ''}`;
 
   const refreshPurchase = async () => {
     if (!user || !canAccessFree || !selectedId) return;
@@ -94,6 +95,10 @@ export default function SingleTicketCheckout({ productId }: { productId: SingleT
     catch { setError('Kopiranje nije uspelo. Podatke možete označiti i kopirati ručno.'); }
   };
 
+  if (!authLoading && (!user || new URLSearchParams(location.hash.slice(1)).has('purchase'))) {
+    return <GuestTicketCheckout key={productId} productId={productId} offers={offers} requestedId={requestedId} loading={loading} loadError={error} />;
+  }
+
   return <section aria-label="Kupovina pojedinačnog tiketa" className="mx-auto max-w-4xl px-5 py-12">
     <h1 className="font-display text-3xl font-black text-white">{product.name}</h1>
     <p className="mt-3 text-neutral-400">Kupovina jednog tiketa. Pristup se aktivira nakon provere uplate.</p>
@@ -101,7 +106,6 @@ export default function SingleTicketCheckout({ productId }: { productId: SingleT
     {error ? <p role="alert" className="mt-5 rounded-xl border border-red-400/30 p-4 text-red-200">{error}</p> : null}
     {loading || authLoading ? <p className="mt-8 text-neutral-400">Učitavanje tiketa...</p>
       : canAccessVip ? <div className="mt-8 rounded-2xl border border-green-400/25 p-6"><p>Već imate VIP pristup.</p><Link to={activePath} className="mt-4 inline-block text-gold-300">Otvori tikete</Link></div>
-      : !user ? <div className="mt-8 rounded-2xl border border-gold-500/20 p-6"><p>Prijavite se pre uplate da biste dobili pristup kupljenom tiketu.</p><div className="mt-5 flex gap-5"><Link className="text-gold-300" to={`/login?next=${encodeURIComponent(returnPath)}`}>Prijavi se</Link><Link className="text-gold-300" to="/register">Kreiraj nalog</Link></div></div>
       : !canAccessFree ? <div className="mt-8 space-y-4 text-neutral-300"><p>Potvrdite email adresu i proverite da je vaš nalog aktivan pre kupovine.</p><Link className="inline-block text-gold-300" to="/dashboard">Otvori nalog i potvrdi email</Link></div>
       : !offers.length ? <p className="mt-8 text-neutral-300">Trenutno nema objavljenog tiketa za kupovinu. Proverite ponovo kasnije.</p>
       : <section className="mt-8 space-y-6 rounded-2xl border border-gold-500/20 bg-black/40 p-6">

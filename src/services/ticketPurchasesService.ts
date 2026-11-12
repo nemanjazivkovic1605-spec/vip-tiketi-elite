@@ -24,3 +24,18 @@ export const ticketPurchasesService = {
   approve: (purchaseId: string) => request<{ purchase: TicketPurchase }>('', { action: 'approve', purchaseId, paymentVerified: true }),
   revoke: (purchaseId: string) => request<{ purchase: TicketPurchase }>('', { action: 'revoke', purchaseId }),
 };
+
+export type GuestTicketPurchaseResult = { purchase: TicketPurchase; ticket?: Tip };
+async function guestRequest<T>(token: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch('/api/ticket-purchases', {
+    method: 'POST', cache: 'no-store', signal: AbortSignal.timeout(20000),
+    headers: { Authorization: `Guest ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Zahtev trenutno nije dostupan.');
+  return result as T;
+}
+export const guestTicketPurchasesService = {
+  create: (ticketId: string, email: string, token: string) => guestRequest<GuestTicketPurchaseResult>(token, { action: 'guest-request', ticketId, email }),
+  read: (ticketId: string, token: string) => guestRequest<GuestTicketPurchaseResult>(token, { action: 'guest-read', ticketId }),
+};
