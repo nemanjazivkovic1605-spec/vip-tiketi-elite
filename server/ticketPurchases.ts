@@ -13,7 +13,7 @@ export class TicketPurchaseError extends Error {
 const COLLECTION = 'ticketPurchases';
 export const validPurchaseTicketId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id);
 export const ticketPurchaseId = (uid: string, ticketId: string) => createHash('sha256').update(JSON.stringify([uid, ticketId])).digest('hex');
-const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+export const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 export const assertPurchaseActor = (actor: PurchaseActor) => {
   if (!actor.uid) throw new TicketPurchaseError('Potrebna je prijava.', 401);
   if (actor.blocked) throw new TicketPurchaseError('Nalog je blokiran.', 403);
@@ -29,20 +29,38 @@ const productFor = (tip: Tip): SingleTicketProductId => {
   if (!id || !tip.isVip) throw new TicketPurchaseError('Ovaj tiket nije dostupan za pojedinačnu kupovinu.', 409);
   return id;
 };
-const assertPublished = (tip: Tip | undefined, summary: Tip | undefined) => {
+export const assertPublished = (tip: Tip | undefined, summary: Tip | undefined) => {
   if (!tip || !summary || tip.publicationStatus !== TipPublicationStatus.PUBLISHED || summary.publicationStatus !== TipPublicationStatus.PUBLISHED) {
     throw new TicketPurchaseError('Tiket trenutno nije dostupan.', 409);
   }
 };
-const paymentAvailable = (tip: Tip | undefined, summary: Tip | undefined, now: Date) => {
+export const paymentAvailable = (tip: Tip | undefined, summary: Tip | undefined, now: Date) => {
   if (!tip || !summary || tip.publicationStatus !== TipPublicationStatus.PUBLISHED || summary.publicationStatus !== TipPublicationStatus.PUBLISHED
     || ![TicketStatus.PENDING, TicketStatus.POSTPONED].includes(tip.status) || !tip.matches.length) return false;
   const starts = tip.matches.map(match => productMatchKickoff(match, tip.date));
   return starts.every(Number.isFinite) && Math.min(...starts) > now.getTime();
 };
-const buyerView = (purchase: TicketPurchase, available = false) => {
+export const buyerView = (purchase: TicketPurchase, available = false) => {
   const { approvedBy, ...safe } = purchase;
   return { ...safe, paymentAvailable: purchase.status === 'pending' && available };
+};
+
+export const purchaseMatchesProduct = (tip: Tip | undefined, purchase: TicketPurchase) => {
+  try { return Boolean(tip && productFor(tip) === purchase.productId); }
+  catch { return false; }
+};
+
+export const buildTicketPurchase = (owner: { uid: string; email: string }, tip: Tip, now: Date): TicketPurchase => {
+  const id = ticketPurchaseId(owner.uid, tip.id);
+  const productId = productFor(tip), product = SINGLE_TICKET_PRODUCTS[productId];
+  const configuredRate = Number(process.env.VITE_EUR_RSD_RATE);
+  const exchangeRate = Number.isFinite(configuredRate) && configuredRate > 0 ? configuredRate : DEFAULT_EUR_RSD_RATE;
+  return {
+    id, userId: owner.uid, userEmail: owner.email, ticketId: tip.id, productId, productName: product.name,
+    priceEur: product.priceEur, priceRsd: Math.round(product.priceEur * exchangeRate), exchangeRate, ticketDate: tip.date,
+    ticketCode: resolveTicketCode(tip, generateTicketCode(true, tip.publishedDate || tip.date, tip.publishedTime || '12:00', tip.id)),
+    reference: `T${id.slice(0, 12).toUpperCase()}`, status: 'pending', createdAt: now.toISOString(), updatedAt: now.toISOString(),
+  };
 };
 
 export async function requestTicketPurchase(db: Firestore, actor: PurchaseActor, ticketId: string, now = new Date()) {
@@ -65,20 +83,13 @@ export async function requestTicketPurchase(db: Firestore, actor: PurchaseActor,
     }
     const tip = ticket.exists ? { ...ticket.data(), id: ticketId } as Tip : undefined;
     assertPublished(tip, summary.exists ? summary.data() as Tip : undefined);
-    const productId = productFor(tip!), product = SINGLE_TICKET_PRODUCTS[productId];
+    productFor(tip!);
     const kickoffs = tip!.matches.map(match => productMatchKickoff(match, tip!.date));
     if (![TicketStatus.PENDING, TicketStatus.POSTPONED].includes(tip!.status) || !kickoffs.length
       || kickoffs.some(value => !Number.isFinite(value)) || Math.min(...kickoffs) <= now.getTime()) {
       throw new TicketPurchaseError('Kupovina je dostupna samo pre početka prvog meča.', 409);
     }
-    const configuredRate = Number(process.env.VITE_EUR_RSD_RATE);
-    const exchangeRate = Number.isFinite(configuredRate) && configuredRate > 0 ? configuredRate : DEFAULT_EUR_RSD_RATE;
-    const purchase: TicketPurchase = {
-      id, userId: actor.uid, userEmail: actor.email, ticketId, productId, productName: product.name,
-      priceEur: product.priceEur, priceRsd: Math.round(product.priceEur * exchangeRate), exchangeRate, ticketDate: tip!.date,
-      ticketCode: resolveTicketCode(tip!, generateTicketCode(true, tip!.publishedDate || tip!.date, tip!.publishedTime || '12:00', ticketId)),
-      reference: `T${id.slice(0, 12).toUpperCase()}`, status: 'pending', createdAt: now.toISOString(), updatedAt: now.toISOString(),
-    };
+    const purchase = buildTicketPurchase(actor, tip!, now);
     transaction.create(ref, plain(purchase));
     return buyerView(purchase, true);
   });
@@ -94,9 +105,11 @@ export async function setTicketPurchaseStatus(db: Firestore, actor: PurchaseActo
     if (!record.exists) throw new TicketPurchaseError('Zahtev nije pronađen.', 404);
     const row = { ...record.data(), id } as TicketPurchase;
     if (ticketPurchaseId(row.userId, row.ticketId) !== id) throw new TicketPurchaseError('Podaci zahteva nisu ispravni.', 409);
+    const guest = row.buyerType === 'guest';
+    if (guest && !/^guest:[a-f0-9]{64}$/.test(row.userId)) throw new TicketPurchaseError('Podaci zahteva nisu ispravni.', 409);
     if (status === 'approved') {
-      const [ticket, summary, profile] = await transaction.getAll(db.doc(`tickets/${row.ticketId}`), db.doc(`publicTickets/${row.ticketId}`), db.doc(`users/${row.userId}`));
-      if (!profile.exists || profile.data()?.status === 'blocked' || profile.data()?.accountStatus === 'blocked') {
+      const [ticket, summary, profile] = await transaction.getAll(db.doc(`tickets/${row.ticketId}`), db.doc(`publicTickets/${row.ticketId}`), ...(guest ? [] : [db.doc(`users/${row.userId}`)]));
+      if (!guest && (!profile?.exists || profile.data()?.status === 'blocked' || profile.data()?.accountStatus === 'blocked')) {
         throw new TicketPurchaseError('Nalog korisnika je blokiran ili uklonjen.', 409);
       }
       const tip = ticket.exists ? { ...ticket.data(), id: row.ticketId } as Tip : undefined;

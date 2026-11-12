@@ -4,6 +4,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { initAdminDb } from './_world-cup-automation.js';
 import { assertPurchaseActor, readAdminTicketPurchases, readTicketPurchases, requestTicketPurchase, setTicketPurchaseStatus,
   TicketPurchaseError, type PurchaseActor } from '../server/ticketPurchases.js';
+import { readGuestTicketPurchase, requestGuestTicketPurchase } from '../server/guestTicketPurchases.js';
 
 async function identify(request: IncomingMessage, db: Firestore): Promise<PurchaseActor> {
   const bearer = request.headers.authorization?.match(/^Bearer\s+(.+)$/)?.[1];
@@ -36,17 +37,35 @@ async function bodyOf(request: IncomingMessage) {
   }
   if (!body || typeof body !== 'object' || Array.isArray(body) || Buffer.byteLength(JSON.stringify(body)) > 4096) throw new TicketPurchaseError('Neispravan zahtev.');
   const data = body as Record<string, unknown>;
-  if (Object.keys(data).some(key => !['action', 'ticketId', 'purchaseId', 'paymentVerified'].includes(key))) throw new TicketPurchaseError('Nepodržani podaci zahteva.');
+  const fields = data.action === 'guest-request' ? ['action', 'ticketId', 'email']
+    : data.action === 'guest-read' ? ['action', 'ticketId'] : ['action', 'ticketId', 'purchaseId', 'paymentVerified'];
+  if (Object.keys(data).some(key => !fields.includes(key))) throw new TicketPurchaseError('Nepodržani podaci zahteva.');
   return data;
 }
 
 export const createTicketPurchasesHandler = (dependencies: { getDb: () => Firestore; identify: typeof identify }) => async (request: IncomingMessage, response: ServerResponse) => {
   response.setHeader('Cache-Control', 'private, no-store');
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
+  response.setHeader('Referrer-Policy', 'no-referrer');
   const send = (status: number, data: unknown) => { response.statusCode = status; response.end(JSON.stringify(data)); };
   if (!['GET', 'POST'].includes(request.method || '')) return send(405, { error: 'Method not allowed.' });
-  if (!request.headers.authorization?.match(/^Bearer\s+\S+$/)) return send(401, { error: 'Potrebna je prijava.' });
+  const guestHeader = request.headers.authorization?.startsWith('Guest ');
+  if (!guestHeader && !request.headers.authorization?.match(/^Bearer\s+\S+$/)) return send(401, { error: 'Potrebna je prijava ili privatan link za kupovinu.' });
   try {
+    const body = request.method === 'POST' ? await bodyOf(request) : null;
+    if (guestHeader) {
+      const token = request.headers.authorization?.match(/^Guest ([a-f0-9]{64})$/)?.[1];
+      if (!token || !body) return send(401, { error: 'Privatan link nije ispravan.' });
+      if (!['guest-request', 'guest-read'].includes(String(body.action))) return send(403, { error: 'Akcija nije dozvoljena.' });
+      if (typeof body.ticketId !== 'string' || body.action === 'guest-request' && typeof body.email !== 'string') return send(400, { error: 'Neispravan zahtev.' });
+      const db = dependencies.getDb();
+      if (body.action === 'guest-read') return send(200, await readGuestTicketPurchase(db, body.ticketId, token));
+      // Vercel overwrites these forwarding headers; locally use the connected peer.
+      const forwarded = request.headers['x-vercel-forwarded-for'] || request.headers['x-forwarded-for'];
+      const clientIp = process.env.VERCEL === '1' && typeof forwarded === 'string'
+        ? forwarded.split(',')[0].trim().slice(0, 128) : request.socket?.remoteAddress || 'local';
+      return send(200, { purchase: await requestGuestTicketPurchase(db, body.ticketId, body.email as string, token, clientIp) });
+    }
     const db = dependencies.getDb(), actor = await dependencies.identify(request, db);
     assertPurchaseActor(actor);
     const url = new URL(request.url || '/', 'https://eliteviptips.com');
@@ -55,11 +74,10 @@ export const createTicketPurchasesHandler = (dependencies: { getDb: () => Firest
       const ticketIds = (url.searchParams.get('ticketIds') || '').split(',').filter(Boolean);
       return send(200, await readTicketPurchases(db, actor, ticketIds));
     }
-    const body = await bodyOf(request);
-    if (body.action === 'request' && typeof body.ticketId === 'string') {
+    if (body?.action === 'request' && typeof body.ticketId === 'string') {
       return send(200, { purchase: await requestTicketPurchase(db, actor, body.ticketId) });
     }
-    if ((body.action === 'approve' || body.action === 'revoke') && typeof body.purchaseId === 'string') {
+    if (body && (body.action === 'approve' || body.action === 'revoke') && typeof body.purchaseId === 'string') {
       return send(200, { purchase: await setTicketPurchaseStatus(db, actor, body.purchaseId, body.action === 'approve' ? 'approved' : 'revoked', body.paymentVerified === true) });
     }
     return send(400, { error: 'Neispravna akcija.' });
