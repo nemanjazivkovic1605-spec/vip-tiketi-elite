@@ -6,20 +6,12 @@ import { Match, TicketStatus, Tip } from '../types';
 import { formatFirstMatchStartAt, formatTicketPublishedAt, getMatchEventTime, isPublicFinishedTicket } from '../utils/tickets';
 import { useAuth } from '../hooks/useAuth';
 import { formatLeagueName } from '../utils/leagueMapper';
+import { getHistoryMonths, isInHistoryMonth } from '../utils/historyMonths';
 
 type PublishedResult = {
   tip: Tip;
   match: Match;
 };
-
-const today = new Date().toISOString().split('T')[0];
-
-const MONTHS = [
-  { label: 'Februar 2026', value: '2026-02', start: '2026-02-01', end: '2026-02-28' },
-  { label: 'Mart 2026', value: '2026-03', start: '2026-03-01', end: '2026-03-31' },
-  { label: 'April 2026', value: '2026-04', start: '2026-04-01', end: '2026-04-30' },
-  { label: 'Maj 2026', value: '2026-05', start: '2026-05-01', end: today },
-];
 
 const formatDate = (date: string) => {
   const [year, month, day] = date.split('-');
@@ -86,13 +78,12 @@ export default function Results() {
   const leagues = useMemo(() => {
     return Array.from(new Set(results.map(({ match }) => formatLeagueName(match.league)))).sort();
   }, [results]);
+  const months = useMemo(() => getHistoryMonths(results.map(({ tip }) => tip.date)), [results]);
 
   const filteredResults = useMemo(() => {
     const normalizedTeam = teamFilter.trim().toLowerCase();
-    const month = MONTHS.find((item) => item.value === selectedMonth);
-
     return results.filter(({ tip, match }) => {
-      const matchesMonth = !month || (tip.date >= month.start && tip.date <= month.end);
+      const matchesMonth = isInHistoryMonth(tip.date, selectedMonth);
       const matchesLeague = selectedLeague === 'all' || formatLeagueName(match.league) === selectedLeague;
       const matchesStatus = selectedStatus === 'all' || tip.status === selectedStatus;
       const matchesTeam = !normalizedTeam
@@ -114,12 +105,13 @@ export default function Results() {
 
       <div className="grid md:grid-cols-4 gap-3 mb-10">
         <select
+          aria-label="Mesec rezultata"
           value={selectedMonth}
           onChange={(event) => setSelectedMonth(event.target.value)}
           className="bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-3 text-sm font-bold text-neutral-200 outline-none focus:border-gold-500/50"
         >
           <option value="all">Svi meseci</option>
-          {MONTHS.map((month) => (
+          {months.map((month) => (
             <option key={month.value} value={month.value}>{month.label}</option>
           ))}
         </select>

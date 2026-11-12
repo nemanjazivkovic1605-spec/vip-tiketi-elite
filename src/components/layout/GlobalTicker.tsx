@@ -25,6 +25,7 @@ export default function GlobalTicker() {
   return (
     <TopNoticeBar
       latestMonthProfitUnits={hasPublicStats ? stats?.monthlyBreakdown[0]?.profitUnits ?? null : null}
+      latestMonthKey={hasPublicStats ? stats?.monthlyBreakdown[0]?.key ?? null : null}
       roi={hasPublicStats ? stats?.roi ?? null : null}
       completedCount={hasPublicStats ? stats?.completedCount ?? null : null}
       hitRate={hasPublicStats ? stats?.hitRate ?? null : null}
