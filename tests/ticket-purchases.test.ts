@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { MemoryFirestore } from './helpers/memoryFirestore.ts';
 import { TicketStatus, TipPublicationStatus, type Tip } from '../src/types.ts';
 import { mapActiveTicketForAccess, mapTicketForPublic } from '../src/services/tickets/ticketMappers.ts';
-import { readAdminTicketPurchases, readTicketPurchases, requestTicketPurchase, setTicketPurchaseStatus, ticketPurchaseId, type PurchaseActor } from '../server/ticketPurchases.ts';
+import { paymentReferenceCandidate, readAdminTicketPurchases, readTicketPurchases, requestTicketPurchase, setTicketPurchaseStatus, ticketPurchaseId, type PurchaseActor } from '../server/ticketPurchases.ts';
 import { createTicketPurchasesHandler } from '../api/ticket-purchases.ts';
 import { safeLoginRedirect } from '../src/utils/loginRedirect.ts';
 
@@ -37,20 +37,60 @@ test('payment request binds a fixed price and reference to one verified user and
   assert.equal(row.ticketId, ticket.id);
   assert.equal(row.priceEur, 15);
   assert.equal(row.priceRsd, 1758);
-  assert.match(row.reference, /^T[A-F0-9]{12}$/);
+  assert.match(row.reference, /^[A-HJ-NP-Z2-9]{4}$/);
+  assert.deepEqual(db.documents.get(`ticketPurchaseReferences/${row.reference}`), { purchaseId: row.id });
   assert.equal(row.paymentAvailable, true);
   assert.equal((await readTicketPurchases(db as any, buyer, [ticket.id], now)).tickets.length, 0);
-  assert.equal(JSON.stringify([...db.documents].filter(([path]) => !path.startsWith('ticketPurchases/'))), before);
+  assert.equal(JSON.stringify([...db.documents].filter(([path]) => !path.startsWith('ticketPurchases/') && !path.startsWith('ticketPurchaseReferences/'))), before);
 });
 
 test('repeat and overlapping requests reuse the same pending payment record', async () => {
   const { db, ticket } = fixture();
   const rows = await Promise.all(Array.from({ length: 4 }, () => requestTicketPurchase(db as any, buyer, ticket.id, now)));
   assert.equal(new Set(rows.map(row => row.id)).size, 1);
+  assert.equal(new Set(rows.map(row => row.reference)).size, 1);
   assert.equal([...db.documents.keys()].filter(path => path.startsWith('ticketPurchases/')).length, 1);
+  assert.equal([...db.documents.keys()].filter(path => path.startsWith('ticketPurchaseReferences/')).length, 1);
   const approved = await setTicketPurchaseStatus(db as any, admin, rows[0].id, 'approved', true, now);
   assert.equal((await requestTicketPurchase(db as any, buyer, ticket.id, now)).status, 'approved');
   assert.equal(db.documents.get(`ticketPurchases/${approved.id}`).approvedBy, admin.uid);
+});
+
+test('occupied payment references are never reassigned, including after revocation', async () => {
+  const { db, ticket } = fixture();
+  const occupied = paymentReferenceCandidate(ticketPurchaseId(buyer.uid, ticket.id));
+  db.documents.set(`ticketPurchaseReferences/${occupied}`, { purchaseId: 'historic-purchase' });
+  const first = await requestTicketPurchase(db as any, buyer, ticket.id, now);
+  assert.notEqual(first.reference, occupied);
+  assert.deepEqual(db.documents.get(`ticketPurchaseReferences/${occupied}`), { purchaseId: 'historic-purchase' });
+  await setTicketPurchaseStatus(db as any, admin, first.id, 'revoked', false, now);
+  assert.deepEqual(db.documents.get(`ticketPurchaseReferences/${first.reference}`), { purchaseId: first.id });
+  const second = await requestTicketPurchase(db as any, other, ticket.id, now);
+  assert.notEqual(first.reference, second.reference);
+});
+
+test('reference allocation fails without writing a purchase when all candidates are occupied', async () => {
+  const { db, ticket } = fixture(), id = ticketPurchaseId(buyer.uid, ticket.id);
+  for (let attempt = 0; attempt < 32; attempt++) {
+    db.documents.set(`ticketPurchaseReferences/${paymentReferenceCandidate(id, attempt)}`, { purchaseId: 'historic-purchase' });
+  }
+  const before = JSON.stringify([...db.documents]);
+  await assert.rejects(() => requestTicketPurchase(db as any, buyer, ticket.id, now), { status: 503 });
+  assert.equal(JSON.stringify([...db.documents]), before);
+});
+
+test('issued legacy references and amounts survive retries and approval without allocating another reference', async () => {
+  const { db, ticket } = fixture();
+  const row = await requestTicketPurchase(db as any, buyer, ticket.id, now);
+  db.documents.delete(`ticketPurchaseReferences/${row.reference}`);
+  Object.assign(db.documents.get(`ticketPurchases/${row.id}`), { reference: 'T123456789ABC', priceRsd: 1800 });
+  assert.equal((await requestTicketPurchase(db as any, buyer, ticket.id, now)).reference, 'T123456789ABC');
+  await setTicketPurchaseStatus(db as any, admin, row.id, 'approved', true, now);
+  const owned = await readTicketPurchases(db as any, buyer, [ticket.id], now);
+  assert.equal(owned.purchases[0].reference, 'T123456789ABC');
+  assert.equal(owned.purchases[0].priceRsd, 1800);
+  assert.equal(owned.tickets.length, 1);
+  assert.equal([...db.documents.keys()].some(path => path.startsWith('ticketPurchaseReferences/')), false);
 });
 
 test('only admin confirmation unlocks the purchased ticket; another user and another ticket stay locked', async () => {

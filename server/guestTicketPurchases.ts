@@ -4,7 +4,7 @@ import { TipPublicationStatus, type Tip } from '../src/types.js';
 import { isPurchaseEmail, normalizePurchaseEmail, type TicketPurchase } from '../src/utils/ticketPurchases.js';
 import { resolveTicketCode } from '../src/utils/tickets.js';
 import { assertPublished, buildTicketPurchase, buyerView, paymentAvailable, plain, purchaseMatchesProduct,
-  ticketPurchaseId, TicketPurchaseError, validPurchaseTicketId } from './ticketPurchases.js';
+  reservePaymentReference, ticketPurchaseId, TicketPurchaseError, validPurchaseTicketId } from './ticketPurchases.js';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 export const guestPurchaseOwner = (token: string) => `guest:${digest(token)}`;
@@ -34,7 +34,8 @@ export async function requestGuestTicketPurchase(db: Firestore, ticketId: string
     const sameWindow = Number.isFinite(windowStart) && now.getTime() >= windowStart && now.getTime() - windowStart < 3600000;
     const count = sameWindow ? Number(previous?.count) || 0 : 0;
     if (count >= GUEST_REQUESTS_PER_HOUR) throw new TicketPurchaseError('Previše zahteva. Pokušajte kasnije ili kontaktirajte podršku.', 429);
-    const row: TicketPurchase = { ...buildTicketPurchase({ uid, email }, tip!, now), buyerType: 'guest' };
+    const reference = await reservePaymentReference(db, transaction, id);
+    const row: TicketPurchase = { ...buildTicketPurchase({ uid, email }, tip!, now, reference), buyerType: 'guest' };
     transaction.create(ref, plain(row));
     transaction.set(limitRef, { windowStart: sameWindow ? windowStart : now.getTime(), count: count + 1 });
     return buyerView(row, true);
