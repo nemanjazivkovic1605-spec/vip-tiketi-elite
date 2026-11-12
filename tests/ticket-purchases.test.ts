@@ -13,7 +13,7 @@ const admin: PurchaseActor = { uid: 'admin', email: 'admin@example.test', emailV
 const other: PurchaseActor = { ...buyer, uid: 'other', email: 'other@example.test' };
 const makeTicket = (id = 'auto-elite_ticket-2099-11-10', type: 'elite_ticket' | 'safe_pick' = 'elite_ticket'): Tip => ({
   id, type, isVip: true, date: '2099-11-10', status: TicketStatus.PENDING,
-  publishedDate: '2099-11-10', publishedTime: '09:00', publicationStatus: TipPublicationStatus.PUBLISHED,
+  publishedDate: '2099-11-10', publishedTime: '09:00', ticketCode: 'V101120990900', publicationStatus: TipPublicationStatus.PUBLISHED,
   totalOdds: 3.24, analysis: 'Private analysis', matches: [0, 1].map(index => ({
     id: `${id}-${index}`, homeTeam: `Home ${index}`, awayTeam: `Away ${index}`, teams: `Home ${index} - Away ${index}`,
     league: 'League', prediction: '1X', odds: 1.8, time: '19:00', eventTime: '19:00', eventDate: '2099-11-10', kickoffAt: '2099-11-10T18:00:00Z',
@@ -62,6 +62,8 @@ test('only admin confirmation unlocks the purchased ticket; another user and ano
   const owned = await readTicketPurchases(db as any, buyer, [ticket.id, safe.id], now);
   assert.deepEqual(owned.tickets.map(tip => tip.id), [ticket.id]);
   assert.equal(owned.tickets[0].locked, false);
+  assert.equal(owned.tickets[0].ticketCode, row.ticketCode);
+  assert.match(owned.tickets[0].ticketCode!, /^V101120990900-[A-Z0-9]{7}$/);
   assert.equal(owned.tickets[0].matches[0].prediction, '1X');
   assert.equal((await readTicketPurchases(db as any, other, [ticket.id], now)).tickets.length, 0);
   assert.equal((await readTicketPurchases(db as any, other, [ticket.id], now)).purchases.length, 0);
