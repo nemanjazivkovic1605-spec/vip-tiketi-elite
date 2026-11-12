@@ -23,7 +23,7 @@ export function analysisTicket(analysis: DailyAnalysisItem): Tip {
   return {
     id: `daily-${analysis.id}`, source: 'admin', type: 'vip_monthly', publicationStatus: TipPublicationStatus.PUBLISHED,
     date: analysis.date, publishedDate: analysis.publishedDate, publishedTime: analysis.publishedTime, publishedAt: analysis.publishedAt,
-    ticketCode: generateTicketCode(analysis.access === 'VIP', analysis.publishedDate || analysis.date, analysis.publishedTime || '12:00'),
+    ticketCode: generateTicketCode(analysis.access === 'VIP', analysis.publishedDate || analysis.date, analysis.publishedTime || '12:00', `daily-${analysis.id}`),
     sourceProvider: analysis.source, fixtureId: String(analysis.providerFixtureId || analysis.fixtureId || ''),
     matches: [{ id: `${analysis.id}-match`, externalMatchId: String(analysis.fixtureId || ''),
       teams: `${analysis.homeTeam} - ${analysis.awayTeam}`, homeTeam: analysis.homeTeam, awayTeam: analysis.awayTeam,
