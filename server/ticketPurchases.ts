@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Firestore } from 'firebase-admin/firestore';
+import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { TicketStatus, TipPublicationStatus, type Tip } from '../src/types.js';
 import { DEFAULT_EUR_RSD_RATE, SINGLE_TICKET_PRODUCTS, type SingleTicketProductId, type TicketPurchase } from '../src/utils/ticketPurchases.js';
 import { getTicketProductType } from '../src/utils/ticketProduct.js';
@@ -13,6 +13,23 @@ export class TicketPurchaseError extends Error {
 const COLLECTION = 'ticketPurchases';
 export const validPurchaseTicketId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id);
 export const ticketPurchaseId = (uid: string, ticketId: string) => createHash('sha256').update(JSON.stringify([uid, ticketId])).digest('hex');
+const REFERENCE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const paymentReferenceCandidate = (purchaseId: string, attempt = 0) => {
+  const bytes = createHash('sha256').update(JSON.stringify([purchaseId, attempt])).digest();
+  return Array.from(bytes.subarray(0, 4), byte => REFERENCE_ALPHABET[byte % REFERENCE_ALPHABET.length]).join('');
+};
+// Call after all other reads. The reservation and purchase commit together;
+// concurrent purchases retry when they select the same free reference.
+export async function reservePaymentReference(db: Firestore, transaction: Transaction, purchaseId: string) {
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const reference = paymentReferenceCandidate(purchaseId, attempt);
+    const ref = db.doc(`ticketPurchaseReferences/${reference}`);
+    if ((await transaction.get(ref)).exists) continue;
+    transaction.create(ref, { purchaseId });
+    return reference;
+  }
+  throw new TicketPurchaseError('Trenutno nije moguće pripremiti uplatu. Pokušajte ponovo kasnije.', 503);
+}
 export const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 export const assertPurchaseActor = (actor: PurchaseActor) => {
   if (!actor.uid) throw new TicketPurchaseError('Potrebna je prijava.', 401);
@@ -50,7 +67,7 @@ export const purchaseMatchesProduct = (tip: Tip | undefined, purchase: TicketPur
   catch { return false; }
 };
 
-export const buildTicketPurchase = (owner: { uid: string; email: string }, tip: Tip, now: Date): TicketPurchase => {
+export const buildTicketPurchase = (owner: { uid: string; email: string }, tip: Tip, now: Date, reference: string): TicketPurchase => {
   const id = ticketPurchaseId(owner.uid, tip.id);
   const productId = productFor(tip), product = SINGLE_TICKET_PRODUCTS[productId];
   const configuredRate = Number(process.env.VITE_EUR_RSD_RATE);
@@ -59,7 +76,7 @@ export const buildTicketPurchase = (owner: { uid: string; email: string }, tip: 
     id, userId: owner.uid, userEmail: owner.email, ticketId: tip.id, productId, productName: product.name,
     priceEur: product.priceEur, priceRsd: Math.round(product.priceEur * exchangeRate), exchangeRate, ticketDate: tip.date,
     ticketCode: resolveTicketCode(tip, generateTicketCode(true, tip.publishedDate || tip.date, tip.publishedTime || '12:00', tip.id)),
-    reference: `T${id.slice(0, 12).toUpperCase()}`, status: 'pending', createdAt: now.toISOString(), updatedAt: now.toISOString(),
+    reference, status: 'pending', createdAt: now.toISOString(), updatedAt: now.toISOString(),
   };
 };
 
@@ -89,7 +106,8 @@ export async function requestTicketPurchase(db: Firestore, actor: PurchaseActor,
       || kickoffs.some(value => !Number.isFinite(value)) || Math.min(...kickoffs) <= now.getTime()) {
       throw new TicketPurchaseError('Kupovina je dostupna samo pre početka prvog meča.', 409);
     }
-    const purchase = buildTicketPurchase(actor, tip!, now);
+    const reference = await reservePaymentReference(db, transaction, id);
+    const purchase = buildTicketPurchase(actor, tip!, now, reference);
     transaction.create(ref, plain(purchase));
     return buyerView(purchase, true);
   });

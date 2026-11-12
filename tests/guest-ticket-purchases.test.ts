@@ -4,8 +4,8 @@ import { randomBytes } from 'node:crypto';
 import { MemoryFirestore } from './helpers/memoryFirestore.ts';
 import { TicketStatus, TipPublicationStatus, type Tip } from '../src/types.ts';
 import { mapTicketForPublic } from '../src/services/tickets/ticketMappers.ts';
-import { readTicketPurchases, setTicketPurchaseStatus, type PurchaseActor } from '../server/ticketPurchases.ts';
-import { GUEST_REQUESTS_PER_HOUR, readGuestTicketPurchase, requestGuestTicketPurchase } from '../server/guestTicketPurchases.ts';
+import { paymentReferenceCandidate, readTicketPurchases, requestTicketPurchase, setTicketPurchaseStatus, ticketPurchaseId, type PurchaseActor } from '../server/ticketPurchases.ts';
+import { GUEST_REQUESTS_PER_HOUR, guestPurchaseOwner, readGuestTicketPurchase, requestGuestTicketPurchase } from '../server/guestTicketPurchases.ts';
 import { createTicketPurchasesHandler } from '../api/ticket-purchases.ts';
 import { guestCheckoutLink, savedGuestToken, saveGuestToken } from '../src/utils/guestCheckout.ts';
 
@@ -39,8 +39,10 @@ test('guest request creates a fixed-price pending purchase without an account an
   assert.equal(purchase.status, 'pending');
   assert.equal(purchase.priceEur, 15);
   assert.equal(purchase.priceRsd, 1758);
+  assert.match(purchase.reference, /^[A-HJ-NP-Z2-9]{4}$/);
+  assert.deepEqual(db.documents.get(`ticketPurchaseReferences/${purchase.reference}`), { purchaseId: purchase.id });
   assert.equal((await readGuestTicketPurchase(db as any, ticket.id, token, now)).ticket, undefined);
-  assert.equal(JSON.stringify([...db.documents].filter(([path]) => !path.startsWith('ticketPurchases/') && !path.startsWith('guestPurchaseLimits/'))), before);
+  assert.equal(JSON.stringify([...db.documents].filter(([path]) => !path.startsWith('ticketPurchases/') && !path.startsWith('guestPurchaseLimits/') && !path.startsWith('ticketPurchaseReferences/'))), before);
   const stored = JSON.stringify([...db.documents]);
   assert.equal(stored.includes(token), false);
   assert.equal(stored.includes('198.51.100.1'), false);
@@ -50,6 +52,7 @@ test('retries reuse one request and a new key cannot claim a purchase by knowing
   const { db, ticket } = fixture();
   const rows = await Promise.all(Array.from({ length: 4 }, () => requestGuestTicketPurchase(db as any, ticket.id, account.email, token, '198.51.100.1', now)));
   assert.equal(new Set(rows.map(row => row.id)).size, 1);
+  assert.equal(new Set(rows.map(row => row.reference)).size, 1);
   assert.equal([...db.documents.keys()].filter(path => path.startsWith('ticketPurchases/')).length, 1);
   await setTicketPurchaseStatus(db as any, admin, rows[0].id, 'approved', true, now);
   await assert.rejects(() => readGuestTicketPurchase(db as any, ticket.id, randomBytes(32).toString('hex'), now), /nije pronađen/);
@@ -58,6 +61,34 @@ test('retries reuse one request and a new key cannot claim a purchase by knowing
   assert.equal(other.status, 'pending');
   assert.equal((await readTicketPurchases(db as any, account, [ticket.id], now)).tickets.length, 0);
   await assert.rejects(() => requestGuestTicketPurchase(db as any, ticket.id, 'changed@example.test', token, '198.51.100.1', now), /Email/);
+});
+
+test('guest and account orders share collision protection and retries keep the reserved code', async () => {
+  const { db, ticket } = fixture();
+  const firstGuestCandidate = paymentReferenceCandidate(ticketPurchaseId(guestPurchaseOwner(token), ticket.id));
+  const accountOrder = await requestTicketPurchase(db as any, account, ticket.id, now);
+  db.documents.set(`ticketPurchaseReferences/${firstGuestCandidate}`, { purchaseId: accountOrder.id });
+  const guest = await requestGuestTicketPurchase(db as any, ticket.id, account.email, token, '198.51.100.1', now);
+  assert.notEqual(guest.reference, firstGuestCandidate);
+  assert.notEqual(guest.reference, accountOrder.reference);
+  assert.deepEqual(db.documents.get(`ticketPurchaseReferences/${firstGuestCandidate}`), { purchaseId: accountOrder.id });
+  const before = JSON.stringify([...db.documents]);
+  assert.equal((await requestGuestTicketPurchase(db as any, ticket.id, account.email, token, '198.51.100.1', now)).reference, guest.reference);
+  assert.equal(JSON.stringify([...db.documents]), before);
+});
+
+test('legacy guest instructions remain valid on private-link reads, retries and approval', async () => {
+  const { db, ticket } = fixture();
+  const row = await requestGuestTicketPurchase(db as any, ticket.id, account.email, token, '198.51.100.1', now);
+  db.documents.delete(`ticketPurchaseReferences/${row.reference}`);
+  Object.assign(db.documents.get(`ticketPurchases/${row.id}`), { reference: 'T123456789ABC', priceRsd: 1800 });
+  assert.equal((await requestGuestTicketPurchase(db as any, ticket.id, account.email, token, '198.51.100.1', now)).reference, 'T123456789ABC');
+  await setTicketPurchaseStatus(db as any, admin, row.id, 'approved', true, now);
+  const owned = await readGuestTicketPurchase(db as any, ticket.id, token, now);
+  assert.equal(owned.purchase.reference, 'T123456789ABC');
+  assert.equal(owned.purchase.priceRsd, 1800);
+  assert.equal(owned.ticket?.id, ticket.id);
+  assert.equal([...db.documents.keys()].some(path => path.startsWith('ticketPurchaseReferences/')), false);
 });
 
 test('only verified admin approval unlocks the guest exact ticket, and revocation removes it', async () => {
