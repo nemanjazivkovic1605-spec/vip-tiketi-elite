@@ -121,6 +121,14 @@ The active public view reads at most 50 entries in the current Belgrade date win
 
 New generated ticket codes include a stable suffix derived from the ticket ID so simultaneous Elite/Safe publication has different references. Legacy active codes receive the same suffix when displayed. Completed historical codes and custom admin references are preserved; no database migration is needed.
 
+### Individual Elite/Safe purchases
+
+`/checkout?product=vip-ticket-day` (15 EUR) and `/checkout?product=safe-pick-day` (10 EUR) now bind a bank transfer to one published ticket and a verified, active account. The locked ticket card links directly to its checkout. A pending request records the server-calculated RSD amount, ticket code and unique transfer reference; it does not grant access or charge a payment method. The QR and payment instructions use those stored values. New requests stop at the first kickoff; existing paid requests can still be reviewed by support.
+
+After independently checking the bank transfer, an administrator opens **Kupovine tiketa**, checks the payment-verification box and approves the exact request. Approval unlocks only that ticket for its owner; it does not set VIP membership or unlock other tickets. Administrators can revoke access. Hiding/deleting or recategorizing the ticket and blocking the owner also prevent individual access. Open ticket pages recheck purchases while visible, once per minute; every API read revalidates the grant.
+
+`/api/ticket-purchases` requires a Firebase ID token, verifies revocation and checks the stored profile. Only the server reads/writes `ticketPurchases`; the existing default-deny client rules stay unchanged. This uses the existing `FIREBASE_SERVICE_ACCOUNT_KEY` and named database, with no rule migration or new payment provider. Buyer responses are private/no-store, omit the approving administrator and never include another user's purchases. The server owns prices (the optional `VITE_EUR_RSD_RATE` must match the deployment's rate), timestamps, references and approval state. Tests use isolated stores and do not approve any real transfer.
+
 ## Resend configuration
 
 The app now sends verification, password reset, welcome, and contact emails through a secure backend endpoint using Resend.

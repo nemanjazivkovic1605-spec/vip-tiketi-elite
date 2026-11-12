@@ -19,6 +19,8 @@ import {
 } from '../utils/tickets';
 import { getTicketProductLabel, getTicketProductTone, getTicketProductType } from '../utils/ticketProduct';
 import { mapActiveTicketForAccess } from '../services/tickets/ticketMappers';
+import { ticketPurchasesService } from '../services/ticketPurchasesService';
+import { SINGLE_TICKET_PRODUCTS, type SingleTicketProductId } from '../utils/ticketPurchases';
 
 const getTicketVisuals = (status: TicketStatus) => {
   if (status === TicketStatus.WON) {
@@ -108,22 +110,30 @@ export default function Tickets() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | TicketStatus>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | TicketProductType>(initialCategory);
-  const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
+  const [selectedTipState, setSelectedTip] = useState<Tip | null>(null);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
   const [accessMessage, setAccessMessage] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [purchaseError, setPurchaseError] = useState('');
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [pageCursor, setPageCursor] = useState<string | undefined>();
   const [hasMoreTips, setHasMoreTips] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [purchaseAccess, setPurchaseAccess] = useState<{ userId: string; ids: string[] }>({ userId: '', ids: [] });
   const requestVersion = useRef(0);
 
   useEffect(() => {
     void fetchData(true);
     return isActiveView ? mockTipsService.subscribeActiveTickets(() => void fetchData())
       : mockTipsService.subscribePublicStats(() => void fetchData());
-  }, [filter, typeFilter, isActiveView, canAccessFree, canAccessVip, isAdmin]);
+  }, [filter, typeFilter, isActiveView, canAccessFree, canAccessVip, isAdmin, user?.id]);
+
+  useEffect(() => {
+    if (!isActiveView || !canAccessFree || canAccessVip || isAdmin) return;
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void fetchData(); }, 60000);
+    return () => window.clearInterval(timer);
+  }, [isActiveView, canAccessFree, canAccessVip, isAdmin, user?.id]);
 
   useEffect(() => {
     setTypeFilter(initialCategory);
@@ -139,28 +149,51 @@ export default function Tickets() {
     if (showLoading) setLoading(true);
     setLoadError('');
     try {
+      let grantedIds: string[] = [];
+      let grantError = '';
       const page = await withTimeout(
         isActiveView
-          ? mockTipsService.getActiveTickets({ canAccessFree, canAccessVip: canAccessVip || isAdmin }).then(tips => ({ tips, cursor: undefined as string | undefined, hasMore: false }))
+          ? mockTipsService.getActiveTickets({ canAccessFree, canAccessVip: canAccessVip || isAdmin }).then(async tips => {
+            if (canAccessFree && !canAccessVip && !isAdmin && tips.some(tip => tip.isVip)) {
+              try {
+                const purchased = await ticketPurchasesService.read(tips.filter(tip => tip.isVip).map(tip => tip.id));
+                const byId = new Map(purchased.tickets.map(tip => [tip.id, tip]));
+                grantedIds = purchased.tickets.map(tip => tip.id);
+                tips = tips.map(tip => byId.get(tip.id) || tip);
+              } catch {
+                grantError = 'Pristup kupljenim tiketima trenutno nije moguće proveriti. Pokušajte ponovo.';
+              }
+            }
+            return { tips, cursor: undefined as string | undefined, hasMore: false };
+          })
           : mockTipsService.getHistoryPage({ category: typeFilter, status: filter }),
         isActiveView ? 'Tiketi se ucitavaju predugo. Pokusajte ponovo.' : 'Istorija se učitava predugo. Pokušajte ponovo.',
       );
       if (request !== requestVersion.current) return;
       setTips(page.tips);
+      setPurchaseAccess({ userId: user?.id || '', ids: grantedIds });
+      setPurchaseError(grantError);
       setPageCursor(page.cursor);
       setHasMoreTips(page.hasMore);
       setVisibleCount(HISTORY_PAGE_SIZE);
     } catch (error) {
       console.error('History tickets load failed:', error);
-      if (request === requestVersion.current) setLoadError(error instanceof Error ? error.message : 'Istorija trenutno nije dostupna.');
+      if (request === requestVersion.current) {
+        setPurchaseAccess({ userId: '', ids: [] });
+        setPurchaseError('');
+        setLoadError(error instanceof Error ? error.message : 'Istorija trenutno nije dostupna.');
+      }
     } finally {
       if (request === requestVersion.current) setLoading(false);
     }
   };
 
+  const purchasedTicketIds = purchaseAccess.userId === user?.id && canAccessFree ? purchaseAccess.ids : [];
+  const hasPrivateTicketAccess = (tip: Tip) => canAccessVip || isAdmin || purchasedTicketIds.includes(tip.id);
   const accessibleTips = useMemo(() => isActiveView
-    ? tips.map(tip => mapActiveTicketForAccess(tip, tip, { canAccessFree, canAccessVip: canAccessVip || isAdmin }))
-    : tips, [tips, isActiveView, canAccessFree, canAccessVip, isAdmin]);
+    ? tips.map(tip => mapActiveTicketForAccess(tip, tip, { canAccessFree, canAccessVip: canAccessVip || isAdmin, purchasedTicketIds }))
+    : tips.filter(tip => [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND].includes(tip.status)), [tips, isActiveView, canAccessFree, canAccessVip, isAdmin, purchaseAccess, user?.id]);
+  const selectedTip = selectedTipState ? accessibleTips.find(tip => tip.id === selectedTipState.id) || null : null;
   const filteredTips = useMemo(() => accessibleTips.filter((tip) => {
     const matchesStatus = filter === 'all' || tip.status === filter;
     const matchesType = typeFilter === 'all' || getTicketProductType(tip) === typeFilter;
@@ -196,7 +229,7 @@ export default function Tickets() {
   };
 
   const renderPrediction = (tip: Tip, prediction: string) => {
-    const locked = isPredictionLockedForUser(tip, user, canAccessFree, canAccessVip);
+    const locked = isPredictionLockedForUser(tip, user, canAccessFree, hasPrivateTicketAccess(tip));
 
     if (!locked) {
       return (
@@ -212,7 +245,7 @@ export default function Tickets() {
         onClick={(event) => {
           event.stopPropagation();
           showVipPopup(tip.isVip
-            ? 'Morate biti VIP član da biste videli VIP tip i analizu.'
+            ? 'Aktivirajte VIP pristup ili kupite ovaj pojedinačni tiket.'
             : 'Prijavite se i potvrdite email adresu da biste videli aktivan FREE tip.');
         }}
         className="relative rounded-xl border border-gold-400/20 bg-gold-500/10 px-4 py-2 text-sm font-black text-gold-300 transition-all hover:border-gold-400/40"
@@ -228,7 +261,7 @@ export default function Tickets() {
   const renderAnalysis = (tip: Tip) => {
     if (!tip.isVip) return null;
 
-    const canRead = canReadVipAnalysis(tip, canAccessVip);
+    const canRead = canReadVipAnalysis(tip, hasPrivateTicketAccess(tip));
     const analysis = canRead
       ? [tip.analysis, ...tip.matches.map((match) => match.analysis)]
         .map((value) => value?.trim())
@@ -244,7 +277,7 @@ export default function Tickets() {
           onClick={(event) => {
             event.stopPropagation();
             if (!canRead) {
-              showVipPopup('Morate biti VIP član da biste pročitali analizu.');
+              showVipPopup('Analiza je dostupna uz VIP pristup ili kupovinu ovog tiketa.');
               return;
             }
             setOpenAnalysisId((current) => current === tip.id ? null : tip.id);
@@ -265,6 +298,7 @@ export default function Tickets() {
 
   const renderTicketBody = (tip: Tip, compact = false) => {
     const visuals = getTicketVisuals(tip.status);
+    const productId = (Object.keys(SINGLE_TICKET_PRODUCTS) as SingleTicketProductId[]).find(id => SINGLE_TICKET_PRODUCTS[id].category === getTicketProductType(tip));
 
     if (isActiveLockedTicket(tip)) {
       return (
@@ -275,7 +309,7 @@ export default function Tickets() {
             </div>
             <h3 className="font-display text-lg font-black text-neutral-100">Meč zaključan</h3>
             <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-neutral-500">
-              {tip.isVip ? 'VIP tip dostupan samo VIP članovima' : 'Registrujte se da biste videli FREE tip'}
+              {tip.isVip ? productId ? 'Dostupno uz VIP pristup ili pojedinačnu kupovinu' : 'VIP tip dostupan VIP članovima' : 'Registrujte se da biste videli FREE tip'}
             </p>
             <div className="mt-4 grid gap-2 text-left text-xs sm:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
@@ -291,6 +325,12 @@ export default function Tickets() {
                 <span className="font-bold text-neutral-200">{formatFirstMatchAt(tip)}</span>
               </div>
             </div>
+            {tip.isVip && productId ? <Link
+              to={`/checkout?product=${productId}&ticketId=${encodeURIComponent(tip.id)}`}
+              onClick={event => event.stopPropagation()}
+              onKeyDown={event => event.stopPropagation()}
+              className="mt-4 inline-block rounded-xl bg-gold-500 px-4 py-3 text-xs font-black text-black"
+            >Kupi ovaj tiket · {SINGLE_TICKET_PRODUCTS[productId].priceEur}€</Link> : null}
           </div>
         </div>
       );
@@ -398,6 +438,7 @@ export default function Tickets() {
         </div>
       </div>
 
+      {purchaseError ? <p role="alert" className="mb-5 rounded-xl border border-gold-500/25 p-4 text-sm text-gold-200">{purchaseError} <button type="button" onClick={() => void fetchData()} className="underline">Proveri pristup</button></p> : null}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full animate-spin"></div>

@@ -44,9 +44,9 @@ export const mapTicketForVip = (tip: Tip): Tip => tip;
 
 export const mapTicketForAdmin = (tip: Tip): Tip => tip;
 
-export const mapActiveTicketForAccess = (summary: Tip, full: Tip | null, access: { canAccessFree: boolean; canAccessVip: boolean }): Tip => {
+export const mapActiveTicketForAccess = (summary: Tip, full: Tip | null, access: { canAccessFree: boolean; canAccessVip: boolean; purchasedTicketIds?: readonly string[] }): Tip => {
   if (full?.id === summary.id && full.publicationStatus === TipPublicationStatus.PUBLISHED
     && [TicketStatus.PENDING, TicketStatus.POSTPONED].includes(full.status)
-    && (access.canAccessVip || access.canAccessFree && full.isVip === false)) return full;
+    && (access.canAccessVip || access.canAccessFree && (full.isVip === false || access.purchasedTicketIds?.includes(full.id)))) return full;
   return mapTicketForPublic(summary);
 };

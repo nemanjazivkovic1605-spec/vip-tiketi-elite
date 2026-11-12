@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, ClipboardCopy, Landmark, LockKeyhole, Mail, QrCode, ReceiptText, ShieldCheck, UserPlus } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import SingleTicketCheckout from '../components/SingleTicketCheckout';
+import { isSingleTicketProduct } from '../utils/ticketPurchases';
 import {
   buildIpsQrPayload,
   buildPaymentSummary,
@@ -56,8 +58,8 @@ export default function Checkout() {
   const rsdPrice = product ? calculateRsdPrice(product.priceEur) : 0;
 
   const ipsPayload = useMemo(
-    () => product ? buildIpsQrPayload(product) : '',
-    [product],
+    () => product && !isSingleTicketProduct(productId) ? buildIpsQrPayload(product) : '',
+    [product, productId],
   );
   const paymentSummary = useMemo(
     () => product ? buildPaymentSummary(product, paymentNote) : '',
@@ -107,6 +109,8 @@ export default function Checkout() {
       setCopyError('Kopiranje nije uspelo. Označite podatke i kopirajte ih ručno.');
     }
   };
+
+  if (isSingleTicketProduct(productId)) return <SingleTicketCheckout productId={productId} />;
 
   if (!product) {
     return (

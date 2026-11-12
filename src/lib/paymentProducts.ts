@@ -1,3 +1,5 @@
+import { DEFAULT_EUR_RSD_RATE, SINGLE_TICKET_PRODUCTS } from '../utils/ticketPurchases';
+
 export const PAYMENT_ACCOUNT = '265000000674036614';
 export const PAYMENT_RECIPIENT = 'ELITE VIP TIPS';
 export const PAYMENT_SUPPORT_EMAIL = 'support@eliteviptips.com';
@@ -5,7 +7,7 @@ export const PAYMENT_SUPPORT_EMAIL = 'support@eliteviptips.com';
 const configuredExchangeRate = Number(import.meta.env.VITE_EUR_RSD_RATE);
 export const EUR_RSD_RATE = Number.isFinite(configuredExchangeRate) && configuredExchangeRate > 0
   ? configuredExchangeRate
-  : 117.2;
+  : DEFAULT_EUR_RSD_RATE;
 
 export type PaymentProductId =
   | 'vip-ticket-day'
@@ -30,7 +32,7 @@ export const PAYMENT_PRODUCTS: Record<PaymentProductId, PaymentProduct> = {
     name: 'Elite tiket',
     shortName: 'ELITE TIKET',
     description: 'Premium tiket sa 2 do 6 mečeva, većom kvotom i fokusom na veći profit.',
-    priceEur: 15,
+    priceEur: SINGLE_TICKET_PRODUCTS['vip-ticket-day'].priceEur,
     purpose: 'ELITE TIPS - ELITE TIKET',
     accent: 'rose',
   },
@@ -39,7 +41,7 @@ export const PAYMENT_PRODUCTS: Record<PaymentProductId, PaymentProduct> = {
     name: 'Safe pick',
     shortName: 'SAFE PICK',
     description: 'Stabilniji dnevni predlog sa fokusom na kontrolisani rizik.',
-    priceEur: 10,
+    priceEur: SINGLE_TICKET_PRODUCTS['safe-pick-day'].priceEur,
     purpose: 'ELITE TIPS - SAFE PICK',
     accent: 'blue',
   },
@@ -78,8 +80,8 @@ export const calculateRsdPrice = (priceEur: number) => Math.round(priceEur * EUR
 
 export const formatRsdAmount = (amount: number) => new Intl.NumberFormat('sr-RS').format(amount);
 
-export const buildIpsQrPayload = (product: PaymentProduct) => {
-  const amount = `${calculateRsdPrice(product.priceEur)},00`;
+export const buildIpsQrPayload = (product: PaymentProduct, amountRsd = calculateRsdPrice(product.priceEur)) => {
+  const amount = `${Math.round(amountRsd)},00`;
   const purpose = product.purpose.slice(0, 35);
 
   return [
