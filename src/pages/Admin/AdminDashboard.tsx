@@ -19,6 +19,7 @@ import TipModal from '../../components/TipModal';
 import TicketEditModal from '../../components/admin/TicketEditModal';
 import AdminOverview from '../../components/admin/AdminOverview';
 import DailyProposalList from '../../components/admin/DailyProposalList';
+import TicketPurchasesPanel from '../../components/admin/TicketPurchasesPanel';
 import { dailyProposalsService } from '../../services/admin/dailyProposalsService';
 import type { DailyProposal } from '../../types';
 import { buildPublishedAt, calculateTotalOdds, formatLocalTime, getDefaultUnitsStake, getStatusLabel, getTicketKind, isPublishedBeforeFirstMatch, normalizeOdds, unitsToRsd } from '../../utils/tickets';
@@ -43,7 +44,7 @@ type BuilderTicketType = 'VIP Dubl' | 'VIP Combo';
 type UserStatusFilter = 'all' | 'pending' | 'approved' | 'expired' | 'blocked' | 'free' | 'silver' | 'gold' | 'elite';
 type TipPublicationFilter = 'all' | 'draft' | 'published';
 type DailyLifecycleFilter = 'active' | 'finished';
-type AdminTab = 'overview' | 'users' | 'matches' | 'tips' | 'analyses' | 'reviews' | 'settings';
+type AdminTab = 'overview' | 'users' | 'purchases' | 'matches' | 'tips' | 'analyses' | 'reviews' | 'settings';
 
 const ADMIN_FINISHED_DAILY_LIMIT = 10;
 const ADMIN_FINISHED_DAILY_LOOKBACK_DAYS = 2;
@@ -1550,6 +1551,7 @@ export default function AdminDashboard() {
   const menuItems = [
     { id: 'overview', label: 'Pregled', icon: <BarChart3 size={20} /> },
     { id: 'users', label: 'Korisnici', icon: <Users size={20} /> },
+    { id: 'purchases', label: 'Kupovine tiketa', icon: <ShieldCheck size={20} /> },
     { id: 'matches', label: 'Baza utakmica', icon: <Database size={20} /> },
     { id: 'tips', label: 'Tipovi', icon: <FileText size={20} /> },
     { id: 'analyses', label: 'Dnevni Tipovi', icon: <TrendingUp size={20} /> },
@@ -1710,6 +1712,8 @@ export default function AdminDashboard() {
                   onOpenPublishedTips={() => openTipsTab('published')}
                 />
               )}
+
+              {activeTab === 'purchases' && <TicketPurchasesPanel />}
 
               {activeTab === 'users' && (
                  <motion.div key="users" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>

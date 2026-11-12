@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { LogIn, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
 import { authService, getFirebaseErrorDetails } from '../services/authService';
+import { safeLoginRedirect } from '../utils/loginRedirect';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,7 +29,7 @@ export default function Login() {
       if (user.isAdmin) {
         navigate('/admin');
       } else {
-        navigate('/dashboard');
+        navigate(safeLoginRedirect(searchParams.get('next')));
       }
     } catch (err) {
       const details = getFirebaseErrorDetails(err);
