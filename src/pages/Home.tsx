@@ -275,7 +275,7 @@ export default function Home() {
             sectionId="safe-pick"
           />
           <aside className="grid content-center gap-6 rounded-xl border border-white/10 bg-black/55 p-5">
-            <CompactInfoCard icon={ShoppingCart} title="Kupovina bez pretplate" text="Odmah dobijaš tiket" />
+            <CompactInfoCard icon={ShoppingCart} title="Kupovina bez pretplate" text="Pristup nakon potvrde uplate" />
             <CompactInfoCard icon={Clock3} title="Dostupno svakog dana" text="Objava ujutru" />
             <CompactInfoCard icon={UserRound} title="Pogodno za sve igrače" text="Početnike i iskusne" />
           </aside>

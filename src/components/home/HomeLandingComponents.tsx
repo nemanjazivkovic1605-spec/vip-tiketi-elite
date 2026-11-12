@@ -18,20 +18,24 @@ import { Link } from 'react-router-dom';
 import type { Tip } from '../../types';
 import { TicketStatus } from '../../types';
 import { calculateTicketUnitsProfit } from '../../utils/tickets';
+import { formatHistoryMonth } from '../../utils/historyMonths';
 
 const signedUnits = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}u`;
 
 export function TopNoticeBar({
   latestMonthProfitUnits,
+  latestMonthKey,
   roi,
   completedCount,
   hitRate,
 }: {
   latestMonthProfitUnits: number | null;
+  latestMonthKey: string | null;
   roi: number | null;
   completedCount: number | null;
   hitRate: number | null;
 }) {
+  const latestMonthLabel = latestMonthKey ? formatHistoryMonth(latestMonthKey) : '';
   const offerItems = [
     { label: 'ELITE TIKET', value: '15€ • Kvota 2.50+', target: '/#elite-ticket' },
     { label: 'SAFE PICK', value: '10€ • Kvota 1.50–3.00', target: '/#safe-pick' },
@@ -40,7 +44,7 @@ export function TopNoticeBar({
     { label: 'ELITE 90 DANA', value: '100€', target: '/#pricing' },
   ];
   const statsItems = [
-    latestMonthProfitUnits === null ? null : { label: 'POSLEDNJI MESEC PROFIT', value: signedUnits(latestMonthProfitUnits), target: '/stats' },
+    latestMonthProfitUnits === null || !latestMonthLabel ? null : { label: `PROFIT · ${latestMonthLabel}`, value: signedUnits(latestMonthProfitUnits), target: '/stats' },
     roi === null ? null : { label: 'ROI', value: `${roi.toFixed(1)}%`, target: '/stats' },
     hitRate === null ? null : { label: 'PROLAZNOST', value: `${hitRate.toFixed(1)}%`, target: '/stats' },
     completedCount === null ? null : { label: 'ZAVRŠENI TIKETI', value: `${completedCount}`, target: '/stats' },
