@@ -115,6 +115,12 @@ The rebuild is incremental, defaults to dry-run and stops above 500 planned writ
 
 Result checking also runs through `.github/workflows/daily-results.yml` every 30 minutes, independent of the once-daily Vercel cron. It uses signed, short-lived GitHub OIDC tokens restricted to this exact repository, workflow and `main` ref; no cron/API secret is stored in GitHub. Unavailable results remain pending with backoff and a rotating cursor, never guessed. GitHub schedules can be delayed. `workflow_dispatch` runs the same protected check manually.
 
+### Active ticket display
+
+The active public view reads at most 50 entries in the current Belgrade date window (the previous six dates through two dates ahead), plus the six known current/upcoming automatic product IDs. Only published pending/postponed tickets are displayed. Older unresolved tickets remain in the database and admin view; their results and historical statistics are not changed.
+
+New generated ticket codes include a stable suffix derived from the ticket ID so simultaneous Elite/Safe publication has different references. Legacy active codes receive the same suffix when displayed. Completed historical codes and custom admin references are preserved; no database migration is needed.
+
 ## Resend configuration
 
 The app now sends verification, password reset, welcome, and contact emails through a secure backend endpoint using Resend.

@@ -111,7 +111,7 @@ export function buildProductTicket(type: AutomatedProduct, date: string, picks: 
   const unitsStake = getDefaultUnitsStake(true, matches.length);
   return { id, type, source: 'admin', automation: PRODUCT_AUTOMATION, automationDate: date, manualOverride: false, resultManualOverride: false,
     date, publishedDate: localDate(now), publishedTime, publishedAt: now.toISOString(), createdAt: now.toISOString(), updatedAt: now.toISOString(),
-    ticketCode: generateTicketCode(true, localDate(now), publishedTime), publicationStatus: TipPublicationStatus.PUBLISHED,
+    ticketCode: generateTicketCode(true, localDate(now), publishedTime, id), publicationStatus: TipPublicationStatus.PUBLISHED,
     matches, totalOdds: calculateTotalOdds(matches), totalOddsOverride: false, ticketType: getTicketKind(matches.length),
     unitsStake, stake: unitsToRsd(unitsStake), status: TicketStatus.PENDING, analysis: '', isVip: true,
   };

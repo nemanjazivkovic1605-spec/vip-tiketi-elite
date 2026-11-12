@@ -32,6 +32,7 @@ import {
   normalizeOdds,
   normalizePublishedDate,
   sortTicketsByDate,
+  resolveTicketCode,
 } from '../utils/tickets';
 import { calculateStats } from '../utils/ticketStats';
 import { getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublication';
@@ -47,6 +48,7 @@ import { subscribePublicStatsSummary } from './publicStatsSummary';
 import { updatePublicStatsTicket } from './firestore/publicStatsWrite';
 import { readHistoryPage } from './historyPageService';
 import { preserveProductAdminEdits } from '../utils/productTicketAdminEdits';
+import { activeTicketDateRange, isCurrentActiveTicket } from '../utils/activeTickets';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -74,12 +76,11 @@ const cleanAnalysis = (analysis?: string) => {
   return value;
 };
 
-const isValidTicketCode = (value?: string) => /^[FV]\d{12}$/.test((value || '').trim());
-
 const isAdminActiveTicketStatus = (status?: TicketStatus) =>
   status === TicketStatus.PENDING || status === TicketStatus.POSTPONED;
 
 const normalizeTip = (tip: Tip): Tip => {
+  const id = tip.id || Math.random().toString(36).slice(2, 11);
   const date = normalizePublishedDate(tip.date || new Date().toISOString().split('T')[0]);
   const matches = Array.isArray(tip.matches)
     ? tip.matches.map((match) => ({
@@ -97,27 +98,24 @@ const normalizeTip = (tip: Tip): Tip => {
   const status = tip.status || TicketStatus.PENDING;
   const normalizedDraft = {
     ...tip,
-    id: tip.id,
+    id,
     date,
     matches,
   } as Tip;
   const publicationMeta = getCorrectedPublicationMetaIfInvalid({
     ...normalizedDraft,
-    id: tip.id,
+    id,
     isVip: Boolean(tip.isVip),
     publishedDate: tip.publishedDate,
     publishedTime: tip.publishedTime,
     publishedAt: tip.publishedAt,
     createdAt: tip.createdAt,
   });
-  const existingTicketCode = (tip.ticketCode || '').trim();
-  const ticketCode = existingTicketCode && isValidTicketCode(existingTicketCode)
-    ? existingTicketCode
-    : publicationMeta.ticketCode;
+  const ticketCode = resolveTicketCode({ ...tip, id, status }, publicationMeta.ticketCode);
 
   return {
     ...tip,
-    id: tip.id || Math.random().toString(36).slice(2, 11),
+    id,
     publishedDate: publicationMeta.publishedDate,
     publishedTime: publicationMeta.publishedTime,
     publishedAt: publicationMeta.publishedAt,
@@ -296,7 +294,11 @@ const readAdminActiveTips = async (): Promise<Tip[]> => {
 
 const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
-const activeTicketsQuery = () => query(getPublicTicketsCollection(), where('status', 'in', [TicketStatus.PENDING, TicketStatus.POSTPONED]), queryLimit(50));
+const activeTicketsQuery = () => {
+  const { first, last } = activeTicketDateRange();
+  // A single date-field index keeps old unresolved entries out of this bounded page.
+  return query(getPublicTicketsCollection(), where('date', '>=', first), where('date', '<=', last), orderBy('date', 'desc'), queryLimit(50));
+};
 const currentProductIds = () => getDailyAnalysisDates().flatMap(day => (['elite_ticket', 'safe_pick'] as const).map(type => getAutomaticProductTicketId(day.date, type)));
 const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
 
@@ -551,7 +553,7 @@ export const mockTipsService = {
       ]);
       const docs = [...active.docs, ...known.filter(item => item.exists())];
       return sortTicketsByDate([...new Map(docs.map(item => [item.id, mapTicketForPublic(normalizeTip({ ...item.data(), id: item.id } as Tip))])).values()])
-        .filter(tip => tip.publicationStatus === TipPublicationStatus.PUBLISHED && isAdminActiveTicketStatus(tip.status)).slice(0, 50);
+        .filter(tip => isCurrentActiveTicket(tip)).slice(0, 50);
     });
     if (!access.canAccessFree && !access.canAccessVip) return summaries;
     return Promise.all(summaries.map(async summary => {
