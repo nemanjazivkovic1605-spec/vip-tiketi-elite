@@ -102,7 +102,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
         ...next,
         publishedTime,
         publishedAt: buildPublishedAt(publishedDate, publishedTime),
-        ticketCode: generateTicketCode(Boolean(next.isVip), publishedDate, publishedTime),
+        ticketCode: generateTicketCode(Boolean(next.isVip), publishedDate, publishedTime, next.id),
       };
     });
   };
@@ -226,7 +226,7 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
       publishedDate,
       publishedTime,
       publishedAt,
-      ticketCode: draft.ticketCode || generateTicketCode(Boolean(draft.isVip), publishedDate, publishedTime),
+      ticketCode: draft.ticketCode || generateTicketCode(Boolean(draft.isVip), publishedDate, publishedTime, draft.id),
       matches,
       unitsStake: Number(unitsStake.toFixed(2)),
       stake: unitsToRsd(unitsStake),

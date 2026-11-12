@@ -71,6 +71,31 @@ For a selected match and market, proposals use the highest eligible actual bookm
 
 Source attribution: [TheSportsDB](https://www.thesportsdb.com/), [OpenLigaDB](https://www.openligadb.de/) ([ODbL](https://opendatacommons.org/licenses/odbl/1-0/)). Team images/logos have separate rights; the new free adapters do not import artwork.
 
+## Automatic ELITE TIKET and SAFE PICK
+
+The existing `/api/daily-picks` morning cron now also creates one `elite_ticket` and one `safe_pick` for the current Europe/Belgrade date. It reuses the same fixture/real-price discovery as the admin proposal tool; no AI endpoint is called. It does not require admin approval. The existing monthly daily-pick workflow remains separate and unchanged in category.
+
+Elite selects 2-6 distinct fixtures, with a real combined price of at least 2.50 (selection target around 5.00, capped at 15.00). Safe selects 1-3 distinct fixtures with a combined price of 1.50-3.00. Existing basic statistics are preferred when available; unavailable statistics are not invented. Only unstarted football matches at least 30 minutes away, supported full-time markets and real feed prices are eligible. Missing data skips that category and records the reason in `automationLogs/products-seed-YYYY-MM-DD`.
+
+Publication is atomic across the existing `tickets`, sanitized `publicTickets` and `dailyAutomation/products-YYYY-MM-DD` reservation. Stable document IDs are `auto-elite_ticket-YYYY-MM-DD` and `auto-safe_pick-YYYY-MM-DD`. Existing manual products occupy the corresponding daily slot. Reservations survive admin deletion, so repeated/overlapping jobs neither duplicate nor recreate tickets. No old tickets or historical aggregates are migrated. Both active products use the existing VIP access rules and checkout prices (15 EUR / 10 EUR).
+
+The existing `Najbolje od nas` links open `/tickets?active=1&category=elite_ticket` or `safe_pick`. This reuses the ticket-card layout with a bounded active-public-index query (50 rows plus six known current/upcoming product IDs), not the finished-history query. Private documents are fetched only for the existing verified FREE/VIP access level; guests/non-VIP get sanitized locked cards. `/history`, ordinary `/tickets` history links, checkout buttons and prices remain unchanged. The active subscription is bounded as well and refreshes cards when the public index changes.
+
+The existing admin ticket editor handles all automated tickets. Admin edits preserve automation metadata; manual result/status changes are protected. Result polling uses the existing `/api/daily-results`, existing free result providers and existing GitHub runner. It checks a bounded active-ticket page, evaluates each leg from verified regular-time scores, and waits for the complete ticket before publishing the public result. Unsupported/unavailable results remain pending with `resultReviewRequired`, visible as `Provera rezultata` in admin. It never guesses a win/loss. Canceled legs are void, postponed legs remain postponed, and mixed win/void tickets use the actual remaining-leg price. Settlement updates the existing public history and incremental monthly/category statistics transactionally.
+
+No new credential is required: server-only `ODDS_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `CRON_SECRET`, and the existing optional fixture/result-provider keys are already supported. `PRODUCT_TICKETS_ENABLED=false` pauses new product publication without stopping results for existing tickets. Default is enabled. Preview deployments cannot write product tickets to production.
+
+The existing Vercel schedules stay daily: `0 8 * * *` for publication (09:00 Serbia in winter / 10:00 in summer), and `30 23 * * *` for results. This frequency is compatible with Hobby's once-daily limitation; Hobby can invoke within the configured hour rather than at an exact minute. The existing GitHub result workflow supplies the more frequent checks; no extra Vercel cron or paid API is introduced. Free-provider coverage and credits can still prevent publication and are logged rather than bypassed.
+
+Safe manual verification, with an admin Firebase bearer token:
+
+```text
+POST /api/daily-picks?mode=products&date=YYYY-MM-DD&dryRun=true
+Authorization: Bearer <Firebase admin ID token>
+```
+
+The date must be today, tomorrow or the day after in Serbia. Dry-run returns planned tickets, reasons and `plannedWrites`, and writes nothing. Omit `dryRun=true` only for an intentional real publication. Do not invoke `/api/daily-results` against production as a fake-result test: it performs real updates. `npm test` uses isolated transaction stores for publication, edits/deletion, real-score grading and aggregate tests, with no production test tickets.
+
 ## Incremental public statistics and history
 
 Public pages only read `publicStats/summary`, `publicMonthlyStats` and up to 50 selected `publicStatsTickets` per page. The compact monthly ledger provides ordering/category/status filters without downloading every ticket. The summary and page cache persist locally; a public CDN export remains available if Firestore is unavailable. All roles use the same aggregate totals.
@@ -89,6 +114,12 @@ npm run stats:rebuild -- --snapshot
 The rebuild is incremental, defaults to dry-run and stops above 500 planned writes. Repeating it unchanged plans zero writes. Deploy the refreshed local snapshots when making a manual export.
 
 Result checking also runs through `.github/workflows/daily-results.yml` every 30 minutes, independent of the once-daily Vercel cron. It uses signed, short-lived GitHub OIDC tokens restricted to this exact repository, workflow and `main` ref; no cron/API secret is stored in GitHub. Unavailable results remain pending with backoff and a rotating cursor, never guessed. GitHub schedules can be delayed. `workflow_dispatch` runs the same protected check manually.
+
+### Active ticket display
+
+The active public view reads at most 50 entries in the current Belgrade date window (the previous six dates through two dates ahead), plus the six known current/upcoming automatic product IDs. Only published pending/postponed tickets are displayed. Older unresolved tickets remain in the database and admin view; their results and historical statistics are not changed.
+
+New generated ticket codes include a stable suffix derived from the ticket ID so simultaneous Elite/Safe publication has different references. Legacy active codes receive the same suffix when displayed. Completed historical codes and custom admin references are preserved; no database migration is needed.
 
 ## Resend configuration
 
@@ -110,8 +141,8 @@ Do not commit `.env`; it is ignored by git. Keep `RESEND_API_KEY` and `FIREBASE_
 
 The /live-results page can merge PitchAPI fixtures with the existing match provider. It requests PitchAPI on the server through /api/pitch-matches, never from the browser. If PITCHAPI_API_KEY is missing or PitchAPI fails, existing fixtures remain available. PitchAPI is read-only here: no Firebase writes, automated picks or ticket changes.
 
-1. Get a free key from https://pitchapi.dev/ and review its terms before displaying external statistics commercially. The current free tier only offers the Big Five leagues; lower divisions require its paid Pro tier.
+1. Get a free key from https://pitchapi.dev/ and review its usage terms before displaying external statistics commercially. As checked on 2026-11-12, its documentation advertises one free plan covering 77 leagues, including second tiers. Verify the actual account catalogue with `/v1/leagues`; do not assume every English lower division or every match has xG.
 2. Configure PITCHAPI_API_KEY as a server-only encrypted Vercel environment variable (do not use the VITE_ prefix and never commit it).
 3. Deploy a preview to verify the date feed and match stats with a real account, then consider enabling production. The xG button only appears for finished PitchAPI matches, retrieves the full-match xG on demand, and displays an unavailable message if no data exists.
 
-Match listings are cached on Vercel for 5 minutes and xG for 30 minutes. No minute-by-minute goal data is fetched. This feature is independent of the planned H2H statistics engine.
+Date feeds explicitly request `status=all`, because the API otherwise defaults to played matches and omits upcoming fixtures. Both the selected UTC date and its previous day are checked, then filtered to the requested Belgrade date. Match listings are cached on Vercel for 5 minutes and xG for 30 minutes. No minute-by-minute goal data is fetched. This feature is independent of the planned H2H statistics engine.

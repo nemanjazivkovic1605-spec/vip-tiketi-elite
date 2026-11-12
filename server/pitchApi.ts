@@ -20,7 +20,7 @@ const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
 const nonNegativeNumber = (value: unknown): number | null => {
-  if ((typeof value !== 'number' && typeof value !== 'string') || value === '') return null;
+  if ((typeof value !== 'number' && typeof value !== 'string') || typeof value === 'string' && !value.trim()) return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
 };

@@ -1,4 +1,4 @@
-import { type Tip, TicketStatus } from '../../types.js';
+import { type Tip, TicketStatus, TipPublicationStatus } from '../../types.js';
 
 export const mapTicketForPublic = (tip: Tip): Tip => {
   if (tip.status === TicketStatus.PENDING || tip.status === TicketStatus.POSTPONED) {
@@ -43,3 +43,10 @@ export const mapTicketForFree = (tip: Tip): Tip =>
 export const mapTicketForVip = (tip: Tip): Tip => tip;
 
 export const mapTicketForAdmin = (tip: Tip): Tip => tip;
+
+export const mapActiveTicketForAccess = (summary: Tip, full: Tip | null, access: { canAccessFree: boolean; canAccessVip: boolean }): Tip => {
+  if (full?.id === summary.id && full.publicationStatus === TipPublicationStatus.PUBLISHED
+    && [TicketStatus.PENDING, TicketStatus.POSTPONED].includes(full.status)
+    && (access.canAccessVip || access.canAccessFree && full.isVip === false)) return full;
+  return mapTicketForPublic(summary);
+};

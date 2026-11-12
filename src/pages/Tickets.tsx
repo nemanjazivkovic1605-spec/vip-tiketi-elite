@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, CheckCircle2, ChevronRight, Clock, Lock, X, XCircle } from 'lucide-react';
 import { mockTipsService } from '../services/mockTips';
@@ -18,6 +18,7 @@ import {
   isPredictionLockedForUser,
 } from '../utils/tickets';
 import { getTicketProductLabel, getTicketProductTone, getTicketProductType } from '../utils/ticketProduct';
+import { mapActiveTicketForAccess } from '../services/tickets/ticketMappers';
 
 const getTicketVisuals = (status: TicketStatus) => {
   if (status === TicketStatus.WON) {
@@ -89,7 +90,7 @@ const getSportMeta = (league = '') => {
   return { icon: '⚽', label: 'Fudbal' };
 };
 
-const isActiveLockedTicket = (tip: Tip) => tip.locked === true && tip.status === TicketStatus.PENDING;
+const isActiveLockedTicket = (tip: Tip) => tip.locked === true && [TicketStatus.PENDING, TicketStatus.POSTPONED].includes(tip.status);
 
 const formatPublishedAt = formatTicketPublishedAt;
 const formatFirstMatchAt = formatFirstMatchStartAt;
@@ -98,10 +99,15 @@ const HISTORY_PAGE_SIZE = 50;
 
 export default function Tickets() {
   const { user, isVerified, isAdmin, canAccessFree, canAccessVip } = useAuth();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const isActiveView = location.pathname === '/tickets' && params.get('active') === '1';
+  const categoryParam = params.get('category');
+  const initialCategory = (['elite_ticket', 'safe_pick', 'vip_monthly'].includes(categoryParam || '') ? categoryParam : 'all') as 'all' | TicketProductType;
   const [tips, setTips] = useState<Tip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | TicketStatus>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | TicketProductType>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | TicketProductType>(initialCategory);
   const [selectedTip, setSelectedTip] = useState<Tip | null>(null);
   const [editingTip, setEditingTip] = useState<Tip | null>(null);
   const [openAnalysisId, setOpenAnalysisId] = useState<string | null>(null);
@@ -115,8 +121,14 @@ export default function Tickets() {
 
   useEffect(() => {
     void fetchData(true);
-    return mockTipsService.subscribePublicStats(() => void fetchData());
-  }, [filter, typeFilter]);
+    return isActiveView ? mockTipsService.subscribeActiveTickets(() => void fetchData())
+      : mockTipsService.subscribePublicStats(() => void fetchData());
+  }, [filter, typeFilter, isActiveView, canAccessFree, canAccessVip, isAdmin]);
+
+  useEffect(() => {
+    setTypeFilter(initialCategory);
+    setFilter('all');
+  }, [location.search, isActiveView]);
 
   useEffect(() => {
     setVisibleCount(HISTORY_PAGE_SIZE);
@@ -128,8 +140,10 @@ export default function Tickets() {
     setLoadError('');
     try {
       const page = await withTimeout(
-        mockTipsService.getHistoryPage({ category: typeFilter, status: filter }),
-        'Istorija se učitava predugo. Pokušajte ponovo.',
+        isActiveView
+          ? mockTipsService.getActiveTickets({ canAccessFree, canAccessVip: canAccessVip || isAdmin }).then(tips => ({ tips, cursor: undefined as string | undefined, hasMore: false }))
+          : mockTipsService.getHistoryPage({ category: typeFilter, status: filter }),
+        isActiveView ? 'Tiketi se ucitavaju predugo. Pokusajte ponovo.' : 'Istorija se učitava predugo. Pokušajte ponovo.',
       );
       if (request !== requestVersion.current) return;
       setTips(page.tips);
@@ -144,11 +158,14 @@ export default function Tickets() {
     }
   };
 
-  const filteredTips = useMemo(() => tips.filter((tip) => {
+  const accessibleTips = useMemo(() => isActiveView
+    ? tips.map(tip => mapActiveTicketForAccess(tip, tip, { canAccessFree, canAccessVip: canAccessVip || isAdmin }))
+    : tips, [tips, isActiveView, canAccessFree, canAccessVip, isAdmin]);
+  const filteredTips = useMemo(() => accessibleTips.filter((tip) => {
     const matchesStatus = filter === 'all' || tip.status === filter;
     const matchesType = typeFilter === 'all' || getTicketProductType(tip) === typeFilter;
     return matchesStatus && matchesType;
-  }), [tips, filter, typeFilter]);
+  }), [accessibleTips, filter, typeFilter]);
   const visibleTips = useMemo(() => filteredTips.slice(0, visibleCount), [filteredTips, visibleCount]);
   const loadMore = async () => {
     if (loadingMore) return;
@@ -327,14 +344,14 @@ export default function Tickets() {
   return (
     <div className="mx-auto max-w-[1500px] px-4 py-7 md:px-6 md:py-9">
       <div className="mb-7 text-center">
-        <h1 className="mb-3 text-3xl font-display font-bold md:text-4xl">ISTORIJA <span className="gold-text">TIKETA</span></h1>
-        <p className="text-neutral-400">Javni pregled svih završenih tiketa iz naše baze.</p>
+        <h1 className="mb-3 text-3xl font-display font-bold md:text-4xl">{isActiveView ? 'AKTIVNI' : 'ISTORIJA'} <span className="gold-text">{isActiveView ? 'TIKETI' : 'TIKETA'}</span></h1>
+        <p className="text-neutral-400">{isActiveView ? 'Aktuelni Elite tiket i Safe pick predlozi.' : 'Javni pregled svih završenih tiketa iz naše baze.'}</p>
       </div>
 
       <div className="mb-6 flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-black/25 p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[9px] font-black uppercase tracking-widest text-neutral-500">Status</span>
-          {['all', TicketStatus.PENDING, TicketStatus.WON, TicketStatus.LOST, TicketStatus.POSTPONED, TicketStatus.REFUND].map((statusFilter) => (
+          {(isActiveView ? ['all', TicketStatus.PENDING, TicketStatus.POSTPONED] : ['all', TicketStatus.PENDING, TicketStatus.WON, TicketStatus.LOST, TicketStatus.POSTPONED, TicketStatus.REFUND]).map((statusFilter) => (
             <button
               key={statusFilter}
               onClick={() => setFilter(statusFilter as 'all' | TicketStatus)}
@@ -497,9 +514,9 @@ export default function Tickets() {
       {filteredTips.length === 0 && !loading && !loadError && (
         <div className="text-center py-20 glass rounded-[3rem]">
           <p className="text-neutral-300 font-bold">
-            {tips.length === 0 ? 'Javna istorija je trenutno u pripremi.' : 'Nema tiketa za izabrani filter.'}
+            {isActiveView ? 'Nema objavljenih aktivnih tiketa za izabrani filter.' : tips.length === 0 ? 'Javna istorija je trenutno u pripremi.' : 'Nema tiketa za izabrani filter.'}
           </p>
-          {tips.length === 0 && (
+          {tips.length === 0 && !isActiveView && (
             <p className="mx-auto mt-3 max-w-xl px-6 text-xs font-medium leading-6 text-neutral-500">
               Završeni tiketi će se prikazati čim javni indeks bude osvežen. Aktivni VIP sadržaj ostaje zaštićen.
             </p>

@@ -74,8 +74,8 @@ export default function LiveResults() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
         <div className="max-w-2xl">
           <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">UTAKMICE I <span className="gold-text">REZULTATI</span></h1>
-          <p className="text-neutral-400">Raspored i rezultati dostupnih fudbalskih liga. PitchAPI dopunjava postojeće izvore kada je dostupan.</p>
-          {pitchAvailable && <p className="text-xs text-green-400 mt-3">PitchAPI je povezan · xG je dostupan za izabrane završene utakmice.</p>}
+          <p className="text-neutral-400">Raspored i rezultati dostupnih fudbalskih liga. Izaberite datum za pregled utakmica.</p>
+          {pitchAvailable && <p className="text-xs text-green-400 mt-3">Za pojedine završene utakmice možete pogledati i xG.</p>}
         </div>
 
         <div className="flex items-center gap-4 bg-white/[0.02] p-2 rounded-2xl border border-white/5">
@@ -112,9 +112,10 @@ export default function LiveResults() {
                 key={match.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="glass p-6 md:p-8 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6 hover:border-white/10 transition-colors"
+                className="glass p-6 md:p-8 rounded-[2rem] hover:border-white/10 transition-colors"
                 layout
               >
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                 <div className="flex flex-col gap-1 w-full md:w-1/4">
                   <div className="text-[10px] text-neutral-500 font-black uppercase tracking-widest mb-1">{formatLeagueName(match.league)}</div>
                   <div className="flex items-center gap-2 text-xs font-bold text-neutral-400">
@@ -143,8 +144,9 @@ export default function LiveResults() {
                      </div>
                    )}
                 </div>
+                </div>
                 {match.source === 'pitchapi' && match.id.startsWith('pitchapi:') && match.status === MatchStatus.FINISHED && (
-                  <div className="w-full border-t border-white/10 pt-3 flex justify-end text-xs">
+                  <div className="mt-4 w-full border-t border-white/10 pt-3 flex justify-end text-xs">
                     {Object.prototype.hasOwnProperty.call(xgByMatch, match.id) ? (
                       xgByMatch[match.id] ? (
                         <span className="font-bold text-gold-400">

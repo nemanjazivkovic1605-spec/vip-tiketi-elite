@@ -52,10 +52,32 @@ export const buildPublishedAt = (publishedDate: string, publishedTime: string) =
 export const buildEventAt = (eventDate: string, eventTime: string) =>
   `${normalizePublishedDate(eventDate)}T${normalizePublishedTime(eventTime)}:00`;
 
-export const generateTicketCode = (isVip: boolean, publishedDate: string, publishedTime: string) => {
+const ticketCodeSuffix = (id: string) => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < id.length; index++) {
+    hash = Math.imul(hash ^ id.charCodeAt(index), 0x01000193) >>> 0;
+  }
+  return hash.toString(36).toUpperCase().padStart(7, '0');
+};
+
+export const generateTicketCode = (isVip: boolean, publishedDate: string, publishedTime: string, ticketId?: string) => {
   const [year, month, day] = normalizePublishedDate(publishedDate).split('-');
   const [hour, minute] = normalizePublishedTime(publishedTime).split(':');
-  return `${isVip ? 'V' : 'F'}${day}${month}${year}${hour}${minute}`;
+  return `${isVip ? 'V' : 'F'}${day}${month}${year}${hour}${minute}${ticketId ? `-${ticketCodeSuffix(ticketId)}` : ''}`;
+};
+
+export const resolveTicketCode = (
+  tip: Pick<Tip, 'id' | 'status' | 'ticketCode'>,
+  fallback: string,
+) => {
+  const stored = tip.ticketCode?.trim();
+  if (!stored) return fallback;
+  // Upgrade ambiguous active codes on read; retain historical and custom codes.
+  if (tip.id && /^[FV]\d{12}$/.test(stored)
+    && [TicketStatus.PENDING, TicketStatus.POSTPONED].includes(tip.status)) {
+    return `${stored}-${ticketCodeSuffix(tip.id)}`;
+  }
+  return stored;
 };
 
 export const getTicketPublicationMeta = (
@@ -80,7 +102,7 @@ export const getTicketPublicationMeta = (
     publishedAt: storedTimestamp && hasTimestamp && !tip.publishedDate && !tip.publishedTime
       ? storedTimestamp
       : buildPublishedAt(publishedDate, publishedTime),
-    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime),
+    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime, tip.id),
   };
 };
 
@@ -134,7 +156,7 @@ export const getCorrectedPublicationMetaIfInvalid = (tip: Tip) => {
     publishedDate,
     publishedTime,
     publishedAt: buildPublishedAt(publishedDate, publishedTime),
-    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime),
+    ticketCode: generateTicketCode(Boolean(tip.isVip), publishedDate, publishedTime, tip.id),
   };
 };
 

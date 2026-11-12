@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
   getDocs,
   limit as queryLimit,
@@ -31,19 +32,23 @@ import {
   normalizeOdds,
   normalizePublishedDate,
   sortTicketsByDate,
+  resolveTicketCode,
 } from '../utils/tickets';
 import { calculateStats } from '../utils/ticketStats';
 import { getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublication';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
-import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
+import { mapActiveTicketForAccess, mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
 import { formatLeagueName } from '../utils/leagueMapper';
 import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot, refreshPublicHistorySnapshot } from './publicHistorySnapshot';
-import { getTicketProductType } from '../utils/ticketProduct';
+import { getAutomaticProductTicketId, getTicketProductType } from '../utils/ticketProduct';
+import { getDailyAnalysisDates } from '../utils/dailyDates';
 import { getStatsFromSummary, readPublicStatsSummary } from './publicStatsSummary';
 import { subscribePublicStatsSummary } from './publicStatsSummary';
 import { updatePublicStatsTicket } from './firestore/publicStatsWrite';
 import { readHistoryPage } from './historyPageService';
+import { preserveProductAdminEdits } from '../utils/productTicketAdminEdits';
+import { activeTicketDateRange, isCurrentActiveTicket } from '../utils/activeTickets';
 
 const TICKETS_COLLECTION = 'tickets';
 const PUBLIC_TICKETS_COLLECTION = 'publicTickets';
@@ -52,6 +57,7 @@ const PUBLIC_TICKETS_CACHE_KEY = 'tickets:public:all';
 const PUBLIC_VIP_TICKETS_CACHE_KEY = 'tickets:public:vip';
 const PUBLIC_STATS_CACHE_KEY = 'tickets:public:stats';
 const PUBLIC_HOMEPAGE_DATA_CACHE_KEY = 'tickets:public:homepage';
+const PUBLIC_ACTIVE_TICKETS_CACHE_KEY = 'tickets:public:active';
 const PUBLIC_READ_PAGE_SIZE = 100;
 const MAX_PUBLIC_READ_PAGES = 20;
 const MAX_FRONTEND_BULK_WRITES = 500;
@@ -60,6 +66,7 @@ const invalidatePublicTicketCache = () => invalidateCachedQueries(
   PUBLIC_VIP_TICKETS_CACHE_KEY,
   PUBLIC_STATS_CACHE_KEY,
   PUBLIC_HOMEPAGE_DATA_CACHE_KEY,
+  PUBLIC_ACTIVE_TICKETS_CACHE_KEY,
 );
 
 const cleanAnalysis = (analysis?: string) => {
@@ -69,12 +76,11 @@ const cleanAnalysis = (analysis?: string) => {
   return value;
 };
 
-const isValidTicketCode = (value?: string) => /^[FV]\d{12}$/.test((value || '').trim());
-
 const isAdminActiveTicketStatus = (status?: TicketStatus) =>
   status === TicketStatus.PENDING || status === TicketStatus.POSTPONED;
 
 const normalizeTip = (tip: Tip): Tip => {
+  const id = tip.id || Math.random().toString(36).slice(2, 11);
   const date = normalizePublishedDate(tip.date || new Date().toISOString().split('T')[0]);
   const matches = Array.isArray(tip.matches)
     ? tip.matches.map((match) => ({
@@ -92,27 +98,24 @@ const normalizeTip = (tip: Tip): Tip => {
   const status = tip.status || TicketStatus.PENDING;
   const normalizedDraft = {
     ...tip,
-    id: tip.id,
+    id,
     date,
     matches,
   } as Tip;
   const publicationMeta = getCorrectedPublicationMetaIfInvalid({
     ...normalizedDraft,
-    id: tip.id,
+    id,
     isVip: Boolean(tip.isVip),
     publishedDate: tip.publishedDate,
     publishedTime: tip.publishedTime,
     publishedAt: tip.publishedAt,
     createdAt: tip.createdAt,
   });
-  const existingTicketCode = (tip.ticketCode || '').trim();
-  const ticketCode = existingTicketCode && isValidTicketCode(existingTicketCode)
-    ? existingTicketCode
-    : publicationMeta.ticketCode;
+  const ticketCode = resolveTicketCode({ ...tip, id, status }, publicationMeta.ticketCode);
 
   return {
     ...tip,
-    id: tip.id || Math.random().toString(36).slice(2, 11),
+    id,
     publishedDate: publicationMeta.publishedDate,
     publishedTime: publicationMeta.publishedTime,
     publishedAt: publicationMeta.publishedAt,
@@ -291,6 +294,12 @@ const readAdminActiveTips = async (): Promise<Tip[]> => {
 
 const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
+const activeTicketsQuery = () => {
+  const { first, last } = activeTicketDateRange();
+  // A single date-field index keeps old unresolved entries out of this bounded page.
+  return query(getPublicTicketsCollection(), where('date', '>=', first), where('date', '<=', last), orderBy('date', 'desc'), queryLimit(50));
+};
+const currentProductIds = () => getDailyAnalysisDates().flatMap(day => (['elite_ticket', 'safe_pick'] as const).map(type => getAutomaticProductTicketId(day.date, type)));
 const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
 
 type StatsFilter = 'all' | 'free' | 'vip' | 'elite_ticket' | 'safe_pick' | 'vip_monthly';
@@ -535,6 +544,39 @@ const readPublishedTips = async (): Promise<Tip[]> => {
 };
 
 export const mockTipsService = {
+  getActiveTickets: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<Tip[]> => {
+    const summaries = await getCachedQuery(PUBLIC_ACTIVE_TICKETS_CACHE_KEY, async () => {
+      // Bounded active query plus current product IDs; no full history/database download.
+      const ids = currentProductIds();
+      const [active, known] = await Promise.all([
+        getDocs(activeTicketsQuery()), Promise.all(ids.map(id => getDoc(getPublicTicketDoc(id)))),
+      ]);
+      const docs = [...active.docs, ...known.filter(item => item.exists())];
+      return sortTicketsByDate([...new Map(docs.map(item => [item.id, mapTicketForPublic(normalizeTip({ ...item.data(), id: item.id } as Tip))])).values()])
+        .filter(tip => isCurrentActiveTicket(tip)).slice(0, 50);
+    });
+    if (!access.canAccessFree && !access.canAccessVip) return summaries;
+    return Promise.all(summaries.map(async summary => {
+      if (!access.canAccessVip && summary.isVip) return summary;
+      try {
+        const snapshot = await getDoc(getTicketDoc(summary.id));
+        const full = snapshot.exists() ? normalizeTip({ ...snapshot.data(), id: snapshot.id } as Tip) : null;
+        return mapActiveTicketForAccess(summary, full, access);
+      } catch { return summary; }
+    }));
+  },
+
+  subscribeActiveTickets: (callback: () => void): (() => void) => {
+    const onChange = () => {
+      invalidateCachedQueries(PUBLIC_ACTIVE_TICKETS_CACHE_KEY);
+      callback();
+    };
+    const onError = (error: unknown) => { console.error('Active tickets subscription failed:', error); callback(); };
+    const subscriptions = [activeTicketsQuery(), query(getPublicTicketsCollection(), where(documentId(), 'in', currentProductIds()))]
+      .map(source => onSnapshot(source, onChange, onError));
+    return () => subscriptions.forEach(unsubscribe => unsubscribe());
+  },
+
   getHistoryPage: readHistoryPage,
   getAdminTipById: async (id: string): Promise<Tip | null> => {
     const snapshot = await getDoc(getTicketDoc(id));
@@ -723,7 +765,7 @@ export const mockTipsService = {
   },
 
   updateTip: async (updatedTip: Tip): Promise<void> => {
-    const normalized = normalizeTip({
+    let normalized = normalizeTip({
       ...updatedTip,
       updatedAt: new Date().toISOString(),
     });
@@ -770,6 +812,7 @@ export const mockTipsService = {
     }
 
     const previous = privateSnapshot.data() as Tip | undefined;
+    normalized = preserveProductAdminEdits(previous, normalized);
     if (updatedTip.type && previous && updatedTip.type !== getTicketProductType(previous)) normalized.categoryManualOverride = true;
 
     await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));

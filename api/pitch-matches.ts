@@ -41,18 +41,18 @@ export default async function handler(request: IncomingMessage, response: Server
     response.end(JSON.stringify({ error: 'Method not allowed.' }));
     return;
   }
-  if (!process.env.PITCHAPI_API_KEY?.trim()) {
-    response.statusCode = 503;
-    response.setHeader('Cache-Control', 'no-store');
-    response.end(JSON.stringify({ error: 'PitchAPI nije aktiviran.' }));
-    return;
-  }
+  response.setHeader('Cache-Control', 'no-store');
   const url = new URL(request.url || '/', 'https://eliteviptips.com');
   const date = url.searchParams.get('date');
   const matchId = url.searchParams.get('matchId');
   if (Boolean(date) === Boolean(matchId) || date && !validDate(date) || matchId && !/^m_[A-Za-z0-9]{6}$/.test(matchId)) {
     response.statusCode = 400;
     response.end(JSON.stringify({ error: 'Neispravan datum ili ID utakmice.' }));
+    return;
+  }
+  if (!process.env.PITCHAPI_API_KEY?.trim()) {
+    response.statusCode = 503;
+    response.end(JSON.stringify({ error: 'PitchAPI nije aktiviran.' }));
     return;
   }
   try {
@@ -64,18 +64,21 @@ export default async function handler(request: IncomingMessage, response: Server
       return;
     }
     const days = [date!, previousDate(date!)];
-    const results = await Promise.allSettled(days.map((day) => readPitch('/v1/date/' + day, 5 * 60_000)));
+    const results = await Promise.allSettled(days.map((day) => readPitch('/v1/date/' + day + '?status=all', 5 * 60_000)));
     const fulfilled = results.filter((item): item is PromiseFulfilledResult<unknown> => item.status === 'fulfilled');
     if (!fulfilled.length) throw new Error('upstream_unavailable');
     const unique = new Map<string, ReturnType<typeof mapPitchMatch>>();
+    let validResponses = 0;
     for (const item of fulfilled) {
       const matches = dataObject(dataObject(item.value)?.data)?.matches;
       if (!Array.isArray(matches)) continue;
+      validResponses++;
       for (const raw of matches) {
         const mapped = mapPitchMatch(raw);
         if (mapped && mapped.date === date) unique.set(mapped.pitchMatchId, mapped);
       }
     }
+    if (!validResponses) throw new Error('invalid_upstream_data');
     const matches = [...unique.values()].filter((item) => item !== null)
       .sort((a, b) => (a!.time + a!.league).localeCompare(b!.time + b!.league));
     response.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=300');
