@@ -1,5 +1,7 @@
 import { type Tip, type TicketProductType } from '../types.js';
 
+export const getAutomaticProductTicketId = (date: string, type: 'elite_ticket' | 'safe_pick') => `auto-${type}-${date}`;
+
 export const TICKET_PRODUCT_LABELS: Record<TicketProductType, string> = {
   elite_ticket: 'ELITE TIKET',
   safe_pick: 'SAFE PICK',

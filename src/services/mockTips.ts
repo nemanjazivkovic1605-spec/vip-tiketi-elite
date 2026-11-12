@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
   getDocs,
   limit as queryLimit,
@@ -36,10 +37,11 @@ import { calculateStats } from '../utils/ticketStats';
 import { getDailyPublicationMeta, getKickoffTime } from '../utils/dailyPublication';
 import { getCachedQuery, invalidateCachedQueries } from './firestore/queryCache';
 import { deleteDocIfExists, setDocIfChanged } from './firestore/incrementalWrite';
-import { mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
+import { mapActiveTicketForAccess, mapTicketForAdmin, mapTicketForFree, mapTicketForPublic, mapTicketForVip } from './tickets/ticketMappers';
 import { formatLeagueName } from '../utils/leagueMapper';
 import { isPublicHistorySnapshotEnabled, readPublicHistorySnapshot, refreshPublicHistorySnapshot } from './publicHistorySnapshot';
-import { getTicketProductType } from '../utils/ticketProduct';
+import { getAutomaticProductTicketId, getTicketProductType } from '../utils/ticketProduct';
+import { getDailyAnalysisDates } from '../utils/dailyDates';
 import { getStatsFromSummary, readPublicStatsSummary } from './publicStatsSummary';
 import { subscribePublicStatsSummary } from './publicStatsSummary';
 import { updatePublicStatsTicket } from './firestore/publicStatsWrite';
@@ -53,6 +55,7 @@ const PUBLIC_TICKETS_CACHE_KEY = 'tickets:public:all';
 const PUBLIC_VIP_TICKETS_CACHE_KEY = 'tickets:public:vip';
 const PUBLIC_STATS_CACHE_KEY = 'tickets:public:stats';
 const PUBLIC_HOMEPAGE_DATA_CACHE_KEY = 'tickets:public:homepage';
+const PUBLIC_ACTIVE_TICKETS_CACHE_KEY = 'tickets:public:active';
 const PUBLIC_READ_PAGE_SIZE = 100;
 const MAX_PUBLIC_READ_PAGES = 20;
 const MAX_FRONTEND_BULK_WRITES = 500;
@@ -61,6 +64,7 @@ const invalidatePublicTicketCache = () => invalidateCachedQueries(
   PUBLIC_VIP_TICKETS_CACHE_KEY,
   PUBLIC_STATS_CACHE_KEY,
   PUBLIC_HOMEPAGE_DATA_CACHE_KEY,
+  PUBLIC_ACTIVE_TICKETS_CACHE_KEY,
 );
 
 const cleanAnalysis = (analysis?: string) => {
@@ -292,6 +296,8 @@ const readAdminActiveTips = async (): Promise<Tip[]> => {
 
 const getTicketsCollection = () => collection(db, TICKETS_COLLECTION);
 const getPublicTicketsCollection = () => collection(db, PUBLIC_TICKETS_COLLECTION);
+const activeTicketsQuery = () => query(getPublicTicketsCollection(), where('status', 'in', [TicketStatus.PENDING, TicketStatus.POSTPONED]), queryLimit(50));
+const currentProductIds = () => getDailyAnalysisDates().flatMap(day => (['elite_ticket', 'safe_pick'] as const).map(type => getAutomaticProductTicketId(day.date, type)));
 const FINISHED_TICKET_STATUSES = [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND] as const;
 
 type StatsFilter = 'all' | 'free' | 'vip' | 'elite_ticket' | 'safe_pick' | 'vip_monthly';
@@ -536,6 +542,39 @@ const readPublishedTips = async (): Promise<Tip[]> => {
 };
 
 export const mockTipsService = {
+  getActiveTickets: async (access: { canAccessFree: boolean; canAccessVip: boolean }): Promise<Tip[]> => {
+    const summaries = await getCachedQuery(PUBLIC_ACTIVE_TICKETS_CACHE_KEY, async () => {
+      // Bounded active query plus current product IDs; no full history/database download.
+      const ids = currentProductIds();
+      const [active, known] = await Promise.all([
+        getDocs(activeTicketsQuery()), Promise.all(ids.map(id => getDoc(getPublicTicketDoc(id)))),
+      ]);
+      const docs = [...active.docs, ...known.filter(item => item.exists())];
+      return sortTicketsByDate([...new Map(docs.map(item => [item.id, mapTicketForPublic(normalizeTip({ ...item.data(), id: item.id } as Tip))])).values()])
+        .filter(tip => tip.publicationStatus === TipPublicationStatus.PUBLISHED && isAdminActiveTicketStatus(tip.status)).slice(0, 50);
+    });
+    if (!access.canAccessFree && !access.canAccessVip) return summaries;
+    return Promise.all(summaries.map(async summary => {
+      if (!access.canAccessVip && summary.isVip) return summary;
+      try {
+        const snapshot = await getDoc(getTicketDoc(summary.id));
+        const full = snapshot.exists() ? normalizeTip({ ...snapshot.data(), id: snapshot.id } as Tip) : null;
+        return mapActiveTicketForAccess(summary, full, access);
+      } catch { return summary; }
+    }));
+  },
+
+  subscribeActiveTickets: (callback: () => void): (() => void) => {
+    const onChange = () => {
+      invalidateCachedQueries(PUBLIC_ACTIVE_TICKETS_CACHE_KEY);
+      callback();
+    };
+    const onError = (error: unknown) => { console.error('Active tickets subscription failed:', error); callback(); };
+    const subscriptions = [activeTicketsQuery(), query(getPublicTicketsCollection(), where(documentId(), 'in', currentProductIds()))]
+      .map(source => onSnapshot(source, onChange, onError));
+    return () => subscriptions.forEach(unsubscribe => unsubscribe());
+  },
+
   getHistoryPage: readHistoryPage,
   getAdminTipById: async (id: string): Promise<Tip | null> => {
     const snapshot = await getDoc(getTicketDoc(id));

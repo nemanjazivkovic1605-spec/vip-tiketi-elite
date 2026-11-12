@@ -1,6 +1,7 @@
 import { TicketStatus, TipPublicationStatus, type DailyAnalysisItem, type Match, type Tip } from '../src/types.js';
 import { calculateTotalOdds, generateTicketCode, getDefaultUnitsStake, getTicketKind, unitsToRsd } from '../src/utils/tickets.js';
 import { evaluateFullTimePrediction } from '../src/utils/predictionResults.js';
+import { getAutomaticProductTicketId } from '../src/utils/ticketProduct.js';
 import { buildCandidates } from './dailyPickSelection.js';
 import { buildDailyProposals, loadDailyMarketData, proposalIdentity } from './dailyProposalProvider.js';
 import { freeFixturesForDate, historicalModel, teamKey } from './freeFootballFeeds.js';
@@ -12,7 +13,7 @@ export const AUTOMATED_PRODUCTS = ['elite_ticket', 'safe_pick'] as const;
 export type AutomatedProduct = typeof AUTOMATED_PRODUCTS[number];
 export type ProductPick = DailyAnalysisItem & { statisticsAvailable?: boolean };
 const timeInBelgrade = (date: Date) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit' }).format(date);
-export const productTicketId = (date: string, type: AutomatedProduct) => `auto-${type}-${date}`;
+export const productTicketId = getAutomaticProductTicketId;
 
 export function productMatchKickoff(match: Match, date: string): number {
   const day = match.eventDate || date, time = match.eventTime || match.time;

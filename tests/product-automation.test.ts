@@ -5,6 +5,7 @@ import { buildStatsSummary } from '../src/utils/publicStats.ts';
 import { calculateTicketUnitsProfit } from '../src/utils/tickets.ts';
 import { preserveProductAdminEdits } from '../src/utils/productTicketAdminEdits.ts';
 import { getTicketProductType } from '../src/utils/ticketProduct.ts';
+import { mapActiveTicketForAccess, mapTicketForPublic } from '../src/services/tickets/ticketMappers.ts';
 import { buildProductTicket, productMatchKickoff, productSettlement, selectProductPicks, type ProductPick } from '../server/productTickets.ts';
 import { applyProductResults, publishProductTickets, runProductPublication, runProductResults, type ProductEvidence } from '../server/productAutomation.ts';
 import { MemoryFirestore } from './helpers/memoryFirestore.ts';
@@ -239,4 +240,20 @@ test('preview cannot publish automatic tickets into the production database', as
   process.env.VERCEL_ENV = 'preview';
   try { await assert.rejects(() => publishProductTickets(new MemoryFirestore() as any, date, pool(), now), /produkciji/); }
   finally { if (previous === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = previous; }
+});
+
+test('active category read layer exposes full tickets only to the existing authorized access level', () => {
+  const full = buildProductTicket('elite_ticket', date, pool(), now)!;
+  const summary = mapTicketForPublic(full);
+  for (const access of [{ canAccessFree: false, canAccessVip: false }, { canAccessFree: true, canAccessVip: false }]) {
+    const safe = mapActiveTicketForAccess(summary, full, access);
+    assert.equal(safe.matches[0].homeTeam, '');
+    assert.equal(safe.matches[0].prediction, '');
+    assert.equal(safe.totalOdds, 1);
+  }
+  assert.equal(mapActiveTicketForAccess(summary, full, { canAccessFree: true, canAccessVip: true }), full);
+  assert.equal(mapActiveTicketForAccess(summary, { ...full, id: 'other' }, { canAccessFree: true, canAccessVip: true }).locked, true);
+  assert.equal(mapActiveTicketForAccess(summary, { ...full, publicationStatus: TipPublicationStatus.DRAFT }, { canAccessFree: true, canAccessVip: true }).locked, true);
+  const free = { ...full, isVip: false };
+  assert.equal(mapActiveTicketForAccess(mapTicketForPublic(free), free, { canAccessFree: true, canAccessVip: false }), free);
 });

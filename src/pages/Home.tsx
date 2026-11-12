@@ -300,7 +300,7 @@ export default function Home() {
                 <h3 className="font-display text-xl font-black uppercase text-gold-100">ELITE TIKET</h3>
               </div>
               <p className="text-sm leading-6 text-neutral-400">Premium tiket sa 2 do 6 mečeva, većom ukupnom kvotom i fokusom na veći profit.</p>
-              <Link to="/#elite-ticket" className="mt-5 inline-flex rounded-lg bg-gold-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-gold-400">
+              <Link to="/tickets?active=1&category=elite_ticket" className="mt-5 inline-flex rounded-lg bg-gold-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition hover:bg-gold-400">
                 Pogledaj Elite tiket
               </Link>
             </article>
@@ -310,7 +310,7 @@ export default function Home() {
                 <h3 className="font-display text-xl font-black uppercase text-blue-100">SAFE PICK</h3>
               </div>
               <p className="text-sm leading-6 text-neutral-400">Singl, dubl ili manji kombo sa kvotom uglavnom 1.50 do 3.00 i fokusom na prolaznost.</p>
-              <Link to="/#safe-pick" className="mt-5 inline-flex rounded-lg bg-blue-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-blue-400">
+              <Link to="/tickets?active=1&category=safe_pick" className="mt-5 inline-flex rounded-lg bg-blue-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-blue-400">
                 Pogledaj Safe pick
               </Link>
             </article>
