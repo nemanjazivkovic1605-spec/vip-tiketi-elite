@@ -58,7 +58,7 @@ export enum MatchStatus {
 export interface MatchResult {
   id: string;
   competitionCode?: string;
-  source?: 'football-data.org' | 'api-football' | 'mock';
+  source?: 'football-data.org' | 'api-football' | 'pitchapi' | 'mock';
   homeTeam: string;
   awayTeam: string;
   league: string;

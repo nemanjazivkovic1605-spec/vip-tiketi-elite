@@ -28,6 +28,7 @@ export default function Navbar() {
   const navLinks = [
     { label: 'Početna', path: '/' },
     { label: 'Statistika', path: '/stats' },
+    { label: 'Utakmice', path: '/live-results' },
     { label: 'Paketi', path: '/#pricing' },
     { label: 'Dnevni tipovi', path: '/daily-tips' },
     { label: 'Istorija', path: '/history' },

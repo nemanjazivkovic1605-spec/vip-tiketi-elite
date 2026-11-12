@@ -1,0 +1,32 @@
+name: PitchAPI integration checks
+
+on:
+  pull_request:
+    paths:
+      - 'api/pitch-matches.ts'
+      - 'server/pitchApi.ts'
+      - 'src/pages/LiveResults.tsx'
+      - 'src/services/pitchMatchesService.ts'
+      - 'tests/pitchapi*.test.ts'
+      - 'src/types.ts'
+      - '.github/workflows/pitchapi-checks.yml'
+  push:
+    branches:
+      - feature/pitchapi-rebased
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

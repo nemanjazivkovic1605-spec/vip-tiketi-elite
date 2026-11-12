@@ -9,6 +9,7 @@ const serverApis = (): Plugin => ({
     const routes: Record<string, string> = {
       '/api/fetch-daily-sports': '/api/fetch-daily-sports.ts',
       '/api/football-data': '/api/football-data.ts',
+      '/api/pitch-matches': '/api/pitch-matches.ts',
       '/api/daily-picks': '/api/daily-picks.ts',
       '/api/daily-results': '/api/daily-results.ts',
       '/api/ticket-purchases': '/api/ticket-purchases.ts',
