@@ -102,7 +102,7 @@ export default function SingleTicketCheckout({ productId }: { productId: SingleT
     {loading || authLoading ? <p className="mt-8 text-neutral-400">Učitavanje tiketa...</p>
       : canAccessVip ? <div className="mt-8 rounded-2xl border border-green-400/25 p-6"><p>Već imate VIP pristup.</p><Link to={activePath} className="mt-4 inline-block text-gold-300">Otvori tikete</Link></div>
       : !user ? <div className="mt-8 rounded-2xl border border-gold-500/20 p-6"><p>Prijavite se pre uplate da biste dobili pristup kupljenom tiketu.</p><div className="mt-5 flex gap-5"><Link className="text-gold-300" to={`/login?next=${encodeURIComponent(returnPath)}`}>Prijavi se</Link><Link className="text-gold-300" to="/register">Kreiraj nalog</Link></div></div>
-      : !canAccessFree ? <p className="mt-8 text-neutral-300">Potvrdite email adresu i proverite da je vaš nalog aktivan pre kupovine.</p>
+      : !canAccessFree ? <div className="mt-8 space-y-4 text-neutral-300"><p>Potvrdite email adresu i proverite da je vaš nalog aktivan pre kupovine.</p><Link className="inline-block text-gold-300" to="/dashboard">Otvori nalog i potvrdi email</Link></div>
       : !offers.length ? <p className="mt-8 text-neutral-300">Trenutno nema objavljenog tiketa za kupovinu. Proverite ponovo kasnije.</p>
       : <section className="mt-8 space-y-6 rounded-2xl border border-gold-500/20 bg-black/40 p-6">
         <label className="block text-sm font-bold">Izaberite tiket

@@ -133,7 +133,7 @@ export async function readTicketPurchases(db: Firestore, actor: PurchaseActor, t
       try { sameProduct = productFor(tip!) === row.productId; } catch { /* A recategorized ticket requires admin review. */ }
     }
     return { purchase: buyerView(row, sameProduct && paymentAvailable(tip, summary.data() as Tip, now)),
-      ...(row.status === 'approved' && sameProduct ? { ticket: plain({ ...tip!, locked: false }) } : {}) };
+      ...(row.status === 'approved' && sameProduct ? { ticket: plain({ ...tip!, ticketCode: resolveTicketCode(tip!, row.ticketCode), locked: false }) } : {}) };
     }));
   });
   return { purchases: records.flatMap(row => row ? [row.purchase] : []), tickets: records.flatMap(row => row?.ticket ? [row.ticket] : []) };
