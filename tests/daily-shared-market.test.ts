@@ -50,6 +50,7 @@ test('wide odds discovery supplies one FREE and two VIP singles without inventin
     assert.deepEqual(picks.map(pick => pick.access), ['FREE', 'VIP', 'VIP']);
     assert.equal(new Set(picks.map(pick => pick.fixtureId)).size, 3);
     assert.equal(new Set(picks.map(pick => pick.marketCategory)).size, 3);
+    assert.equal(picks[0].odds, 1.8, 'market-only ranking targets a moderate real price, not the shortest possible quote');
     for (const pick of picks) assert.equal(pick.odds, ({ '1': 1.8, 'Over 2.5': 2.1, 'Under 3.5': 1.6 } as Record<string, number>)[pick.prediction]);
     const db = new MemoryFirestore();
     assert.equal((await publishDailyCandidates(db as any, date, data.candidates, now)).saved, 3);

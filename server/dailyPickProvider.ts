@@ -42,7 +42,7 @@ async function loadFreeCandidates(date: string, now: Date, deadline: number) {
       candidates.push({ ...item, prediction: quote.prediction, odds: quote.odds, analysisSource: 'market-odds', marketCategory: quote.category,
         enabled: true, hidden: false, manualOverride: false, resultManualOverride: false,
         analysis: '', reasoning: '', bookmaker: quote.bookmaker, oddsUpdatedAt: quote.updatedAt,
-        selectionScore: -100 + 100 / quote.odds,
+        selectionScore: -100 - Math.abs(Math.log(quote.odds / 1.8)) * 10,
       });
     }
   }
