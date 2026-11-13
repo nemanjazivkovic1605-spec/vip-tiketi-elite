@@ -14,7 +14,7 @@ const now = new Date('2099-11-10T08:00:00Z'), date = '2099-11-10';
 const pool = (count = 8): ProductPick[] => Array.from({ length: count }, (_, index) => ({
   id: `fixture-${index}`, source: 'the-odds-api', sport: 'football', status: 'ACTIVE', date, time: '19:00', kickoffTime: '19:00',
   kickoffAt: '2099-11-10T18:00:00Z', fixtureId: index + 1, providerFixtureId: String(index + 1),
-  homeTeam: `Home ${index}`, awayTeam: `Away ${index}`, league: `League ${index % 3}`, prediction: '1', odds: 1.8,
+  homeTeam: `Home ${index}`, awayTeam: `Away ${index}`, league: `League ${index % 3}`, prediction: '1', odds: 1.8, oddsUpdatedAt: now.toISOString(),
   reasoning: '', access: 'VIP', sortOrder: index, enabled: false, hidden: true,
 }));
 const later = new Date('2099-11-10T22:00:00Z');

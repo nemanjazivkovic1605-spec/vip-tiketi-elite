@@ -4,6 +4,7 @@ import { cachedSportsJson, freeFixturesForDate, teamKey } from './freeFootballFe
 import { isUpcomingFixture, type Fixture, type Odds } from './dailyPickSelection.js';
 import { loadIndependentOdds, oddsSportForFixture } from './oddsProvider.js';
 import { localDate, numberSetting } from './sportsApi.js';
+import { isFreshOddsTimestamp } from './oddsPolicy.js';
 
 const numericId = (value: string) => parseInt(createHash('sha256').update(value).digest('hex').slice(0, 12), 16);
 const priority = (key: string) => ['soccer_uefa', 'soccer_fifa', 'soccer_epl', 'soccer_spain_la_liga', 'soccer_italy_serie_a',
@@ -28,10 +29,10 @@ type Offer = { prediction: string; odds: number; category: string; bookmaker: st
 export function proposalOffers(fixture: Fixture, odds: Odds[], now = new Date()): Offer[] {
   const offers: Offer[] = [];
   for (const row of odds.filter((item) => item.fixture.id === fixture.fixture.id)) {
-    if (!row.update || !Number.isFinite(Date.parse(row.update)) || Math.abs(now.getTime() - Date.parse(row.update)) > 3 * 3600_000) continue;
+    if (!isFreshOddsTimestamp(row.update, now)) continue;
     for (const bookmaker of row.bookmakers) for (const bet of bookmaker.bets) for (const value of bet.values) {
       const price = Number(value.odd);
-      if (!Number.isFinite(price) || price < 1.2 || price > 3) continue;
+      if (!Number.isFinite(price) || price <= 1) continue;
       const market = bet.name.trim().toLowerCase().replace(/\s+/g, ' '), outcome = value.value.trim().toLowerCase();
       let prediction = '', category = '';
       if (['match winner', 'fulltime result', '1x2'].includes(market)) {
@@ -67,7 +68,8 @@ export function buildDailyProposals(fixtures: Fixture[], odds: Odds[], now = new
     const id = proposalIdentity(fixture.teams.home.name, fixture.teams.away.name, fixture.fixture.date);
     if (seen.has(id)) continue;
     seen.add(id);
-    const selectedMarket = [...offers].sort((a, b) => (usedCategories.get(a.category) || 0) - (usedCategories.get(b.category) || 0)
+    const selectedMarket = offers.filter(offer => offer.odds >= 1.2 && offer.odds <= 3
+      && (bestProposalOffer(offers, offer.prediction)?.odds || 0) <= 3).sort((a, b) => (usedCategories.get(a.category) || 0) - (usedCategories.get(b.category) || 0)
       || Math.abs(a.odds - 1.8) - Math.abs(b.odds - 1.8))[0];
     // Keep match/market selection unchanged; improve only its actual quoted price.
     const offer = selectedMarket ? bestProposalOffer(offers, selectedMarket.prediction) : undefined;

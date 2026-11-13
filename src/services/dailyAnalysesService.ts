@@ -171,7 +171,7 @@ const normalizeManual = (data: DocumentData, id: string): DailyAnalysisItem => {
   providerFixtureId: typeof data.providerFixtureId === 'string' ? data.providerFixtureId : undefined,
   oddsProvider: typeof data.oddsProvider === 'string' ? data.oddsProvider : undefined,
   kickoffAt: typeof data.kickoffAt === 'string' ? data.kickoffAt : undefined,
-  analysisSource: ['api-predictions', 'model-statistics'].includes(data.analysisSource) ? data.analysisSource : undefined,
+  analysisSource: ['api-predictions', 'model-statistics', 'market-odds'].includes(data.analysisSource) ? data.analysisSource : undefined,
   date,
   time,
   matchTime: data.matchTime || data.kickoffTime || data.time || time,

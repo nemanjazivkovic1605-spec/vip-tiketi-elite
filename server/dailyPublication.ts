@@ -7,8 +7,17 @@ import { selectDailyPicks, type Candidate } from './dailyPickSelection.js';
 import { localDate, numberSetting } from './sportsApi.js';
 import { preparePublicStatsUpdate } from '../src/utils/publicStats.js';
 import { generateTicketCode } from '../src/utils/tickets.js';
+import { isFreshOddsTimestamp } from './oddsPolicy.js';
+import { teamKey } from './freeFootballFeeds.js';
 
-type Reservation = { id: string; fixtureId?: number; access: 'FREE' | 'VIP' };
+type Reservation = { id: string; fixtureId?: number; matchKey?: string; access: 'FREE' | 'VIP' };
+const matchKey = (item: Pick<DailyAnalysisItem, 'homeTeam' | 'awayTeam' | 'date' | 'time' | 'kickoffTime'>) =>
+  item.homeTeam && item.awayTeam && item.date && (item.kickoffTime || item.time)
+    ? `${teamKey(item.homeTeam)}:${teamKey(item.awayTeam)}:${item.date}:${item.kickoffTime || item.time}` : undefined;
+export const dailyReservation = (id: string, item: DailyAnalysisItem): Reservation => ({
+  id, ...(item.fixtureId ? { fixtureId: item.fixtureId } : {}),
+  ...(matchKey(item) ? { matchKey: matchKey(item) } : {}), access: item.access === 'VIP' ? 'VIP' : 'FREE',
+});
 export const publicationSlots = (existing: Reservation[]) => {
   const count = (access: 'FREE' | 'VIP') => existing.filter((item) => item.access === access).length;
   return [
@@ -16,6 +25,14 @@ export const publicationSlots = (existing: Reservation[]) => {
     ...Array(Math.max(0, numberSetting('DAILY_VIP_PICKS', 2, 0, 3) - count('VIP'))).fill('VIP'),
   ] as Array<'FREE' | 'VIP'>;
 };
+
+export function selectDailyPublicationCandidates(date: string, candidates: Candidate[], reserved: Reservation[], now = new Date()) {
+  const ids = new Set(reserved.map(item => item.id)), fixtures = new Set(reserved.map(item => item.fixtureId).filter(Boolean));
+  const matches = new Set(reserved.map(item => item.matchKey).filter(Boolean));
+  return selectDailyPicks(candidates.filter(item => !ids.has(item.id) && !fixtures.has(item.fixtureId)
+    && !matches.has(matchKey(item)) && isFreshOddsTimestamp(item.oddsUpdatedAt, now)
+    && item.date === date && Date.parse(item.kickoffAt || '') > now.getTime() + 30 * 60_000), publicationSlots(reserved));
+}
 
 export function analysisTicket(analysis: DailyAnalysisItem): Tip {
   const status = analysis.status === 'WON' ? TicketStatus.WON : analysis.status === 'LOST' ? TicketStatus.LOST
@@ -119,12 +136,9 @@ export async function publishDailyCandidates(db: Firestore, date: string, candid
     for (const item of (manifest.data()?.published || []) as Reservation[]) reserved.set(item.id, item);
     for (const document of snapshot.docs) {
       const item = document.data();
-      reserved.set(document.id, { id: document.id, ...(item.fixtureId ? { fixtureId: item.fixtureId } : {}), access: item.access === 'VIP' ? 'VIP' : 'FREE' });
+      reserved.set(document.id, dailyReservation(document.id, item as DailyAnalysisItem));
     }
-    const usedFixtures = new Set([...reserved.values()].map((item) => item.fixtureId).filter(Boolean));
-    const eligible = candidates.filter((item) => !reserved.has(item.id) && !usedFixtures.has(item.fixtureId)
-      && item.date === date && Date.parse(item.kickoffAt || '') > now.getTime() + 30 * 60_000);
-    const selected = selectDailyPicks(eligible, publicationSlots([...reserved.values()]));
+    const selected = selectDailyPublicationCandidates(date, candidates, [...reserved.values()], now);
     if (!selected.length) return { saved: 0, fetched: candidates.length, skippedManualOverride: snapshot.docs.filter((doc) => doc.data().manualOverride).length };
     const existing = await transaction.getAll(...selected.flatMap((item) => [
       db.collection('dailyAnalyses').doc(item.id), db.collection('tickets').doc(`daily-${item.id}`),
@@ -135,17 +149,17 @@ export async function publishDailyCandidates(db: Firestore, date: string, candid
       const item = selected[index];
       // Insert only. Even a manually moved record or edited ticket cannot be overwritten.
       if (existing[index * 2].exists || existing[index * 2 + 1].exists) continue;
-      const analysis = { ...item, publishedAt: now.toISOString(), publishedDate: localDate(now), publishedTime,
-        automation: 'daily-picks', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
+      const analysis = withoutUndefined({ ...item, publishedAt: now.toISOString(), publishedDate: localDate(now), publishedTime,
+        automation: 'daily-picks', createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
       transaction.create(db.collection('dailyAnalyses').doc(item.id), analysis);
       if (item.access === 'FREE') {
         const { vipAnalysis, ...free } = analysis;
         transaction.set(db.collection('freeDailyAnalyses').doc(item.id), free);
       } else transaction.set(db.collection('publicDailyAnalyses').doc(item.id), lockedDailyIndex(item));
-      const ticket = analysisTicket(analysis as unknown as DailyAnalysisItem);
+      const ticket = withoutUndefined(analysisTicket(analysis as unknown as DailyAnalysisItem));
       transaction.create(db.collection('tickets').doc(ticket.id), ticket);
       transaction.set(db.collection('publicTickets').doc(ticket.id), mapTicketForPublic(ticket));
-      reserved.set(item.id, { id: item.id, fixtureId: item.fixtureId!, access: item.access });
+      reserved.set(item.id, dailyReservation(item.id, item));
       saved++;
     }
     // Reservations survive admin deletion: the scheduler does not recreate a removed pick that day.

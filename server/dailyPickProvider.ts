@@ -1,20 +1,54 @@
 import { buildCandidates, isUpcomingFixture, type Candidate, type Fixture, type Odds, type Prediction } from './dailyPickSelection.js';
 import { getSportsKey, numberSetting, requestSports } from './sportsApi.js';
-import { freeFixturesForDate, historicalModel } from './freeFootballFeeds.js';
-import { loadIndependentOdds } from './oddsProvider.js';
+import { freeFixturesForDate, historicalModel, teamKey } from './freeFootballFeeds.js';
+import { buildDailyProposals, loadDailyMarketData, proposalOffers } from './dailyProposalProvider.js';
+import { ODDS_CACHE_TTL_MS } from './oddsPolicy.js';
 
 async function loadFreeCandidates(date: string, now: Date, deadline: number) {
-  const fixtures = await freeFixturesForDate(date);
+  const data = await loadDailyMarketData(date, now);
+  const fixtures = data.fixtures;
   const upcoming = fixtures.filter((fixture) => isUpcomingFixture(fixture, now));
-  const prices = await loadIndependentOdds(upcoming, now);
   const candidates: Candidate[] = [];
-  for (const fixture of upcoming.filter((item) => prices.odds.some((offer) => offer.fixture.id === item.fixture.id)).slice(0, 10)) {
-    if (Date.now() >= deadline) break;
-    const model = await historicalModel(fixture);
-    if (model) candidates.push(...buildCandidates(fixture, prices.odds, model, now));
+  const proposals = buildDailyProposals(upcoming, data.odds, now).filter(item => item.date === date && item.analysis.odds > 1);
+  let known: Awaited<ReturnType<typeof freeFixturesForDate>> = [];
+  if (proposals.length && Date.now() < deadline - 15000) {
+    try { known = await freeFixturesForDate(date); }
+    catch { data.warnings.push('Dodatna istorijska statistika trenutno nije dostupna. Ne prikazuje se izmisljena procena sigurnosti.'); }
   }
-  return { candidates, fixtures: fixtures.length, upcoming: upcoming.length, oddsPages: Number(prices.odds.length > 0), oddsPagesTotal: 0,
-    warnings: [prices.warning, !candidates.length ? 'Nijedan mec nema istovremeno proverenu kvotu i dovoljno statistike za automatsku objavu. Rucni unos ostaje dostupan.' : undefined].filter(Boolean) as string[] };
+  let modeled = 0;
+  const modelLimit = numberSetting('DAILY_PREDICTION_LIMIT', 4, 3, 10);
+  for (const proposal of proposals) {
+    if (Date.now() >= deadline) break;
+    const item = proposal.analysis;
+    const fixture = known.find(match => teamKey(match.teams.home.name) === teamKey(item.homeTeam)
+      && teamKey(match.teams.away.name) === teamKey(item.awayTeam)
+      && Math.abs(Date.parse(match.fixture.date) - Date.parse(item.kickoffAt || '')) <= 600000);
+    if (fixture && modeled < modelLimit && Date.now() < deadline - 15000) {
+      modeled++;
+      const model = await historicalModel(fixture).catch(() => null);
+      if (model) {
+        const prices = data.odds.filter(offer => offer.fixture.id === item.fixtureId)
+          .map(offer => ({ ...offer, fixture: { id: fixture.fixture.id } }));
+        candidates.push(...buildCandidates(fixture, prices, model, now));
+        // Do not replace a rejected statistical pick with a market-only claim.
+        continue;
+      }
+    }
+    const offers = proposalOffers(upcoming.find(match => match.fixture.id === item.fixtureId)!, data.odds, now);
+    const best = new Map<string, (typeof offers)[number]>();
+    for (const quote of offers) if (!best.has(quote.prediction) || best.get(quote.prediction)!.odds < quote.odds) best.set(quote.prediction, quote);
+    for (const quote of best.values()) {
+      if (quote.odds < 1.2 || quote.odds > 3) continue;
+      candidates.push({ ...item, prediction: quote.prediction, odds: quote.odds, analysisSource: 'market-odds', marketCategory: quote.category,
+        enabled: true, hidden: false, manualOverride: false, resultManualOverride: false,
+        analysis: '', reasoning: '', bookmaker: quote.bookmaker, oddsUpdatedAt: quote.updatedAt,
+        selectionScore: -100 + 100 / quote.odds,
+      });
+    }
+  }
+  if (!candidates.length) data.warnings.push('Nema buducih meceva sa dovoljno svezom, proverenom kvotom za objavu.');
+  return { candidates, fixtures: fixtures.length, upcoming: upcoming.length, oddsPages: Number(data.odds.length > 0), oddsPagesTotal: 0,
+    warnings: data.warnings };
 }
 
 export async function loadDailyCandidates(date: string, now = new Date(), deadline = Date.now() + 220_000) {
@@ -24,13 +58,13 @@ export async function loadDailyCandidates(date: string, now = new Date(), deadli
   catch { return loadFreeCandidates(date, now, deadline); }
   const upcoming = fixtures.filter((fixture) => isUpcomingFixture(fixture, now))
     .sort((a, b) => a.fixture.date.localeCompare(b.fixture.date) || a.fixture.id - b.fixture.id);
-  if (!upcoming.length) return { candidates: [] as Candidate[], fixtures: fixtures.length, upcoming: 0, oddsPages: 0, oddsPagesTotal: 0, warnings: [] as string[] };
+  if (!upcoming.length) return loadFreeCandidates(date, now, deadline);
   const odds: Odds[] = [];
   const pageLimit = numberSetting('DAILY_ODDS_PAGE_LIMIT', 3, 1, 10);
   let pagesTotal = 1, pagesRead = 0;
   for (let page = 1; page <= Math.min(pagesTotal, pageLimit) && Date.now() < deadline; page++) {
     let payload;
-    try { payload = await requestSports<Odds>('/odds', { date, page: String(page), timezone: 'Europe/Belgrade' }, { ttlMs: 30 * 60_000 }); }
+    try { payload = await requestSports<Odds>('/odds', { date, page: String(page), timezone: 'Europe/Belgrade' }, { ttlMs: ODDS_CACHE_TTL_MS }); }
     catch { return loadFreeCandidates(date, now, deadline); }
     odds.push(...payload.response);
     pagesTotal = payload.paging?.total || 1;
@@ -54,6 +88,6 @@ export async function loadDailyCandidates(date: string, now = new Date(), deadli
     } catch { warnings.push(`Prognoza nije dostupna za utakmicu ${fixture.fixture.id}.`); }
   }
   if (pagesTotal > pagesRead) warnings.push(`Pregledano ${pagesRead} od ${pagesTotal} stranica kvota radi kontrole potrošnje API-ja.`);
-  if (!candidates.length) warnings.push('Nema budućih utakmica sa odgovarajućom stvarnom kvotom i API prognozom.');
+  if (!candidates.length) return loadFreeCandidates(date, now, deadline);
   return { candidates, fixtures: fixtures.length, upcoming: upcoming.length, oddsPages: pagesRead, oddsPagesTotal: pagesTotal, warnings };
 }

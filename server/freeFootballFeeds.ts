@@ -11,7 +11,7 @@ export type FreeFixture = Fixture & {
   goals: { home: number | null; away: number | null };
   score: { fulltime: { home: number | null; away: number | null }; halftime?: { home: number | null; away: number | null } };
 };
-const cache = new Map<string, { until: number; task: Promise<any> }>();
+const cache = new Map<string, { until: number; createdAt: number; pending: boolean; task: Promise<any> }>();
 const queues = new Map<string, Promise<void>>();
 const nextRequest = new Map<string, number>();
 const unavailableUntil = new Map<string, number>();
@@ -23,7 +23,7 @@ const score = (value: any) => value !== null && value !== undefined && value !==
 export function cachedSportsJson(url: URL, headers: Record<string, string> = {}, ttl = 5 * 60000): Promise<any> {
   const key = createHash('sha256').update(`${url}:${JSON.stringify(headers)}`).digest('hex');
   const previous = cache.get(key);
-  if (previous && previous.until > Date.now()) return previous.task;
+  if (previous && (previous.pending || previous.until > Date.now() && Date.now() - previous.createdAt < ttl)) return previous.task;
   const account = createHash('sha256').update(`${url.origin}:${JSON.stringify(headers)}:${url.searchParams.get('apiKey') || ''}`).digest('hex');
   const gate = (queues.get(account) || Promise.resolve()).then(async () => {
     if ((unavailableUntil.get(account) || 0) > Date.now()) throw new Error('Sports provider cooling down.');
@@ -33,6 +33,7 @@ export function cachedSportsJson(url: URL, headers: Record<string, string> = {},
     nextRequest.set(account, Date.now() + interval);
   });
   queues.set(account, gate.catch(() => undefined));
+  let entry: { until: number; createdAt: number; pending: boolean; task: Promise<any> };
   const task = gate.then(() => fetch(url, { headers: { 'User-Agent': 'EliteVipTips/1.0 (support@eliteviptips.com)', ...headers }, signal: AbortSignal.timeout(10000) }))
     .then(async (response) => {
       if (!response.ok) {
@@ -41,9 +42,11 @@ export function cachedSportsJson(url: URL, headers: Record<string, string> = {},
       }
       return response.json();
     })
-    .catch((error) => { cache.delete(key); throw error; });
+    .then(data => { entry.pending = false; entry.createdAt = Date.now(); entry.until = entry.createdAt + ttl; return data; })
+    .catch((error) => { if (cache.get(key) === entry) cache.delete(key); throw error; });
   if (cache.size > 150) cache.clear();
-  cache.set(key, { until: Date.now() + ttl, task });
+  entry = { until: Date.now() + ttl, createdAt: Date.now(), pending: true, task };
+  cache.set(key, entry);
   return task;
 }
 

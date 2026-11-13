@@ -1,4 +1,5 @@
 import type { DailyAnalysisItem } from '../src/types.js';
+import { isFreshOddsTimestamp } from './oddsPolicy.js';
 
 export type Fixture = {
   sourceProvider?: 'football-data.org' | 'TheSportsDB' | 'OpenLigaDB' | 'the-odds-api';
@@ -121,16 +122,16 @@ export function buildCandidates(fixture: Fixture, odds: Odds[], model: Predictio
   const confidence = Math.round(probability * 100);
   if (confidence < 55) return [];
   const offer = odds.filter((item) => item.fixture?.id === fixture.fixture.id
-    && (!item.update || Number.isFinite(Date.parse(item.update)) && Math.abs(now.getTime() - Date.parse(item.update)) <= 3 * 3600_000)).flatMap((item) =>
+    && isFreshOddsTimestamp(item.update, now)).flatMap((item) =>
     (item.bookmakers || []).flatMap((bookmaker) => bookmaker.bets.flatMap((bet) => {
       if (!names.includes(normalized(bet.name))) return [];
-      const outcome = bet.values.find((value) => outcomes.includes(normalized(value.value)));
-      const value = Number(outcome?.odd?.replace(',', '.'));
-      if (!Number.isFinite(value) || value < 1.15 || value > 3.5) return [];
-      return [{ value, bookmaker: bookmaker.name, updatedAt: item.update }];
+      return bet.values.filter((value) => outcomes.includes(normalized(value.value))).flatMap(outcome => {
+        const value = Number(outcome.odd.replace(',', '.'));
+        return Number.isFinite(value) && value > 1 ? [{ value, bookmaker: bookmaker.name, updatedAt: item.update }] : [];
+      });
     })),
   ).sort((a, b) => b.value - a.value || (b.updatedAt || '').localeCompare(a.updatedAt || '') || a.bookmaker.localeCompare(b.bookmaker))[0];
-  if (!offer || probability <= 1 / offer.value) return [];
+  if (!offer || offer.value < 1.15 || offer.value > 3.5 || probability <= 1 / offer.value) return [];
   const text = `Za mec ${fixture.teams.home.name} - ${fixture.teams.away.name} izdvojen je tip ${prediction}, uz modelsku procenu ${confidence}%. ${basis} Dostupna kvota iznosi ${offer.value.toFixed(2)}. Procena modela ne garantuje ishod; kvota se moze promeniti do pocetka utakmice.`;
   return [{
     id: `${fixture.sourceProvider || 'api-football'}-${fixture.providerId || fixture.fixture.id}`, source: fixture.sourceProvider || 'api-football', sport: 'football', fixtureId: fixture.fixture.id,
@@ -154,7 +155,7 @@ export const buildCandidate = (fixture: Fixture, odds: Odds[], model: Prediction
 
 // All league IDs are eligible. Diversity prefers a different league before a repeat.
 export function selectDailyPicks(candidates: Candidate[], slots: Array<'FREE' | 'VIP'>): DailyAnalysisItem[] {
-  const remaining = [...candidates].sort((a, b) => b.selectionScore - a.selectionScore || b.confidence! - a.confidence! || a.id.localeCompare(b.id));
+  const remaining = [...candidates].sort((a, b) => b.selectionScore - a.selectionScore || (b.confidence ?? 0) - (a.confidence ?? 0) || a.id.localeCompare(b.id));
   const usedLeagues = new Set<number>();
   const usedFixtures = new Set<number>();
   const usedMarkets = new Set<string>();

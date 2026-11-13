@@ -1,5 +1,6 @@
 import { cachedSportsJson, teamKey } from './freeFootballFeeds.js';
 import type { Fixture, Odds } from './dailyPickSelection.js';
+import { isFreshOddsTimestamp, ODDS_CACHE_TTL_MS } from './oddsPolicy.js';
 
 const sportForLeague: Array<[RegExp, string]> = [
   [/premier league|premiership/i, 'soccer_epl'], [/\bbundesliga\s+2(?!\d)|\b2\..*bundesliga/i, 'soccer_germany_bundesliga2'],
@@ -25,10 +26,11 @@ export function mapVerifiedOdds(fixture: Fixture, events: any[], sport: string, 
   if (candidates.length !== 1) return [];
   const event = candidates[0];
   return (event.bookmakers || []).flatMap((bookmaker: any, index: number) => {
-    if (!bookmaker.title || !bookmaker.last_update || !Number.isFinite(Date.parse(bookmaker.last_update))
-      || Math.abs(now.getTime() - Date.parse(bookmaker.last_update)) > 3 * 3600000) return [];
-    const bets = (bookmaker.markets || []).flatMap((market: any) => {
+    if (!bookmaker.title) return [];
+    return (bookmaker.markets || []).flatMap((market: any) => {
       if (!['h2h', 'totals', 'btts'].includes(market.key)) return [];
+      const updatedAt = market.last_update || bookmaker.last_update;
+      if (!isFreshOddsTimestamp(updatedAt, now)) return [];
       const values = (market.outcomes || []).flatMap((outcome: any) => {
         const price = Number(outcome.price);
         if (!Number.isFinite(price) || price <= 1) return [];
@@ -39,9 +41,12 @@ export function mapVerifiedOdds(fixture: Fixture, events: any[], sport: string, 
         if (market.key === 'btts' && ['Yes', 'No'].includes(outcome.name)) value = outcome.name;
         return value ? [{ value, odd: String(price) }] : [];
       });
-      return values.length ? [{ name: market.key === 'h2h' ? 'Match Winner' : market.key === 'totals' ? 'Goals Over/Under' : 'Both Teams Score', values }] : [];
+      return values.length ? [{ fixture: { id: fixture.fixture.id }, update: updatedAt,
+        bookmakers: [{ id: index + 1, name: bookmaker.title, bets: [{
+          name: market.key === 'h2h' ? 'Match Winner' : market.key === 'totals' ? 'Goals Over/Under' : 'Both Teams Score', values,
+        }] }],
+      }] : [];
     });
-    return bets.length ? [{ fixture: { id: fixture.fixture.id }, update: bookmaker.last_update, bookmakers: [{ id: index + 1, name: bookmaker.title, bets }] }] : [];
   });
 }
 
@@ -56,7 +61,7 @@ export async function loadIndependentOdds(fixtures: Fixture[], now = new Date())
     try {
       const url = new URL(`https://api.the-odds-api.com/v4/sports/${sport}/odds/`);
       Object.entries({ apiKey: key, regions: 'eu', markets: 'h2h,totals', oddsFormat: 'decimal', dateFormat: 'iso' }).forEach(([name, value]) => url.searchParams.set(name, value));
-      const events = await cachedSportsJson(url, {}, 30 * 60000);
+      const events = await cachedSportsJson(url, {}, ODDS_CACHE_TTL_MS);
       if (!Array.isArray(events)) throw new Error('Invalid odds response.');
       fixtures.filter((fixture) => oddsSportForFixture(fixture) === sport).forEach((fixture) => odds.push(...mapVerifiedOdds(fixture, events, sport, now)));
     } catch { failures++; }

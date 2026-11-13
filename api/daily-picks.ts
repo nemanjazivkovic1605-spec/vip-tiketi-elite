@@ -2,8 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { initAdminDb, sendJson } from './_world-cup-automation.js';
 import { isAdminRequest, isCronRequest } from '../server/adminAuth.js';
 import { loadDailyCandidates } from '../server/dailyPickProvider.js';
-import { selectDailyPicks } from '../server/dailyPickSelection.js';
-import { publicationSlots, publishDailyCandidates } from '../server/dailyPublication.js';
+import { dailyReservation, publicationSlots, publishDailyCandidates, selectDailyPublicationCandidates } from '../server/dailyPublication.js';
 import { addDays, localDate, numberSetting, validDate } from '../server/sportsApi.js';
 import { loadAdminDailyProposals } from '../server/dailyProposalProvider.js';
 import { saveDailyProposals } from '../server/dailyProposalsStore.js';
@@ -43,33 +42,31 @@ export default async function handler(request: IncomingMessage, response: Server
     }
     const db = initAdminDb();
     const dryRun = url.searchParams.get('dryRun') === 'true';
-    const products = await runProductPublication(db, requestedDate || today, dryRun, new Date(), Math.min(deadline, Date.now() + 120000));
-    if (url.searchParams.get('mode') === 'products') return sendJson(response, 200, products);
-    // Dry-run reads reservations but never publishes tickets or updates logs/statistics.
-    if (url.searchParams.get('dryRun') === 'true') {
-      for (const date of dates) {
-        try {
-          const data = await loadDailyCandidates(date, new Date(), deadline);
-          results.push({ date, fixtures: data.fixtures, upcoming: data.upcoming, oddsPages: data.oddsPages,
-            warnings: data.warnings, picks: selectDailyPicks(data.candidates, publicationSlots([])) });
-        } catch (error) {
-          results.push({ date, failed: 1, error: error instanceof Error ? error.message : 'Provera sportskog API-ja nije uspela.' });
-        }
-      }
-      return sendJson(response, results.every((result) => result.failed) ? 502 : 200, { dryRun: true, saved: 0, products, results });
-    }
+    const products = await runProductPublication(db, requestedDate || today, dryRun, new Date(), Math.min(deadline, Date.now() + 120000))
+      .catch(() => ({ date: requestedDate || today, saved: 0, failed: 1, error: 'Elite/Safe objava trenutno nije dostupna. Provera singlova se nastavlja.' }));
+    if (url.searchParams.get('mode') === 'products') return sendJson(response, (products as any).failed ? 502 : 200, products);
     for (const date of dates) {
+      if (Date.now() >= deadline - 5000) {
+        results.push({ date, saved: 0, failed: 1, error: 'Dostignut je vremenski budzet. Preostala dnevna mesta ostaju slobodna za sledece pokretanje.' });
+        continue;
+      }
       const [existing, manifest] = await Promise.all([
-        db.collection('dailyAnalyses').where('date', '==', date).get(), db.collection('dailyAutomation').doc(date).get(),
+        db.collection('dailyAnalyses').where('date', '==', date).limit(50).get(), db.collection('dailyAutomation').doc(date).get(),
       ]);
       const reserved = new Map<string, any>((manifest.data()?.published || []).map((item: any) => [item.id, item]));
-      existing.docs.forEach((doc) => reserved.set(doc.id, { ...doc.data(), id: doc.id }));
+      existing.docs.forEach((doc) => reserved.set(doc.id, dailyReservation(doc.id, doc.data() as any)));
       if (!publicationSlots([...reserved.values()]).length) {
         results.push({ date, saved: 0, fetched: 0, skippedManualOverride: existing.docs.filter((doc) => doc.data().manualOverride).length, message: 'Dnevni predlozi su već objavljeni.' });
         continue;
       }
       try {
         const data = await loadDailyCandidates(date, new Date(), deadline);
+        if (dryRun) {
+          const picks = selectDailyPublicationCandidates(date, data.candidates, [...reserved.values()]);
+          results.push({ date, saved: 0, fixtures: data.fixtures, upcoming: data.upcoming, oddsPages: data.oddsPages,
+            warnings: data.warnings, picks, plannedWrites: picks.length ? picks.length * 4 + 2 : 0 });
+          continue;
+        }
         const published = await publishDailyCandidates(db, date, data.candidates);
         const result = { date, ...published, fixtures: data.fixtures, upcoming: data.upcoming,
           oddsPages: data.oddsPages, oddsPagesTotal: data.oddsPagesTotal, warnings: data.warnings };
@@ -78,10 +75,12 @@ export default async function handler(request: IncomingMessage, response: Server
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Preuzimanje nije uspelo.';
         results.push({ date, saved: 0, fetched: 0, failed: 1, error: message });
-        await db.collection('automationLogs').add({ action: 'daily-seed', date, status: 'error', message, createdAt: new Date().toISOString() });
+        if (!dryRun) await db.collection('automationLogs').add({ action: 'daily-seed', date, status: 'error', message, createdAt: new Date().toISOString() });
       }
     }
     const sum = (key: string) => results.reduce((total, result) => total + (Number(result[key]) || 0), 0);
+    if (dryRun) return sendJson(response, results.every(result => result.failed) ? 502 : 200,
+      { dryRun: true, saved: 0, plannedWrites: sum('plannedWrites') + Number((products as any).plannedWrites || 0), products, results });
     sendJson(response, results.every((result) => result.failed) ? 502 : 200, {
       saved: sum('saved') + products.saved, fetched: sum('fetched'), skippedManualOverride: sum('skippedManualOverride'), failed: sum('failed'), products, results,
     });

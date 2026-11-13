@@ -7,11 +7,12 @@ import { buildDailyProposals, loadDailyMarketData, proposalIdentity } from './da
 import { freeFixturesForDate, historicalModel, teamKey } from './freeFootballFeeds.js';
 import { loadDailyCandidates } from './dailyPickProvider.js';
 import { getSportsKey, localDate } from './sportsApi.js';
+import { isFreshOddsTimestamp } from './oddsPolicy.js';
 
 export const PRODUCT_AUTOMATION = 'product-tickets' as const;
 export const AUTOMATED_PRODUCTS = ['elite_ticket', 'safe_pick'] as const;
 export type AutomatedProduct = typeof AUTOMATED_PRODUCTS[number];
-export type ProductPick = DailyAnalysisItem & { statisticsAvailable?: boolean };
+export type ProductPick = DailyAnalysisItem & { statisticsAvailable?: boolean; oddsUpdatedAt?: string };
 const timeInBelgrade = (date: Date) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit' }).format(date);
 export const productTicketId = getAutomaticProductTicketId;
 
@@ -31,7 +32,8 @@ export function productMatchKickoff(match: Match, date: string): number {
 export async function loadProductPicks(date: string, now = new Date(), deadline = Date.now() + 150000) {
   const data = await loadDailyMarketData(date, now);
   const proposals = buildDailyProposals(data.fixtures, data.odds, now);
-  const picks: ProductPick[] = proposals.filter((item) => item.analysis.odds > 1).map((item) => item.analysis);
+  const picks: ProductPick[] = proposals.filter((item) => item.analysis.odds > 1)
+    .map((item) => ({ ...item.analysis, oddsUpdatedAt: item.oddsUpdatedAt }));
   // Reuse existing basic results/statistics only. No AI, H2H database or additional paid provider.
   if (picks.length && Date.now() < deadline - 15000) {
     try {
@@ -53,7 +55,7 @@ export async function loadProductPicks(date: string, now = new Date(), deadline 
           .sort((a, b) => b.selectionScore - a.selectionScore);
         const best = candidates[0];
         if (best) Object.assign(pick, { prediction: best.prediction, odds: best.odds, confidence: best.confidence, statisticsAvailable: true,
-          source: fixture.sourceProvider, fixtureId: fixture.fixture.id, providerFixtureId: fixture.providerId });
+          oddsUpdatedAt: best.oddsUpdatedAt, source: fixture.sourceProvider, fixtureId: fixture.fixture.id, providerFixtureId: fixture.providerId });
       }
     } catch { data.warnings.push('Osnovna statistika nije dostupna; koriste se provereni trzisni podaci bez izmisljanja statistike.'); }
   }
@@ -71,7 +73,7 @@ export function selectProductPicks(pool: ProductPick[], type: AutomatedProduct, 
   const unique = new Map<string, ProductPick>();
   for (const pick of pool) {
     if (pick.date !== date || pick.sport !== 'football' || pick.status !== 'ACTIVE' || !pick.homeTeam || !pick.awayTeam || !pick.league || !pick.prediction?.trim()
-      || !Number.isFinite(pick.odds) || pick.odds < 1.2 || pick.odds > 3 || !Number.isFinite(Date.parse(pick.kickoffAt || ''))
+      || !Number.isFinite(pick.odds) || pick.odds < 1.2 || pick.odds > 3 || !isFreshOddsTimestamp(pick.oddsUpdatedAt, now) || !Number.isFinite(Date.parse(pick.kickoffAt || ''))
       || Date.parse(pick.kickoffAt!) < now.getTime() + 30 * 60000 || localDate(new Date(pick.kickoffAt!)) !== date
       || timeInBelgrade(new Date(pick.kickoffAt!)) !== (pick.kickoffTime || pick.time)
       || evaluateFullTimePrediction(pick.prediction, 0, 0) === undefined) continue;

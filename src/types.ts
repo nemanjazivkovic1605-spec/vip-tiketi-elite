@@ -278,7 +278,7 @@ export interface DailyAnalysisItem {
   providerFixtureId?: string;
   oddsProvider?: string;
   kickoffAt?: string;
-  analysisSource?: 'api-predictions' | 'model-statistics';
+  analysisSource?: 'api-predictions' | 'model-statistics' | 'market-odds';
   date: string;
   matchTime?: string;
   kickoffTime?: string;

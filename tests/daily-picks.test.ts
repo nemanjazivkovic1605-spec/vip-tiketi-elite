@@ -14,7 +14,7 @@ const fixture = (id = 1, league = 912): Fixture => ({
   league: { id: league, name: 'Regional Division', country: 'Serbia' },
   teams: { home: { id: id * 2, name: `Home ${id}` }, away: { id: id * 2 + 1, name: `Away ${id}` } },
 });
-const odds = (id = 1, value = '1.65'): Odds[] => [{ fixture: { id }, bookmakers: [{ id: 6, name: 'Example bookmaker', bets: [
+const odds = (id = 1, value = '1.65'): Odds[] => [{ fixture: { id }, update: now.toISOString(), bookmakers: [{ id: 6, name: 'Example bookmaker', bets: [
   { name: 'Double Chance', values: [{ value: 'Home/Draw', odd: value }] },
 ] }] }];
 const model = (id = 1): Prediction => ({
