@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "scripts/football-data-archive.ts",
+    "scripts/deploy-analytics-data.ts",
+    "server/footballAnalytics/footballDataArchive/**/*.ts",
+    "tests/football-data-archive*.test.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

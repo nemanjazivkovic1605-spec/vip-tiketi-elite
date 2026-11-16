@@ -4,9 +4,8 @@ dist/
 .vercel/
 coverage/
 .local-backups/
+.local-data/
 .DS_Store
 *.log
 .env*
 !.env.example
-
-.vercel

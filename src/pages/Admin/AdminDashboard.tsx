@@ -1,5 +1,5 @@
 ﻿import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { coalesceRefresh } from '../../utils/coalesceRefresh';
 import { 
@@ -86,6 +86,7 @@ const getSixMonthsAgo = () => {
 };
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -1555,6 +1556,9 @@ export default function AdminDashboard() {
     { id: 'matches', label: 'Baza utakmica', icon: <Database size={20} /> },
     { id: 'tips', label: 'Tipovi', icon: <FileText size={20} /> },
     { id: 'analyses', label: 'Dnevni Tipovi', icon: <TrendingUp size={20} /> },
+    { id: 'historical-analytics', label: 'Elite Analytics', icon: <BarChart3 size={20} /> },
+    { id: 'analysis-lab', label: 'Dnevni raspored', icon: <Database size={20} /> },
+    { id: 'htft-analytics', label: 'HT/FT Rang-lista', icon: <BarChart3 size={20} /> },
     { id: 'reviews', label: 'Recenzije', icon: <Star size={20} /> },
     { id: 'settings', label: 'Podešavanja', icon: <Settings size={20} /> },
   ];
@@ -1566,7 +1570,7 @@ export default function AdminDashboard() {
       </datalist>
       {/* Sidebar */}
       <aside className={`
-        fixed md:relative z-50 w-64 h-screen bg-black/90 backdrop-blur-xl border-r border-white/10 transition-transform duration-300
+        fixed md:relative z-50 flex w-64 h-screen flex-col bg-black/90 backdrop-blur-xl border-r border-white/10 transition-transform duration-300
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         <div className="p-8 pb-4">
@@ -1575,11 +1579,14 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
-        <nav className="p-4 space-y-2 mt-8">
+        <nav className="min-h-0 flex-1 overflow-y-auto p-4 space-y-2 mt-4">
           {menuItems.map((item) => (
             <button
               key={item.id}
               onClick={() => {
+                if (item.id === 'historical-analytics') { navigate('/admin/historical-analytics'); return; }
+                if (item.id === 'analysis-lab') { navigate('/admin/analize'); return; }
+                if (item.id === 'htft-analytics') { navigate('/admin/htft'); return; }
                 setActiveTab(item.id as any);
                 setIsMobileMenuOpen(false);
               }}
@@ -1597,7 +1604,7 @@ export default function AdminDashboard() {
           ))}
         </nav>
 
-        <div className="absolute bottom-0 left-0 w-full p-4 border-t border-white/5">
+        <div className="w-full shrink-0 p-4 border-t border-white/5">
            <button 
              onClick={logout}
              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-sm font-bold text-red-500 hover:bg-red-500/10 transition-all"

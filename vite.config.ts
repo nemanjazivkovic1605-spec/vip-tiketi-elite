@@ -13,6 +13,7 @@ const serverApis = (): Plugin => ({
       '/api/daily-picks': '/api/daily-picks.ts',
       '/api/daily-results': '/api/daily-results.ts',
       '/api/ticket-purchases': '/api/ticket-purchases.ts',
+      '/api/football-analytics': '/api/football-analytics.ts',
     };
     server.middlewares.use(async (request, response, next) => {
       const route = routes[new URL(request.url || '/', 'http://localhost').pathname];

@@ -31,6 +31,9 @@ const Pricing = lazy(() => import('./pages/Pricing'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const AuthAction = lazy(() => import('./pages/AuthAction'));
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
+const FootballAnalytics = lazy(() => import('./pages/Admin/FootballAnalytics'));
+const HistoricalAnalytics = lazy(() => import('./pages/Admin/HistoricalAnalytics'));
+const HtftAnalytics = lazy(() => import('./pages/Admin/HtftAnalytics'));
 
 const PageLoader = () => (
   <div className="min-h-[60vh] bg-neutral-950 flex items-center justify-center">
@@ -123,6 +126,9 @@ export default function App() {
                 } />
 
                 {/* Admin Routes */}
+                <Route path="/admin/analize" element={<ProtectedRoute requireAdmin={true}><FootballAnalytics /></ProtectedRoute>} />
+                <Route path="/admin/historical-analytics" element={<ProtectedRoute requireAdmin={true}><HistoricalAnalytics /></ProtectedRoute>} />
+                <Route path="/admin/htft" element={<ProtectedRoute requireAdmin={true}><HtftAnalytics /></ProtectedRoute>} />
                 <Route path="/admin/*" element={
                   <ProtectedRoute requireAdmin={true}>
                     <AdminDashboard />
