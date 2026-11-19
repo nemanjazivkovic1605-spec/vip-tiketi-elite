@@ -19,6 +19,7 @@ Nijedan API kljuc, korisnicki nalog ili privatna analiza nisu deo ovog izvestaja
 | Poreklo podataka | Spojeni zapisi mogu imati polja vise razlicitih izvora | Sanitizacija po poreklu svakog polja, ne samo po listi izvora |
 | SQL osvezavanje | Siri sync je namerno iskljucen; poslednje provere su bile 15.11. | Poseban ograniceni dnevni public sync sa dry-run planom i atomic commit-om |
 | Firestore trosak | Raniji rizik masovnih index write operacija | Novi javni pregled ne koristi Firestore i ne radi upis pri pregledu |
+| Vercel Hobby | Produkcijski deploy odbio trinaestu serverless funkciju | Public handler izdvojen kao modul u postojecoj funkciji, sa zasebnim read-only rutiranjem; nema Pro nadogradnje |
 
 ## Proverene produkcijske automatizacije
 
@@ -81,7 +82,7 @@ Nije aktiviran placeni API/hosting. Detalji ogranicenja izvora:
 
 ## Provere
 
-- `npm test`: 175/175 prolazi, ukljucujuci postojece auth/pristupne,
+- `npm test`: 176 testova, ukljucujuci postojece auth/pristupne,
   purchase, auto-publication, result i nove public/sync testove.
 - `npm run lint`, `npm run analytics:archive:check`, `npm run build`: obavezni
   release gate-ovi; finalni rezultat se proverava pre objave.

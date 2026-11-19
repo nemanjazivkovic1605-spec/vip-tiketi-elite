@@ -27,6 +27,7 @@ import { htftRanking, htftTransitions, readHtftTeam, readHtftMatch, htftSchedule
 import type { HtftFilters, HtftCode } from '../src/types/htftAnalytics.js';
 import { planPublicSync,applyPublicSync,runPublicDailySync } from '../server/publicFootball/sync.js';
 import { sportsHealthReport } from '../server/publicFootball/audit.js';
+import publicFootballHandler from '../server/publicFootball/http.js';
 
 export const maxDuration = 240;
 const send = (response: ServerResponse, status: number, data: unknown) => {
@@ -49,11 +50,14 @@ export const createAnalyticsHandler =
     authorize = isAdminRequest,
     database = getAnalyticsDatabase,
     cron = isCronRequest,
+    publicHandler = publicFootballHandler,
   ) =>
   async (request: IncomingMessage, response: ServerResponse) => {
     response.setHeader("Content-Type", "application/json; charset=utf-8");
     response.setHeader("Cache-Control", "private, no-store");
     const url = new URL(request.url || "/", "https://eliteviptips.com");
+    // Public requests can only reach the separate read-only projection handler.
+    if(url.searchParams.get('public')==='1')return publicHandler(request,response);
     const action =
       url.searchParams.get("action") || (cron(request) ? "sync" : "status");
     const scheduled = action === "sync" && cron(request);

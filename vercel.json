@@ -13,11 +13,12 @@
     }
   ],
   "rewrites": [
-    { "source": "/fudbal", "destination": "/api/public-football?page=overview" },
-    { "source": "/match-finder", "destination": "/api/public-football?page=finder" },
-    { "source": "/fudbal/lige/:slug", "destination": "/api/public-football?page=league&slug=:slug" },
-    { "source": "/fudbal/utakmice/:id", "destination": "/api/public-football?page=match&id=:id" },
-    { "source": "/sitemap.xml", "destination": "/api/public-football?page=sitemap" },
+    { "source": "/fudbal", "destination": "/api/football-analytics?public=1&page=overview" },
+    { "source": "/match-finder", "destination": "/api/football-analytics?public=1&page=finder" },
+    { "source": "/fudbal/lige/:slug", "destination": "/api/football-analytics?public=1&page=league&slug=:slug" },
+    { "source": "/fudbal/utakmice/:id", "destination": "/api/football-analytics?public=1&page=match&id=:id" },
+    { "source": "/sitemap.xml", "destination": "/api/football-analytics?public=1&page=sitemap" },
+    { "source": "/api/public-football", "destination": "/api/football-analytics?public=1" },
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
@@ -28,7 +29,6 @@
     }
   ],
   "functions": {
-    "api/public-football.ts": { "maxDuration": 60 },
     "api/football-analytics.ts": { "maxDuration": 240 },
     "api/daily-picks.ts": { "maxDuration": 300 },
     "api/daily-results.ts": { "maxDuration": 300 },

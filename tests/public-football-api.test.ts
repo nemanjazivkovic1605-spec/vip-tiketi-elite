@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPublicFootballHandler,publicFootballSitemap } from '../api/public-football.ts';
+import { createPublicFootballHandler,publicFootballSitemap } from '../server/publicFootball/http.ts';
+import { createAnalyticsHandler } from '../api/football-analytics.ts';
 import { snapshotFromMatches } from '../server/publicFootball/store.ts';
 import { mapPublicFootballMatch,PUBLIC_FIELDS } from '../server/publicFootball/policy.ts';
 const now=new Date('2026-11-18T12:00:00Z');
@@ -8,6 +9,18 @@ const fields={'home.name':'Home <script>alert(1)</script>','away.name':'Away','l
 const fixture=mapPublicFootballMatch('a'.repeat(32),{environment:'real',fields,provenance:Object.fromEntries(PUBLIC_FIELDS.map(key=>[key,{provider:'openfootball'}]))},now)!;
 const snapshot=snapshotFromMatches([fixture],now);
 async function call(url:string,method='GET',load=async()=>snapshot){const response:any={statusCode:0,headers:{},body:'',setHeader(name:string,value:string){this.headers[name]=value;},end(value:string){this.body=value;}};await createPublicFootballHandler(load,()=>now)({url,method}as any,response);return response;}
+
+test('shared Vercel function keeps the public projection read-only and cannot route public requests into admin actions',async()=>{
+  let privateReads=0,publicReads=0;
+  const handler=createAnalyticsHandler(async()=>false,async()=>{privateReads++;throw new Error('Private database');},()=>false,createPublicFootballHandler(async()=>{publicReads++;return snapshot;},()=>now));
+  async function shared(url:string,method='GET'){const response:any={statusCode:0,headers:{},body:'',setHeader(name:string,value:string){this.headers[name]=value;},end(value:string){this.body=value;}};await handler({url,method}as any,response);return response;}
+  assert.equal((await shared('/api/football-analytics?public=1&action=finder')).statusCode,200);
+  assert.equal((await shared('/api/football-analytics?public=1&action=sync')).statusCode,400);
+  assert.equal((await shared('/api/football-analytics?public=1&action=historical-overview')).statusCode,400);
+  assert.equal((await shared('/api/football-analytics?public=1&action=finder','POST')).statusCode,405);
+  assert.equal((await shared('/api/football-analytics?action=status')).statusCode,403);
+  assert.equal(privateReads,0);assert.equal(publicReads,1);
+});
 test('public API is readable without authentication, is bounded, and refuses all mutations before loading data',async()=>{
   const result=await call('/api/public-football?action=finder');assert.equal(result.statusCode,200);const data=JSON.parse(result.body);assert.equal(data.rows.length,1);assert(!('matches'in data));assert(!('provenance'in data.rows[0].match));assert(!('analysis'in data.rows[0].match));
   let reads=0;for(const method of ['POST','PUT','DELETE']){const denied=await call('/api/public-football',method,async()=>{reads++;return snapshot;});assert.equal(denied.statusCode,405);}assert.equal(reads,0);

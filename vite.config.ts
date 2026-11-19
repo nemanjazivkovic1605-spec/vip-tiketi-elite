@@ -25,7 +25,7 @@ const serverApis = (): Plugin => ({
         if(league) publicUrl.searchParams.set('slug', league[1]);
         if(match) publicUrl.searchParams.set('id', match[1]);
         request.url = `/api/public-football?${publicUrl.searchParams}`;
-        try { const module = await server.ssrLoadModule('/api/public-football.ts'); await module.default(request, response); }
+        try { const module = await server.ssrLoadModule('/server/publicFootball/http.ts'); await module.default(request, response); }
         catch { response.statusCode = 503; response.end('Javni fudbalski pregled trenutno nije dostupan.'); }
         return;
       }

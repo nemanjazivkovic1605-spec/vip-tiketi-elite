@@ -52,6 +52,12 @@ su oznaceni.
 
 ## Read-only javni tok
 
+Radi ogranicenja Hobby plana na 12 funkcija, public handler je izdvojen u
+`server/publicFootball/http.ts`, ali deli postojecu Vercel funkciju
+`api/football-analytics.ts`. Rewrite dodaje `public=1`; takav zahtev zavrsava
+iskljucivo u zasebnom GET/HEAD handleru. Ne moze pozvati admin akciju. JSON
+alias `/api/public-football` ne pravi trinaestu serverless funkciju.
+
 Javni handler dozvoljava GET/HEAD, cita jedan pripremljeni SQL zapis i ne zove
 sportske API-je. U memoriji deli paralelna ucitavanja (TTL 5 minuta), a CDN
 koristi 5 minuta cache-a i do 30 minuta stale-while-revalidate. Odgovor sadrzi

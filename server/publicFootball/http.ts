@@ -1,10 +1,10 @@
 import type { IncomingMessage,ServerResponse } from 'node:http';
-import { getAnalyticsDatabase } from '../server/footballAnalytics/database.js';
-import { readPublicSnapshot,publicSnapshotCache } from '../server/publicFootball/store.js';
-import { buildPublicFootballPage,parseFinderFilters } from '../server/publicFootball/model.js';
-import { renderPublicFootball,renderPublicError,leaguePath,matchPath } from '../server/publicFootball/view.js';
-import type { PublicSnapshot,PublicFootballPageData } from '../src/types/publicFootball.js';
-import { addDays,localDate } from '../server/sportsApi.js';
+import { getAnalyticsDatabase } from '../footballAnalytics/database.js';
+import { readPublicSnapshot,publicSnapshotCache } from './store.js';
+import { buildPublicFootballPage,parseFinderFilters } from './model.js';
+import { renderPublicFootball,renderPublicError,leaguePath,matchPath } from './view.js';
+import type { PublicSnapshot,PublicFootballPageData } from '../../src/types/publicFootball.js';
+import { addDays,localDate } from '../sportsApi.js';
 
 const snapshot=publicSnapshotCache(async()=>readPublicSnapshot(await getAnalyticsDatabase()));
 export const clearPublicFootballCache=()=>snapshot.clear();

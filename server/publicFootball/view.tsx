@@ -14,7 +14,7 @@ const status:Record<PublicMatch['status'],string>={scheduled:'Zakazano',live:'U 
 const country=(value:string)=>({England:'Engleska',Germany:'Nemačka'}[value]||value);
 export const matchPath=(match:PublicMatch)=>`/fudbal/utakmice/${match.id}`;
 export const leaguePath=(slug:string)=>`/fudbal/lige/${slug}`;
-const query=(params:URLSearchParams,key:string,value:string)=>{const next=new URLSearchParams(params);for(const internal of ['page','action','slug','id'])next.delete(internal);next.set(key,value);return `?${next}`;};
+const query=(params:URLSearchParams,key:string,value:string)=>{const next=new URLSearchParams(params);for(const internal of ['public','page','action','slug','id'])next.delete(internal);next.set(key,value);return `?${next}`;};
 
 function Header({finder=false}:{finder?:boolean}) {
   return <><header className="fp-header"><div className="fp-shell fp-header-inner"><a className="fp-brand" href="/"><img src="/favicon.svg" alt="" width="27" height="27"/><span>ELITE <b>TIPS</b></span></a><nav aria-label="Glavna navigacija"><a href="/">Početna</a><a href="/fudbal" aria-current={!finder?'page':undefined}>Fudbal</a><a href="/match-finder" aria-current={finder?'page':undefined}>Match Finder</a><a href="/history">Istorija tipova</a><a href="/stats">Statistika tipova</a></nav><a className="fp-account" href="/dashboard">Moj nalog<ArrowRight size={14}/></a></div></header><nav className="fp-mobile-nav" aria-label="Fudbalski pregled"><a href="/fudbal">Utakmice i lige</a><a href="/match-finder">Match Finder</a><a href="/history">Istorija tipova</a></nav></>;
