@@ -20,6 +20,7 @@ Nijedan API kljuc, korisnicki nalog ili privatna analiza nisu deo ovog izvestaja
 | SQL osvezavanje | Siri sync je namerno iskljucen; poslednje provere su bile 15.11. | Poseban ograniceni dnevni public sync sa dry-run planom i atomic commit-om |
 | Firestore trosak | Raniji rizik masovnih index write operacija | Novi javni pregled ne koristi Firestore i ne radi upis pri pregledu |
 | Vercel Hobby | Produkcijski deploy odbio trinaestu serverless funkciju | Public handler izdvojen kao modul u postojecoj funkciji, sa zasebnim read-only rutiranjem; nema Pro nadogradnje |
+| SSR runtime | Lokalni Vite je razresavao `.js` -> `.tsx`, produkcijski tracer nije | Build pravi i native-Node proverava serverski JSX bundle; public handler se ucitava odvojeno od privatnog API-ja |
 
 ## Proverene produkcijske automatizacije
 

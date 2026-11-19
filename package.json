@@ -17,7 +17,7 @@
     "analytics:history:import": "tsx scripts/historical-football.ts import",
     "analytics:history:report": "tsx scripts/historical-football.ts report",
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "build": "node scripts/build-public-football-view.mjs && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",

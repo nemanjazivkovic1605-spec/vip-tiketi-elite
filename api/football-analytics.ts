@@ -27,7 +27,6 @@ import { htftRanking, htftTransitions, readHtftTeam, readHtftMatch, htftSchedule
 import type { HtftFilters, HtftCode } from '../src/types/htftAnalytics.js';
 import { planPublicSync,applyPublicSync,runPublicDailySync } from '../server/publicFootball/sync.js';
 import { sportsHealthReport } from '../server/publicFootball/audit.js';
-import publicFootballHandler from '../server/publicFootball/http.js';
 
 export const maxDuration = 240;
 const send = (response: ServerResponse, status: number, data: unknown) => {
@@ -50,7 +49,7 @@ export const createAnalyticsHandler =
     authorize = isAdminRequest,
     database = getAnalyticsDatabase,
     cron = isCronRequest,
-    publicHandler = publicFootballHandler,
+    publicHandler = async (request:IncomingMessage,response:ServerResponse) => (await import('../server/publicFootball/http.js')).default(request,response),
   ) =>
   async (request: IncomingMessage, response: ServerResponse) => {
     response.setHeader("Content-Type", "application/json; charset=utf-8");

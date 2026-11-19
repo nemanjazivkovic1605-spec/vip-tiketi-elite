@@ -57,6 +57,11 @@ Radi ogranicenja Hobby plana na 12 funkcija, public handler je izdvojen u
 `api/football-analytics.ts`. Rewrite dodaje `public=1`; takav zahtev zavrsava
 iskljucivo u zasebnom GET/HEAD handleru. Ne moze pozvati admin akciju. JSON
 alias `/api/public-football` ne pravi trinaestu serverless funkciju.
+`npm run build` prvo priprema serverski `view.js` iz TSX izvora pomocu postojeceg
+esbuild-a i proverava njegov import u obicnom Node.js procesu. Ovo je potrebno
+jer Vercel-ov Node tracer ne razresava `.js` alias ka `.tsx` izvoru. Generisani
+fajl nije client bundle i ne cuva se u git-u. Privatni API ucitava public
+handler tek kada dobije javni zahtev, pa problem tog prikaza ne blokira admin.
 
 Javni handler dozvoljava GET/HEAD, cita jedan pripremljeni SQL zapis i ne zove
 sportske API-je. U memoriji deli paralelna ucitavanja (TTL 5 minuta), a CDN
