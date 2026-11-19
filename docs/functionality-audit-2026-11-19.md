@@ -78,6 +78,35 @@ proveru u stvarnom runtime-u i ne vraca kljuceve ili privatne podatke.
 - Neon: ostaje Free plan. Postojeca baza zauzimala je oko 849 MB pre javne
   projekcije; novi upisi imaju izricitu rezervu ispod besplatnog ogranicenja.
 
+### Stvarna runtime provera posle objave 19.11.
+
+| Izvor | Odgovor / stanje |
+| --- | --- |
+| OpenLigaDB | HTTP 200, 306 utakmica u proverenoj sezoni |
+| OpenFootball | HTTP 200, 380 utakmica u proverenoj sezoni |
+| Football-Data.org | HTTP 200, 13 takmicenja u katalogu |
+| The Odds API | HTTP 200, 77 stavki u katalogu; odds krediti nisu troseni ovom proverom |
+| API-Football | Runtime nema upotrebljiv API kljuc, bez obzira na prisustvo imena u env metadata |
+| PitchAPI | Konfigurisan je testni kljuc; ne prihvata se kao izvor javnih stvarnih rezultata |
+| Gemini | Konfigurisan, ali generisanje namerno nije pokrenuto tokom revizije |
+
+Novi public pregled koristi samo prva dva dozvoljena izvora i ne zavisi od
+nepodesenog API-Football-a ili testnog PitchAPI-ja. Stari PitchAPI/xG pregled
+nije verifikovan kao izvor stvarnih produkcijskih podataka; za njegovo dalje
+koriscenje potreban je proverljiv produkcijski izvor, ne testni kljuc.
+
+Produkcijski `/fudbal`, `/match-finder`, liga i utakmica vratili su HTTP 200 sa
+stvarnim HTML sadrzajem. Sitemap je XML, robots TXT. Javni POST vraca 405,
+guest health/sync 403, a admin health 200. Provera nije menjala SQL ili
+Firestore podatke. Baza nakon javne projekcije ima oko 851 MB i nema duplih
+public ID-jeva.
+
+Privatni admin status posle objave i dalje vraca 155.431 utakmicu, 153.723
+poznata HT/FT rezultata i 23 lige. Produkcijski admin `public-sync-plan` vraca
+0 izmena i 62 nepromenjena termina u dnevnom prozoru. Javni HTML/JSON i
+sitemap potvrdjeno dobijaju CDN HIT. Vercel project API potvrduje sva tri
+registrovana cron-a, ukljucujuci novi dnevni SQL public sync.
+
 Nije aktiviran placeni API/hosting. Detalji ogranicenja izvora:
 `docs/public-football.md`.
 
