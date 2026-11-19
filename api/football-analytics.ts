@@ -25,6 +25,8 @@ import { planHistoricalImport, syncHistoricalCurrentSeason, writeHistoricalImpor
 import type { HistoricalImportOptions } from '../src/types/historicalAnalytics.js';
 import { htftRanking, htftTransitions, readHtftTeam, readHtftMatch, htftSchedule, validateHtftFilters } from '../server/footballAnalytics/htftAnalytics.js';
 import type { HtftFilters, HtftCode } from '../src/types/htftAnalytics.js';
+import { planPublicSync,applyPublicSync,runPublicDailySync } from '../server/publicFootball/sync.js';
+import { sportsHealthReport } from '../server/publicFootball/audit.js';
 
 export const maxDuration = 240;
 const send = (response: ServerResponse, status: number, data: unknown) => {
@@ -61,6 +63,7 @@ export const createAnalyticsHandler =
       });
     if (!["GET", "POST"].includes(request.method || ""))
       return send(response, 405, { error: "Method not allowed." });
+    if(action==='health'&&request.method==='GET')return send(response,200,await sportsHealthReport());
     const config = analyticsDatabaseConfig();
     if (!config.configured)
       return send(
@@ -124,7 +127,15 @@ export const createAnalyticsHandler =
         return send(response, 200, {
           results: process.env.ANALYTICS_SYNC_ENABLED === 'true' ? await refreshAnalytics(db) : [],
           historical: await syncHistoricalCurrentSeason(db),
+          publicFootball: await runPublicDailySync(db),
         });
+      if(action==='public-sync-plan'||action==='public-sync-write') {
+        if(request.method!=='POST')return send(response,405,{error:'Sinhronizacija zahteva eksplicitnu admin POST akciju.'});
+        const plan=await planPublicSync(db);
+        if(action==='public-sync-plan')return send(response,200,{fingerprint:plan.fingerprint,...plan.summary});
+        const body=await readHistoricalBody(request);
+        return send(response,200,await applyPublicSync(db,plan,body.fingerprint||''));
+      }
       if (action.startsWith('htft-')) {
         if (request.method !== 'GET') return send(response, 405, { error: 'Analitički pregledi dozvoljavaju samo čitanje.' });
         try {

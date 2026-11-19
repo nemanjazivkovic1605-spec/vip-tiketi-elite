@@ -10,6 +10,7 @@ import ScrollToTop from './components/utils/ScrollToTop';
 import MembershipGuard from './components/MembershipGuard';
 import EmailVerificationGate from './components/EmailVerificationGate';
 import AppErrorBoundary from './components/errors/AppErrorBoundary';
+import SiteMetadata from './components/seo/SiteMetadata';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -63,6 +64,7 @@ export default function App() {
 
   return (
     <HelmetProvider>
+      <SiteMetadata />
       <div className="min-h-screen bg-neutral-950 text-neutral-100 selection:bg-gold-500/30" style={{ backgroundColor: '#050505', color: '#f8f8f2' }}>
         <ScrollToTop />
         {!isAdminPath && <Navbar />}

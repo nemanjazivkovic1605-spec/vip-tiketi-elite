@@ -28,7 +28,7 @@ export default function Navbar() {
   const navLinks = [
     { label: 'Početna', path: '/' },
     { label: 'Statistika', path: '/stats' },
-    { label: 'Utakmice', path: '/live-results' },
+    { label: 'Fudbal', path: '/fudbal' },
     { label: 'Paketi', path: '/#pricing' },
     { label: 'Dnevni tipovi', path: '/daily-tips' },
     { label: 'Istorija', path: '/history' },
@@ -55,6 +55,7 @@ export default function Navbar() {
 
         <div className="hidden items-center gap-7 lg:flex">
           {navLinks.map((link) => (
+            link.path === '/fudbal' ? <a key={link.path} href={link.path} className="text-[12px] font-black uppercase tracking-widest text-neutral-400 transition-colors hover:text-gold-500">{link.label}</a> :
             <Link
               key={link.path}
               to={link.path}
@@ -117,6 +118,7 @@ export default function Navbar() {
           >
             <div className="flex flex-col gap-3 px-6 py-7">
               {[...navLinks, ...accountLinks].map((link) => (
+                link.path === '/fudbal' ? <a key={link.path} href={link.path} onClick={() => setIsOpen(false)} className="rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-widest text-neutral-400">{link.label}</a> :
                 <Link
                   key={link.path}
                   to={link.path}

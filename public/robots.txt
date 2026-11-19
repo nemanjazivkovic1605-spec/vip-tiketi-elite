@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /login
+Disallow: /register
+Disallow: /checkout
+Disallow: /auth-action
+Disallow: /__/auth/
+Disallow: /vip-tips
+
+Sitemap: https://eliteviptips.com/sitemap.xml

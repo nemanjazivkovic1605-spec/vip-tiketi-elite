@@ -1,0 +1,45 @@
+import type { HistoricalAggregate } from './historicalAnalytics';
+
+export type PublicSource = 'openfootball' | 'openligadb';
+export type PublicMatch = {
+  id: string;
+  league: { slug: string; name: string; country: string };
+  season: string;
+  date: string;
+  time: string | null;
+  kickoffAt: string | null;
+  homeTeam: string;
+  awayTeam: string;
+  status: 'scheduled' | 'live' | 'finished' | 'postponed' | 'canceled' | 'unknown';
+  ht: { home: number | null; away: number | null };
+  ft: { home: number | null; away: number | null };
+  checkedAt: string | null;
+  sources: PublicSource[];
+};
+export type PublicLeague = PublicMatch['league'] & { matches: number; finished: number; withHt: number; seasons: string[]; latestDate: string; sources: PublicSource[] };
+export type PublicSnapshot = { matches: PublicMatch[]; leagues: PublicLeague[]; loadedAt: string; lastUpdatedAt: string | null; truncated: boolean; excluded: number };
+export type PublicForm = { sample: number; expected: number; pointsPercent: number | null; results: string[]; averageFor: number | null; averageAgainst: number | null; over25: number | null; btts: number | null; htftSample: number; comebacks: number };
+export type FinderFilters = { from: string; to: string; league: string; form: number | null; over25: number | null; btts: number | null; comeBacks: number | null; sample: number; offset: number; search: string };
+export type PublicMatchPreview = { match: PublicMatch; home: PublicForm; away: PublicForm; missing: string[] };
+export type PublicFootballPageData = {
+  page: 'overview' | 'finder' | 'league' | 'match';
+  today: string;
+  filters: FinderFilters;
+  leagues: PublicLeague[];
+  league: PublicLeague | null;
+  match: PublicMatch | null;
+  aggregate: HistoricalAggregate;
+  rows: PublicMatchPreview[];
+  results: PublicMatch[];
+  resultsTotal: number;
+  resultsMore: boolean;
+  h2h: PublicMatch[];
+  home10: PublicForm | null;
+  away10: PublicForm | null;
+  total: number;
+  hasMore: boolean;
+  lastUpdatedAt: string | null;
+  truncated: boolean;
+  unavailableLeagues: string[];
+  coverageWarnings: string[];
+};

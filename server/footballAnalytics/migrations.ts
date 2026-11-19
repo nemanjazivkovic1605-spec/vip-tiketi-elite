@@ -44,4 +44,11 @@ export const migrations = [
       `CREATE TABLE IF NOT EXISTS fa_archive_imports (id TEXT PRIMARY KEY, archive_sha TEXT NOT NULL, plan_fingerprint TEXT NOT NULL, plan_digest TEXT NOT NULL, last_identity TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)`,
     ],
   },
+  {
+    version: 4,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS fa_schema (version INTEGER PRIMARY KEY)`,
+      `CREATE TABLE IF NOT EXISTS fa_public_snapshots (id TEXT PRIMARY KEY, version TEXT NOT NULL, updated_at TEXT NOT NULL, payload TEXT NOT NULL)`,
+    ],
+  },
 ];

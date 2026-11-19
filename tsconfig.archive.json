@@ -3,8 +3,10 @@
   "include": [
     "scripts/football-data-archive.ts",
     "scripts/deploy-analytics-data.ts",
+    "scripts/public-football.ts",
     "server/footballAnalytics/footballDataArchive/**/*.ts",
-    "tests/football-data-archive*.test.ts"
+    "tests/football-data-archive*.test.ts",
+    "tests/public-football*.test.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

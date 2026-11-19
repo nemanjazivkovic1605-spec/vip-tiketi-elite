@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "football:public": "tsx scripts/public-football.ts",
     "analytics:archive": "tsx scripts/football-data-archive.ts",
     "analytics:archive:check": "tsc --noEmit -p tsconfig.archive.json",
     "analytics:htft": "tsx scripts/htft-analytics.ts",

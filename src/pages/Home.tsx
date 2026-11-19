@@ -5,6 +5,8 @@ import {
   BarChart3,
   Clock3,
   Coins,
+  CalendarDays,
+  Search,
   Headphones,
   LockKeyhole,
   ReceiptText,
@@ -213,10 +215,10 @@ export default function Home() {
               <span className="rounded border border-gold-500/25 bg-black/45 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gold-200">18+ odgovorno</span>
             </div>
             <h1 className="max-w-xl font-display text-5xl font-black leading-[0.95] text-white md:text-7xl">
-              Dominiraj <span className="text-gold-400">sportskim kladionicama</span>
+              Elite <span className="text-gold-400">VIP Tips</span>
             </h1>
             <p className="mt-5 max-w-xl text-sm leading-7 text-neutral-300 md:text-base">
-              Free tipovi za verifikovane korisnike i VIP tipovi za ozbiljne igrače koji žele dugoročan profit.
+              Istražite fudbalsku statistiku i proverite javne rezultate naših tipova. FREE pristup za verifikovane korisnike i dodatni sadržaj za aktivne VIP članove.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
@@ -239,6 +241,13 @@ export default function Home() {
               <StatCard icon={ReceiptText} label="Završeni tiketi" value={loading ? '...' : hasPublicStats ? `+${stats?.completedCount ?? 0}` : '—'} />
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="border-b border-white/10 bg-[#101010] px-5 py-6 md:px-6">
+        <div className="mx-auto grid max-w-7xl items-center gap-5 lg:grid-cols-[1fr_auto]">
+          <div><p className="mb-2 text-[10px] font-bold uppercase text-gold-400">Fudbalski pregled</p><h2 className="text-xl font-semibold text-white">Raspored, forma i HT/FT na jednom mestu</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">Javno dostupni rezultati i istorijski pokazatelji, sa jasno navedenim uzorkom i pokrivenošću.</p></div>
+          <div className="flex flex-wrap gap-3"><a href="/fudbal" className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-[#181818] px-4 py-3 text-xs font-semibold text-neutral-200 transition-colors hover:border-gold-500/50"><CalendarDays size={16}/>Utakmice i lige</a><a href="/match-finder" className="inline-flex items-center gap-2 rounded-md bg-gold-500 px-4 py-3 text-xs font-semibold text-black transition-colors hover:bg-gold-400"><Search size={16}/>Match Finder<ArrowRight size={15}/></a></div>
         </div>
       </section>
 
