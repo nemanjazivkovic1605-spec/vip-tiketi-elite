@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/pitch-matches.ts';
+import handler from '../api/football-providers.ts';
 
 const call = async (url: string, method = 'GET') => {
   const response = {

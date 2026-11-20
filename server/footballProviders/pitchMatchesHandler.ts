@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mapPitchMatch, extractPitchXg } from '../server/pitchApi.js';
-import { validDate } from '../server/sportsApi.js';
+import { mapPitchMatch, extractPitchXg } from '../pitchApi.js';
+import { validDate } from '../sportsApi.js';
 
 const BASE_URL = 'https://api.pitchapi.dev';
 const cache = new Map<string, { expiresAt: number; task: Promise<unknown> }>();

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { initAdminDb, sendJson } from './_world-cup-automation.js';
+import { initAdminDb, sendJson } from '../server/worldCupAutomation.js';
 import { isAdminRequest, isCronRequest } from '../server/adminAuth.js';
 import { loadDailyCandidates } from '../server/dailyPickProvider.js';
 import { dailyReservation, publicationSlots, publishDailyCandidates, selectDailyPublicationCandidates } from '../server/dailyPublication.js';

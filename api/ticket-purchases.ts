@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getAuth } from 'firebase-admin/auth';
 import type { Firestore } from 'firebase-admin/firestore';
-import { initAdminDb } from './_world-cup-automation.js';
+import { initAdminDb } from '../server/worldCupAutomation.js';
 import { assertPurchaseActor, readAdminTicketPurchases, readTicketPurchases, requestTicketPurchase, setTicketPurchaseStatus,
   TicketPurchaseError, type PurchaseActor } from '../server/ticketPurchases.js';
 import { readGuestTicketPurchase, requestGuestTicketPurchase } from '../server/guestTicketPurchases.js';

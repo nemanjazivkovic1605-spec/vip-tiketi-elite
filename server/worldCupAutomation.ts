@@ -3,13 +3,13 @@ import { initializeApp, cert, getApps, type App } from 'firebase-admin/app';
 import { getFirestore, FieldValue, FieldPath, type Firestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json' with { type: 'json' };
 import { mapTicketForPublic } from '../src/services/tickets/ticketMappers.js';
-import { applyDailyResult } from '../server/dailyPublication.js';
-import { getSportsKey, requestSports } from '../server/sportsApi.js';
-import { findFreeFixture } from '../server/freeFootballFeeds.js';
+import { applyDailyResult } from './dailyPublication.js';
+import { getSportsKey, requestSports } from './sportsApi.js';
+import { findFreeFixture } from './freeFootballFeeds.js';
 import { evaluateFullTimePrediction } from '../src/utils/predictionResults.js';
-import { footballDataRegularScore, fullTimeFixtureScore } from '../server/resultScores.js';
+import { footballDataRegularScore, fullTimeFixtureScore } from './resultScores.js';
 import { preparePublicStatsUpdate } from '../src/utils/publicStats.js';
-import { resultQueueCursor } from '../server/resultsQueue.js';
+import { resultQueueCursor } from './resultsQueue.js';
 
 type ApiFixture = {
   fixture?: {

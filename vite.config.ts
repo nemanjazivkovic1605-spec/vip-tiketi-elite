@@ -8,8 +8,15 @@ const serverApis = (): Plugin => ({
   configureServer(server) {
     const routes: Record<string, string> = {
       '/api/fetch-daily-sports': '/api/fetch-daily-sports.ts',
-      '/api/football-data': '/api/football-data.ts',
-      '/api/pitch-matches': '/api/pitch-matches.ts',
+      '/api/football-data': '/api/football-providers.ts',
+      '/api/pitch-matches': '/api/football-providers.ts',
+      '/api/fetch-fixture-result': '/api/football-providers.ts',
+      '/api/football-providers': '/api/football-providers.ts',
+      '/api/world-cup-seed': '/api/world-cup.ts',
+      '/api/world-cup-results': '/api/world-cup.ts',
+      '/api/world-cup': '/api/world-cup.ts',
+      '/api/generate-daily-analysis': '/api/generate-daily-analysis.ts',
+      '/api/resend-email': '/api/resend-email.ts',
       '/api/daily-picks': '/api/daily-picks.ts',
       '/api/daily-results': '/api/daily-results.ts',
       '/api/ticket-purchases': '/api/ticket-purchases.ts',
@@ -30,7 +37,13 @@ const serverApis = (): Plugin => ({
         return;
       }
       const route = routes[new URL(request.url || '/', 'http://localhost').pathname];
-      if (!route) return next();
+      if (!route) {
+        if (publicUrl.pathname !== '/api' && !publicUrl.pathname.startsWith('/api/')) return next();
+        response.statusCode = 404;
+        response.setHeader('Content-Type', 'application/json; charset=utf-8');
+        response.end(JSON.stringify({ error: 'API route not found.' }));
+        return;
+      }
       try {
         const module = await server.ssrLoadModule(route);
         await module.default(request, response);
