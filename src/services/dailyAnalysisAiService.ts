@@ -48,7 +48,7 @@ export const dailyAnalysisAiService = {
     if (!firebaseUser) throw new Error('Morate biti prijavljeni kao admin da biste generisali analizu.');
 
     const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), 50_000);
+    const timeoutId = window.setTimeout(() => controller.abort(), 60_000);
     try {
       const token = await firebaseUser.getIdToken();
       const response = await fetch('/api/generate-daily-analysis', {
@@ -75,7 +75,9 @@ export const dailyAnalysisAiService = {
         signal: controller.signal,
       });
 
-      const result = await response.json() as Partial<AiAnalysisResult> & { error?: string };
+      const result = await response.json().catch(() => {
+        throw new Error('Server nije vratio ispravan odgovor. Pokušajte ponovo.');
+      }) as Partial<AiAnalysisResult> & { error?: string };
       if (!response.ok) throw new Error(result.error || 'Generisanje analize trenutno nije dostupno.');
       const analysis = typeof result.analysis === 'string' && result.analysis.trim()
         ? cleanAnalysis(result.analysis)

@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { isAdminRequest } from '../server/adminAuth.js';
-import { requestSports } from '../server/sportsApi.js';
-import { fullTimeFixtureScore } from '../server/resultScores.js';
-import { findFreeFixture } from '../server/freeFootballFeeds.js';
+import { isAdminRequest } from '../adminAuth.js';
+import { requestSports } from '../sportsApi.js';
+import { fullTimeFixtureScore } from '../resultScores.js';
+import { findFreeFixture } from '../freeFootballFeeds.js';
 
 type ApiRequest = IncomingMessage & { body?: unknown };
 type FixtureLookup = {
@@ -124,25 +124,29 @@ export const findFixtureResult = async (lookup: FixtureLookup) => {
   };
 };
 
-export default async function handler(request: ApiRequest, response: ServerResponse) {
-  if (request.method !== 'POST') {
-    sendJson(response, 405, { error: 'Method not allowed.' });
-    return;
-  }
+export function createFixtureResultHandler(dependencies = { isAdminRequest, findFixtureResult }) {
+  return async function handler(request: ApiRequest, response: ServerResponse) {
+    if (request.method !== 'POST') {
+      sendJson(response, 405, { error: 'Method not allowed.' });
+      return;
+    }
 
-  try {
-    if (!await isAdminRequest(request)) {
-      sendJson(response, 403, { error: 'Admin authorization required.' });
-      return;
+    try {
+      if (!await dependencies.isAdminRequest(request)) {
+        sendJson(response, 403, { error: 'Admin authorization required.' });
+        return;
+      }
+      const lookup = parseLookup(await readBody(request));
+      if (!lookup) {
+        sendJson(response, 400, { error: 'Home team and away team are required.' });
+        return;
+      }
+      const result = await dependencies.findFixtureResult(lookup);
+      sendJson(response, 200, { result });
+    } catch (error) {
+      sendJson(response, 502, { error: error instanceof Error ? error.message : 'Result request failed.' });
     }
-    const lookup = parseLookup(await readBody(request));
-    if (!lookup) {
-      sendJson(response, 400, { error: 'Home team and away team are required.' });
-      return;
-    }
-    const result = await findFixtureResult(lookup);
-    sendJson(response, 200, { result });
-  } catch (error) {
-    sendJson(response, 502, { error: error instanceof Error ? error.message : 'Result request failed.' });
-  }
+  };
 }
+
+export default createFixtureResultHandler();

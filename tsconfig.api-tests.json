@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["api", "vite.config.ts", "tests/api-consolidation.test.ts", "tests/gemini-analysis.test.ts", "tests/pitchapi-endpoint.test.ts"]
+}

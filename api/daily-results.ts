@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { initAdminDb, resolveFixtureForResult, sendJson, updateWorldCupResults } from './_world-cup-automation.js';
+import { initAdminDb, resolveFixtureForResult, sendJson, updateWorldCupResults } from '../server/worldCupAutomation.js';
 import { isAdminRequest, isCronRequest } from '../server/adminAuth.js';
 import { isResultsRunnerRequest } from '../server/resultsRunnerAuth.js';
 import { runProductResults } from '../server/productAutomation.js';

@@ -3,7 +3,18 @@ name: PitchAPI integration checks
 on:
   pull_request:
     paths:
-      - 'api/pitch-matches.ts'
+      - 'api/football-providers.ts'
+      - 'server/footballProviders/**'
+      - 'server/http/apiDispatcher.ts'
+      - 'api/world-cup.ts'
+      - 'server/worldCup/**'
+      - 'server/worldCupAutomation.ts'
+      - 'api/generate-daily-analysis.ts'
+      - 'server/ai/**'
+      - 'tests/api-consolidation.test.ts'
+      - 'tests/gemini-analysis.test.ts'
+      - 'vercel.json'
+      - 'vite.config.ts'
       - 'server/pitchApi.ts'
       - 'src/pages/LiveResults.tsx'
       - 'src/services/pitchMatchesService.ts'
@@ -28,5 +39,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run typecheck:api
       - run: npm test
       - run: npm run build

@@ -13,6 +13,11 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/world-cup-seed", "destination": "/api/world-cup?action=seed" },
+    { "source": "/api/world-cup-results", "destination": "/api/world-cup?action=results" },
+    { "source": "/api/football-data", "destination": "/api/football-providers?action=football-data" },
+    { "source": "/api/pitch-matches", "destination": "/api/football-providers?action=pitch-matches" },
+    { "source": "/api/fetch-fixture-result", "destination": "/api/football-providers?action=fetch-fixture-result" },
     { "source": "/fudbal", "destination": "/api/football-analytics?public=1&page=overview" },
     { "source": "/match-finder", "destination": "/api/football-analytics?public=1&page=finder" },
     { "source": "/fudbal/lige/:slug", "destination": "/api/football-analytics?public=1&page=league&slug=:slug" },
@@ -24,7 +29,7 @@
       "destination": "/api/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }
   ],
@@ -33,7 +38,9 @@
     "api/daily-picks.ts": { "maxDuration": 300 },
     "api/daily-results.ts": { "maxDuration": 300 },
     "api/fetch-daily-sports.ts": { "maxDuration": 120 },
-    "api/football-data.ts": { "maxDuration": 120 }
+    "api/football-providers.ts": { "maxDuration": 300 },
+    "api/world-cup.ts": { "maxDuration": 300 },
+    "api/generate-daily-analysis.ts": { "maxDuration": 60 }
   },
   "crons": [
     {
