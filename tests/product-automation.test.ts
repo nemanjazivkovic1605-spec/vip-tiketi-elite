@@ -6,7 +6,7 @@ import { calculateTicketUnitsProfit } from '../src/utils/tickets.ts';
 import { preserveProductAdminEdits } from '../src/utils/productTicketAdminEdits.ts';
 import { getTicketProductType } from '../src/utils/ticketProduct.ts';
 import { mapActiveTicketForAccess, mapTicketForPublic } from '../src/services/tickets/ticketMappers.ts';
-import { buildProductTicket, productMatchKickoff, productSettlement, selectProductPicks, type ProductPick } from '../server/productTickets.ts';
+import { buildProductTicket, productMatchKickoff, productSettlement, safeProductMarketPicks, selectProductPicks, type ProductPick } from '../server/productTickets.ts';
 import { applyProductResults, publishProductTickets, runProductPublication, runProductResults, type ProductEvidence } from '../server/productAutomation.ts';
 import { MemoryFirestore } from './helpers/memoryFirestore.ts';
 
@@ -14,7 +14,7 @@ const now = new Date('2099-11-10T08:00:00Z'), date = '2099-11-10';
 const pool = (count = 8): ProductPick[] => Array.from({ length: count }, (_, index) => ({
   id: `fixture-${index}`, source: 'the-odds-api', sport: 'football', status: 'ACTIVE', date, time: '19:00', kickoffTime: '19:00',
   kickoffAt: '2099-11-10T18:00:00Z', fixtureId: index + 1, providerFixtureId: String(index + 1),
-  homeTeam: `Home ${index}`, awayTeam: `Away ${index}`, league: `League ${index % 3}`, prediction: '1', odds: 1.8, oddsUpdatedAt: now.toISOString(),
+  homeTeam: `Home ${index}`, awayTeam: `Away ${index}`, league: `League ${index % 3}`, prediction: '1', odds: 1.7, oddsUpdatedAt: now.toISOString(),
   reasoning: '', access: 'VIP', sortOrder: index, enabled: false, hidden: true,
 }));
 const later = new Date('2099-11-10T22:00:00Z');
@@ -28,7 +28,8 @@ test('builds existing Elite/Safe categories with correct match counts, actual od
   const elite = buildProductTicket('elite_ticket', date, pool(), now)!;
   const safe = buildProductTicket('safe_pick', date, pool(), now)!;
   assert.ok(elite.matches.length >= 2 && elite.matches.length <= 6);
-  assert.ok(safe.matches.length >= 1 && safe.matches.length <= 3);
+  assert.equal(safe.matches.length, 2);
+  assert.equal(safe.ticketType, 'DUBL');
   assert.ok(elite.totalOdds >= 2.5);
   assert.ok(safe.totalOdds >= 1.5 && safe.totalOdds <= 3);
   assert.equal(getTicketProductType(elite), 'elite_ticket');
@@ -38,7 +39,7 @@ test('builds existing Elite/Safe categories with correct match counts, actual od
   assert.equal(elite.status, TicketStatus.PENDING);
   assert.equal(elite.publicationStatus, TipPublicationStatus.PUBLISHED);
   assert.equal(elite.analysis, '');
-  assert.ok(elite.matches.every(match => match.odds === 1.8 && match.analysis === ''));
+  assert.ok(elite.matches.every(match => match.odds === 1.7 && match.analysis === ''));
   assert.equal(new Set(elite.matches.map(match => match.externalMatchId)).size, elite.matches.length);
   assert.notEqual(elite.id, safe.id);
 });
@@ -46,7 +47,7 @@ test('builds existing Elite/Safe categories with correct match counts, actual od
 test('selection prefers available real basic statistics and rejects missing, started, ungradable and duplicate fixtures', () => {
   const values = pool(3);
   values[1].statisticsAvailable = true;
-  assert.equal(selectProductPicks(values, 'safe_pick', date, now)[0].id, values[1].id);
+  assert.ok(selectProductPicks(values, 'safe_pick', date, now).some(item => item.id === values[1].id));
   const bad = [{ ...values[0], odds: 1 }, { ...values[0], odds: NaN }, { ...values[0], prediction: 'unknown market' },
     { ...values[0], kickoffAt: now.toISOString() }, { ...values[0], status: 'WON' as const }];
   assert.equal(buildProductTicket('safe_pick', date, bad, now), null);
@@ -59,7 +60,62 @@ test('supports double, triple and larger combinations without inventing extra le
   assert.equal(buildProductTicket('elite_ticket', date, pool(3), now)!.matches.length, 3);
   const lowerPrices = pool().map(item => ({ ...item, odds: 1.2 }));
   assert.equal(buildProductTicket('elite_ticket', date, lowerPrices, now)!.matches.length, 6);
-  assert.equal(buildProductTicket('safe_pick', date, lowerPrices, now)!.matches.length, 3);
+  assert.equal(buildProductTicket('safe_pick', date, lowerPrices, now), null, 'a third leg must not be added to reach the target odds');
+});
+
+test('Safe Pick requires two distinct conservative legs and never falls back to a single or risky double', () => {
+  assert.equal(buildProductTicket('safe_pick', date, pool(1), now), null);
+  assert.equal(buildProductTicket('safe_pick', date, [pool(1)[0], pool(1)[0]], now), null);
+  assert.equal(buildProductTicket('safe_pick', date, pool(2).map(item => ({ ...item, odds: 1.8 })), now), null);
+  assert.equal(buildProductTicket('safe_pick', date, pool(2).map(item => ({ ...item, odds: 1.75 })), now), null);
+  const balanced = pool(4).map((item, index) => ({ ...item, odds: [1.3, 1.4, 1.25, 2.4][index] }));
+  const before = structuredClone(balanced);
+  const safe = buildProductTicket('safe_pick', date, balanced, now)!;
+  assert.equal(safe.matches.length, 2);
+  assert.equal(safe.totalOdds, 1.82);
+  assert.deepEqual(safe.matches.map(match => match.odds), [1.3, 1.4]);
+  assert.deepEqual(balanced, before, 'selection must not rewrite the original picks or prices');
+});
+
+test('Safe Pick prefers real statistical confidence without borrowing it from a different market', () => {
+  const values = pool(3).map((item, index) => ({ ...item, statisticsAvailable: true, confidence: [61, 82, 79][index] }));
+  const picks = selectProductPicks(values, 'safe_pick', date, now);
+  assert.deepEqual(picks.map(item => item.id), ['fixture-1', 'fixture-2']);
+  const alternate = { ...values[0], prediction: 'Under 3.5', confidence: 90, safePickOnly: true };
+  assert.equal(selectProductPicks([...values, alternate], 'safe_pick', date, now).find(item => item.id === values[0].id)?.prediction, 'Under 3.5');
+  assert.ok(selectProductPicks([...values, alternate], 'elite_ticket', date, now).every(item => !item.safePickOnly));
+});
+
+test('Safe Pick market alternatives use the highest real quote per market without changing Elite offers', () => {
+  const pick = { ...pool(1)[0], prediction: 'Over 2.5', odds: 1.9, confidence: 75, statisticsAvailable: true };
+  const fixture = { fixture: { id: 1, date: pick.kickoffAt!, status: { short: 'NS' } }, league: { id: 1, name: pick.league },
+    teams: { home: { id: 1, name: pick.homeTeam }, away: { id: 2, name: pick.awayTeam } } };
+  const quotes = [{ fixture: { id: 1 }, update: now.toISOString(), bookmakers: [
+    { id: 1, name: 'Book A', bets: [{ name: 'Goals Over/Under', values: [{ value: 'Over 1.5', odd: '1.25' }, { value: 'Over 2.5', odd: '1.90' }] }] },
+    { id: 2, name: 'Book B', bets: [{ name: 'Goals Over/Under', values: [{ value: 'Over 1.5', odd: '1.40' }, { value: 'Over 2.5', odd: '2.10' }] }] },
+  ] }];
+  const safer = safeProductMarketPicks(pick, fixture, quotes, now)[0];
+  assert.equal(safer.prediction, 'Over 1.5');
+  assert.equal(safer.odds, 1.4);
+  assert.equal(safer.confidence, undefined);
+  assert.equal(safer.statisticsAvailable, false);
+  assert.equal(safer.safePickOnly, true);
+  assert.equal(pick.prediction, 'Over 2.5');
+  assert.equal(pick.odds, 1.9);
+  assert.deepEqual(safeProductMarketPicks(pick, fixture, [], now), []);
+  assert.deepEqual(safeProductMarketPicks(pick, fixture, [{ ...quotes[0], update: '2099-11-09T08:00:00Z' }], now), []);
+});
+
+test('Safe Pick checks alternate real markets before skipping a double whose lowest prices are too small', () => {
+  const low = pool(2).map(item => ({ ...item, prediction: 'Over 1.5', odds: 1.2 }));
+  const alternatives = low.map(item => ({ ...item, prediction: 'Under 3.5', odds: 1.4, safePickOnly: true }));
+  assert.equal(buildProductTicket('safe_pick', date, low, now), null);
+  const safe = buildProductTicket('safe_pick', date, [...low, ...alternatives], now)!;
+  assert.equal(safe.matches.length, 2);
+  assert.equal(new Set(safe.matches.map(match => match.externalMatchId)).size, 2);
+  assert.ok(safe.totalOdds >= 1.5 && safe.totalOdds <= 3);
+  assert.ok(safe.matches.every(match => [1.2, 1.4].includes(match.odds)));
+  assert.equal(buildProductTicket('safe_pick', date, [low[0], alternatives[0]], now), null);
 });
 
 test('Belgrade event times respect winter/summer offsets and admin date/time edits', () => {
@@ -196,7 +252,7 @@ test('combo losses/refunds use actual outcomes and void legs have an effective o
   assert.equal(productSettlement(won.map(match => ({ ...match, status: TicketStatus.REFUND })), 5.83).status, TicketStatus.REFUND);
   const partial = productSettlement([{ ...won[0], status: TicketStatus.REFUND }, ...won.slice(1)], 5.83);
   assert.equal(partial.status, TicketStatus.WON);
-  assert.equal(partial.totalOdds, Number((1.8 ** (won.length - 1)).toFixed(2)));
+  assert.equal(partial.totalOdds, Number((1.7 ** (won.length - 1)).toFixed(2)));
 });
 
 test('canceled legs settle mixed tickets correctly, while fully void tickets never count as wins or losses', async () => {
@@ -213,10 +269,10 @@ test('canceled legs settle mixed tickets correctly, while fully void tickets nev
     assert.equal(stats.lossCount, 0);
     assert.equal(stats.refundCount, allVoid ? 1 : 0);
     assert.equal(stats.unitsProfit, allVoid ? 0 : calculateTicketUnitsProfit(updated));
-    assert.equal(updated.matches[0].odds, 1.8, 'original real quoted leg price is preserved for the audit');
+    assert.equal(updated.matches[0].odds, 1.7, 'original real quoted leg price is preserved for the audit');
     if (!allVoid) {
       assert.equal(updated.totalOddsOverride, true);
-      assert.equal(updated.totalOdds, Number((1.8 ** (tip.matches.length - 1)).toFixed(2)));
+      assert.equal(updated.totalOdds, Number((1.7 ** (tip.matches.length - 1)).toFixed(2)));
     }
   }
 });

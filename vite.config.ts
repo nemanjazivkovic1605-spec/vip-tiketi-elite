@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv, type Plugin} from 'vite';
+import { publicFootballRoute } from './server/publicFootball/routes';
 
 const serverApis = (): Plugin => ({
   name: 'server-apis',
@@ -24,13 +25,9 @@ const serverApis = (): Plugin => ({
     };
     server.middlewares.use(async (request, response, next) => {
       const publicUrl = new URL(request.url || '/', 'http://localhost');
-      const league = publicUrl.pathname.match(/^\/fudbal\/lige\/([a-z0-9-]+)$/);
-      const match = publicUrl.pathname.match(/^\/fudbal\/utakmice\/([a-f0-9]{32})$/);
-      const page = publicUrl.pathname === '/fudbal' ? 'overview' : publicUrl.pathname === '/match-finder' ? 'finder' : publicUrl.pathname === '/sitemap.xml' ? 'sitemap' : league ? 'league' : match ? 'match' : null;
+      const page = publicFootballRoute(publicUrl.pathname);
       if(page || publicUrl.pathname === '/api/public-football') {
-        if(page) publicUrl.searchParams.set('page', page);
-        if(league) publicUrl.searchParams.set('slug', league[1]);
-        if(match) publicUrl.searchParams.set('id', match[1]);
+        if(page) for(const [key,value] of Object.entries(page)) publicUrl.searchParams.set(key,value);
         request.url = `/api/public-football?${publicUrl.searchParams}`;
         try { const module = await server.ssrLoadModule('/server/publicFootball/http.ts'); await module.default(request, response); }
         catch { response.statusCode = 503; response.end('Javni fudbalski pregled trenutno nije dostupan.'); }

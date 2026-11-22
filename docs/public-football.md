@@ -21,17 +21,46 @@ postojecim `fa_*` tabelama. Nema javnog pristupa tim tabelama.
 - `/match-finder`: GET pretraga po ligi, datumu, timu, formi, golovima i preokretima.
 - `/fudbal/lige/:slug`: liga, sezone, agregati i rezultati u stranicama po 30.
 - `/fudbal/utakmice/:id`: poznati rezultati, forma poslednjih 10 i raniji H2H.
+- `/timovi` i `/statistika/:slug`: javni imenik timova i pojedinacni profili sa
+  stvarnom formom, golovima, sezonama i pravilno pripisanim preokretima.
+- `/h2h` i `/h2h/:first/:second`: samo parovi koji vec imaju zabelezene javne
+  susrete; obrnuti redosled timova preusmerava na jednu canonical adresu.
+- `/analize-danas`: raspored i istorijski pokazatelji za danas po vremenu Srbije.
+  To nije otkljucavanje privatnih predloga, kvota ili VIP AI analiza.
+- `/lige/:slug` i `/utakmice/:id`: kompatibilni 301 alias-i ka postojecim
+  canonical adresama; ne prave duple stranice u sitemap-u.
 - `/sitemap.xml` i `/robots.txt`: stvarni XML/TXT resursi, ne SPA fallback.
 
 Ove fudbalske stranice vracaju serverski renderovan HTML, jedinstvene naslove,
 canonical/description/OG metapodatke i strukturirane podatke. Nije potreban
 Firebase ili React app bundle u browseru. Filtrirane URL varijante i interna
 pretraga imaju `noindex,follow`; osnovne lige i utakmice su indeksabilne.
-Sitemap ogranicava utakmice na najvise 600 relevantnih termina.
+Sitemap je sada indeks sa segmentima do 1.000 URL-ova za javne stranice,
+lige, timove, postojece H2H parove i sve utakmice iz pripremljenog javnog
+snapshot-a. Nema vise ogranicenja na poslednjih 600 utakmica. H2H par bez
+poznatog zavrsenog susreta nije u sitemap-u. `checkedAt` se ne predstavlja kao
+datum materijalne izmene sadrzaja: ne generisu se lazni `lastmod` datumi.
 
-Postojeci SPA zadrzava svoje rute, uz centralizovane metapodatke i direktan
-link na novi pregled iz navigacije i pocetne strane. Ovo nije prelazak cele
-aplikacije na SSR. Google indeksiranje nije trenutno niti garantovano.
+Pocetna, kontakt, FAQ, pravila i tri postojece informativne stranice koriste
+build-time prerender istih React komponenti. Komponente se razresavaju pre
+renderovanja, tako da nema skrivenih Suspense segmenata ni zavisnosti od JS-a
+za osnovni sadrzaj. Browser hidrira isti prikaz; lazy loading ostaje na snazi.
+Build ne pristupa mrezi, Firestore-u ili sportskim API-jima. Privatni server
+prerender bundle ostaje van `dist` i nije nova Serverless funkcija.
+
+History/Stats racunanje i read-only javni datasource ostaju nepromenjeni.
+Ne pravi se lazni statisticki snapshot tokom build-a. Njihovi HTML shell-ovi
+imaju sopstvene metapodatke; interaktivni podaci se i dalje ucitavaju iz
+postojecih javnih indeksa. Nepoznat produkcijski URL vraca pravi 404/noindex,
+a poznate SPA, admin, auth i API rute ostaju dostupne. Ovaj javni sistem i
+dalje deli postojecu funkciju: ukupno ostaje devet API entrypoint-a.
+
+Google indeksiranje nije trenutno niti garantovano. DNS zapis sa prefiksom
+`google-site-verification` postoji (provereno 22.11.2026), ali sam zapis nije
+potvrda vlasnickog statusa, predatog sitemap-a ili obima indeksiranja u Search
+Console-u. To zahteva pristup vlasnickom Google nalogu. Za HTML metod postoji
+opciona build promenljiva `GOOGLE_SITE_VERIFICATION`; unosi se samo stvarni
+HTML token koji Google izda, nikada kopija DNS tokena ili lozinka.
 
 ## Statisticka pravila
 

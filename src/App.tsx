@@ -11,6 +11,7 @@ import MembershipGuard from './components/MembershipGuard';
 import EmailVerificationGate from './components/EmailVerificationGate';
 import AppErrorBoundary from './components/errors/AppErrorBoundary';
 import SiteMetadata from './components/seo/SiteMetadata';
+import NotFound from './pages/NotFound';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -58,13 +59,17 @@ const ProtectedRoute = ({ children, requireAdmin = false }: { children: React.Re
   return <>{children}</>;
 };
 
-export default function App() {
+export default function App({ prerendered = false, pageOverrides }: { prerendered?: boolean; pageOverrides?: Record<string, React.ComponentType> }) {
   const location = useLocation();
   const isAdminPath = location.pathname.startsWith('/admin');
+  const page = (path: string, fallback: React.ComponentType) => {
+    const Page = pageOverrides?.[path] || fallback;
+    return <Page/>;
+  };
 
   return (
     <HelmetProvider>
-      <SiteMetadata />
+      <SiteMetadata prerendered={prerendered}/>
       <div className="min-h-screen bg-neutral-950 text-neutral-100 selection:bg-gold-500/30" style={{ backgroundColor: '#050505', color: '#f8f8f2' }}>
         <ScrollToTop />
         {!isAdminPath && <Navbar />}
@@ -72,9 +77,9 @@ export default function App() {
           {!isAdminPath && <GlobalTicker />}
           <AppErrorBoundary key={location.pathname}>
             <Suspense fallback={<PageLoader />}>
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode="wait" initial={prerendered ? false : undefined}>
                 <Routes>
-                <Route path="/" element={<Home />} />
+                <Route path="/" element={page('/', Home)} />
                 <Route path="/tickets" element={<Tickets />} />
                 <Route path="/history" element={<Tickets />} />
                 <Route path="/table" element={<Tickets />} />
@@ -83,16 +88,16 @@ export default function App() {
                 <Route path="/live" element={<LiveResults />} />
                 <Route path="/stats" element={<Stats />} />
                 <Route path="/statistics" element={<Stats />} />
-                <Route path="/contact" element={<Contact />} />
-                <Route path="/faq" element={<Faq />} />
+                <Route path="/contact" element={page('/contact', Contact)} />
+                <Route path="/faq" element={page('/faq', Faq)} />
                 <Route path="/cesta-pitanja" element={<Faq />} />
-                <Route path="/bankroll-management" element={<BankrollManagement />} />
-                <Route path="/daily-analysis" element={<DailyAnalysis />} />
+                <Route path="/bankroll-management" element={page('/bankroll-management', BankrollManagement)} />
+                <Route path="/daily-analysis" element={page('/daily-analysis', DailyAnalysis)} />
                 <Route path="/daily-tips" element={<DailyTips />} />
                 <Route path="/dnevne-analize" element={<DailyTips />} />
                 <Route path="/dnevni-tipovi" element={<DailyTips />} />
-                <Route path="/early-information" element={<EarlyInformation />} />
-                <Route path="/terms" element={<Terms />} />
+                <Route path="/early-information" element={page('/early-information', EarlyInformation)} />
+                <Route path="/terms" element={page('/terms', Terms)} />
                 <Route path="/legal" element={<Terms />} />
                 <Route path="/pravila-koriscenja" element={<Terms />} />
                 <Route path="/login" element={<Login />} />
@@ -138,7 +143,7 @@ export default function App() {
                 } />
 
                 {/* Catch-all */}
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
                 </Routes>
               </AnimatePresence>
             </Suspense>

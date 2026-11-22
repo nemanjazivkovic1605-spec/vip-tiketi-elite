@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["api", "vite.config.ts", "tests/api-consolidation.test.ts", "tests/gemini-analysis.test.ts", "tests/pitchapi-endpoint.test.ts"]
+  "include": ["api", "vite.config.ts", "src/vite-env.d.ts", "server/seo/prerender.tsx", "server/publicFootball", "tests/api-consolidation.test.ts", "tests/gemini-analysis.test.ts", "tests/pitchapi-endpoint.test.ts", "tests/football-loading.test.ts", "tests/product-automation.test.ts", "tests/public-football-seo.test.ts"]
 }

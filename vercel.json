@@ -22,16 +22,31 @@
     { "source": "/match-finder", "destination": "/api/football-analytics?public=1&page=finder" },
     { "source": "/fudbal/lige/:slug", "destination": "/api/football-analytics?public=1&page=league&slug=:slug" },
     { "source": "/fudbal/utakmice/:id", "destination": "/api/football-analytics?public=1&page=match&id=:id" },
+    { "source": "/timovi", "destination": "/api/football-analytics?public=1&page=teams" },
+    { "source": "/statistika/:slug", "destination": "/api/football-analytics?public=1&page=team&slug=:slug" },
+    { "source": "/h2h", "destination": "/api/football-analytics?public=1&page=h2h" },
+    { "source": "/h2h/:first/:second", "destination": "/api/football-analytics?public=1&page=pair&first=:first&second=:second" },
+    { "source": "/analize-danas", "destination": "/api/football-analytics?public=1&page=today" },
+    { "source": "/lige/:slug", "destination": "/api/football-analytics?public=1&page=league-alias&slug=:slug" },
+    { "source": "/utakmice/:id", "destination": "/api/football-analytics?public=1&page=match-alias&id=:id" },
     { "source": "/sitemap.xml", "destination": "/api/football-analytics?public=1&page=sitemap" },
+    { "source": "/sitemaps/:segment.xml", "destination": "/api/football-analytics?public=1&page=sitemap&segment=:segment" },
     { "source": "/api/public-football", "destination": "/api/football-analytics?public=1" },
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
-    {
-      "source": "/((?!api(?:/|$)).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/:page(contact|faq|terms|bankroll-management|daily-analysis|early-information|history|stats)", "destination": "/:page.html" },
+    { "source": "/:page(tickets|table|results|live-results|live|statistics|cesta-pitanja|daily-tips|dnevne-analize|dnevni-tipovi|legal|pravila-koriscenja|login|register|checkout|auth-action|dashboard|pricing|vip|vip-tips)", "destination": "/app.html" },
+    { "source": "/admin/:path*", "destination": "/app.html" },
+    { "source": "/__/auth/action", "destination": "/app.html" },
+    { "source": "/((?!api(?:/|$)).*)", "destination": "/api/football-analytics?public=1&page=not-found" }
+  ],
+  "headers": [
+    { "source": "/:page(login|register|checkout|auth-action|dashboard|pricing|vip|vip-tips|app.html)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }] },
+    { "source": "/admin/:path*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }] },
+    { "source": "/__/auth/:path*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, follow" }] }
   ],
   "functions": {
     "api/football-analytics.ts": { "maxDuration": 240 },

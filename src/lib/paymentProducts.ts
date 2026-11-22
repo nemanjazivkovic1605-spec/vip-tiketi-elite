@@ -40,7 +40,7 @@ export const PAYMENT_PRODUCTS: Record<PaymentProductId, PaymentProduct> = {
     id: 'safe-pick-day',
     name: 'Safe pick',
     shortName: 'SAFE PICK',
-    description: 'Stabilniji dnevni predlog sa fokusom na kontrolisani rizik.',
+    description: 'Dubl sa dve utakmice i ukupnom kvotom 1.50 do 3.00, sa fokusom na kontrolisani rizik.',
     priceEur: SINGLE_TICKET_PRODUCTS['safe-pick-day'].priceEur,
     purpose: 'ELITE TIPS - SAFE PICK',
     accent: 'blue',

@@ -13,7 +13,8 @@ const call = async (url: string, method = 'GET') => {
 };
 
 const withProvider = async (fetcher: typeof fetch, run: () => Promise<void>, key: string | null = 'synthetic-pitch-key') => {
-  const beforeFetch = globalThis.fetch, beforeKey = process.env.PITCHAPI_API_KEY;
+  const beforeFetch = globalThis.fetch, beforeKey = process.env.PITCHAPI_API_KEY, beforeAlias = process.env.PITCHAPI_KEY;
+  delete process.env.PITCHAPI_KEY;
   if (key === null) delete process.env.PITCHAPI_API_KEY;
   else process.env.PITCHAPI_API_KEY = key;
   globalThis.fetch = fetcher;
@@ -22,6 +23,8 @@ const withProvider = async (fetcher: typeof fetch, run: () => Promise<void>, key
     globalThis.fetch = beforeFetch;
     if (beforeKey === undefined) delete process.env.PITCHAPI_API_KEY;
     else process.env.PITCHAPI_API_KEY = beforeKey;
+    if (beforeAlias === undefined) delete process.env.PITCHAPI_KEY;
+    else process.env.PITCHAPI_KEY = beforeAlias;
   }
 };
 
@@ -95,5 +98,60 @@ test('provider failures remain errors and are not cached as valid fixture data',
     assert.equal(response.headers['cache-control'], 'no-store');
     await call('/api/pitch-matches?date=2026-12-04');
     assert.equal(calls, 4);
+  });
+});
+
+test('existing alternate credential name works without changing the primary credential precedence', async () => {
+  const used: string[] = [];
+  await withProvider((async (_input, options) => {
+    used.push((options!.headers as Record<string, string>)['X-API-KEY']);
+    return Response.json({ data: { matches: [] } });
+  }) as typeof fetch, async () => {
+    process.env.PITCHAPI_KEY = 'synthetic-alternate-key';
+    assert.equal((await call('/api/pitch-matches?date=2027-01-02')).statusCode, 200);
+    process.env.PITCHAPI_API_KEY = 'synthetic-primary-key';
+    assert.equal((await call('/api/pitch-matches?date=2027-01-02')).statusCode, 200);
+    assert.deepEqual(used, ['synthetic-alternate-key', 'synthetic-alternate-key', 'synthetic-primary-key', 'synthetic-primary-key']);
+  }, null);
+});
+
+test('a malformed 200 response is evicted so the corrected upstream response can recover immediately', async () => {
+  let broken = true, calls = 0;
+  await withProvider((async () => {
+    calls++;
+    return Response.json(broken ? { error: { code: 'unavailable' } } : { data: { matches: [] } });
+  }) as typeof fetch, async () => {
+    assert.equal((await call('/api/pitch-matches?date=2027-02-02')).statusCode, 502);
+    broken = false;
+    assert.equal((await call('/api/pitch-matches?date=2027-02-02')).statusCode, 200);
+    assert.equal(calls, 4);
+  });
+});
+
+test('partial upstream failures never become a cached successful empty fixture feed', async () => {
+  await withProvider((async input => new URL(String(input)).pathname.endsWith('2027-03-02')
+    ? new Response('', { status: 503 }) : Response.json({ data: { matches: [] } })) as typeof fetch, async () => {
+    const response = await call('/api/pitch-matches?date=2027-03-02');
+    assert.equal(response.statusCode, 502);
+    assert.equal(response.headers['cache-control'], 'no-store');
+  });
+});
+
+test('partial real results are usable but not CDN cached as a complete feed', async () => {
+  await withProvider((async input => new URL(String(input)).pathname.endsWith('2027-04-01')
+    ? new Response('', { status: 503 }) : Response.json({ data: { matches: [rawMatch('m_Real12', '2027-04-02T19:00:00Z')] } })) as typeof fetch, async () => {
+    const response = await call('/api/pitch-matches?date=2027-04-02');
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json.matches.length, 1);
+    assert.equal(response.headers['cache-control'], 'no-store');
+  });
+});
+
+test('test credentials and explicitly labeled demo data cannot enter the real public fixtures feed', async () => {
+  await withProvider((async () => { throw new Error('test key must not call upstream'); }) as typeof fetch, async () => {
+    assert.equal((await call('/api/pitch-matches?date=2027-05-02')).statusCode, 503);
+  }, 'pk_test_synthetic');
+  await withProvider((async () => Response.json({ environment: 'test', data: { matches: [] } })) as typeof fetch, async () => {
+    assert.equal((await call('/api/pitch-matches?date=2027-06-02')).statusCode, 502);
   });
 });

@@ -246,7 +246,7 @@ export default function Home() {
 
       <section className="border-b border-white/10 bg-[#101010] px-5 py-6 md:px-6">
         <div className="mx-auto grid max-w-7xl items-center gap-5 lg:grid-cols-[1fr_auto]">
-          <div><p className="mb-2 text-[10px] font-bold uppercase text-gold-400">Fudbalski pregled</p><h2 className="text-xl font-semibold text-white">Raspored, forma i HT/FT na jednom mestu</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">Javno dostupni rezultati i istorijski pokazatelji, sa jasno navedenim uzorkom i pokrivenošću.</p></div>
+          <div><p className="mb-2 text-[10px] font-bold uppercase text-gold-400">Fudbalski pregled</p><h2 className="text-xl font-semibold text-white">Fudbalska statistika, raspored i HT/FT</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-400">Javno dostupni rezultati i istorijski pokazatelji, sa jasno navedenim uzorkom i pokrivenošću.</p><nav className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-gold-300" aria-label="Javna fudbalska statistika"><a href="/timovi" className="hover:underline">Statistika timova</a><a href="/h2h" className="hover:underline">Međusobni susreti — H2H</a><a href="/analize-danas" className="hover:underline">Analize utakmica danas</a></nav></div>
           <div className="flex flex-wrap gap-3"><a href="/fudbal" className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-[#181818] px-4 py-3 text-xs font-semibold text-neutral-200 transition-colors hover:border-gold-500/50"><CalendarDays size={16}/>Utakmice i lige</a><a href="/match-finder" className="inline-flex items-center gap-2 rounded-md bg-gold-500 px-4 py-3 text-xs font-semibold text-black transition-colors hover:bg-gold-400"><Search size={16}/>Match Finder<ArrowRight size={15}/></a></div>
         </div>
       </section>
@@ -278,7 +278,7 @@ export default function Home() {
             price="10€"
             tone="safe"
             badge="Popularno"
-            features={['Singl, dubl ili manji kombo', 'Kvota 1.50–3.00', 'Fokus na prolaznost']}
+            features={['Dubl: 2 utakmice', 'Kvota 1.50–3.00', 'Fokus na prolaznost']}
             buttonLabel="Kupi pick"
             target={getCheckoutPath('safe-pick-day')}
             sectionId="safe-pick"
@@ -318,7 +318,7 @@ export default function Home() {
                 <ShieldCheck className="text-blue-300" size={24} />
                 <h3 className="font-display text-xl font-black uppercase text-blue-100">SAFE PICK</h3>
               </div>
-              <p className="text-sm leading-6 text-neutral-400">Singl, dubl ili manji kombo sa kvotom uglavnom 1.50 do 3.00 i fokusom na prolaznost.</p>
+              <p className="text-sm leading-6 text-neutral-400">Dubl sa dve utakmice, ukupnom kvotom 1.50 do 3.00 i fokusom na prolaznost.</p>
               <Link to="/tickets?active=1&category=safe_pick" className="mt-5 inline-flex rounded-lg bg-blue-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-blue-400">
                 Pogledaj Safe pick
               </Link>

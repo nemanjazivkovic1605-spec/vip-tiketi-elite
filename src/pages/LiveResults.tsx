@@ -14,13 +14,17 @@ export default function LiveResults() {
   const [xgLoading, setXgLoading] = useState<Record<string, boolean>>({});
   const [selectedDate, setSelectedDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Belgrade' }).format(new Date()));
   const requestId = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async () => {
     const id = ++requestId.current;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setLoading(true);
     setError('');
     try {
-      const result = await pitchMatchesService.getMatchesForDate(selectedDate);
+      const result = await pitchMatchesService.getMatchesForDate(selectedDate, { signal: controller.signal });
       if (id === requestId.current) {
         setMatches(result.matches);
         setPitchAvailable(result.pitchAvailable);
@@ -34,7 +38,7 @@ export default function LiveResults() {
 
   useEffect(() => {
     void fetchData();
-    return () => { requestId.current++; };
+    return () => { requestId.current++; activeRequest.current?.abort(); };
   }, [fetchData]);
 
   const fetchXg = async (matchId: string) => {
@@ -45,7 +49,7 @@ export default function LiveResults() {
       const xg = await pitchMatchesService.getMatchXg(matchId);
       setXgByMatch((previous) => ({ ...previous, [key]: xg }));
     } catch {
-      setXgByMatch((previous) => ({ ...previous, [key]: null }));
+      // A failed request is retryable; only a confirmed missing value is cached as null.
     } finally {
       setXgLoading((previous) => ({ ...previous, [key]: false }));
     }
