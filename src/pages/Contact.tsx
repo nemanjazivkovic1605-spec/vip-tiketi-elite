@@ -178,7 +178,7 @@ export default function Contact() {
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5 p-5 md:p-7">
+            <form method="post" onSubmit={handleSubmit} className="space-y-5 p-5 md:p-7">
               <div className="grid gap-5 md:grid-cols-2">
                 <label className="block">
                   <span className="mb-2 block text-xs font-black uppercase tracking-widest text-neutral-500">Ime</span>

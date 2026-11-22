@@ -46,7 +46,7 @@ export async function publishProductTickets(db: Firestore, date: string, pool: P
       if (!ticket || ticket.matches.some(match => productMatchKickoff(match, date) < now.getTime() + 30 * 60000)) {
         results.push({ type, status: 'skipped', reason: type === 'elite_ticket'
           ? 'Nema 2-6 validnih buducih meceva sa stvarnim kvotama i ukupnom kvotom najmanje 2.50.'
-          : 'Nema 1-3 validna buduca meca sa stvarnim ukupnim kvotama od 1.50 do 3.00.' });
+          : 'Nema dva odgovarajuca buduca meca za Safe Pick dubl sa pojedinacnim kvotama 1.20-1.75 i ukupnom kvotom 1.50-3.00.' });
         continue;
       }
       plans.push(ticket);

@@ -174,11 +174,13 @@ test('Vercel rewrites keep all five aliases before SPA, preserve SEO and cron pa
     '/api/fetch-fixture-result': '/api/football-providers?action=fetch-fixture-result',
   };
   const spa = config.rewrites.findIndex(rule => rule.destination === '/index.html');
-  const spaPattern = new RegExp(`^${config.rewrites[spa].source}$`);
-  assert.equal(spaPattern.test('/api/not-a-real-route'), false);
-  assert.equal(spaPattern.test('/api'), false);
-  assert.equal(spaPattern.test('/history'), true);
-  assert.equal(spaPattern.test('/login'), true);
+  const fallback = config.rewrites.find(rule => rule.destination.includes('page=not-found'));
+  const fallbackPattern = new RegExp(`^${fallback.source}$`);
+  assert.equal(fallbackPattern.test('/api/not-a-real-route'), false);
+  assert.equal(fallbackPattern.test('/api'), false);
+  assert.equal(config.rewrites[spa].source, '/');
+  assert.ok(config.rewrites.some(rule => rule.destination === '/:page.html' && rule.source.includes('history')));
+  assert.ok(config.rewrites.some(rule => rule.destination === '/app.html' && rule.source.includes('login')));
   for (const [source, destination] of Object.entries(aliases)) {
     const index = config.rewrites.findIndex(rule => rule.source === source);
     assert.ok(index >= 0 && index < spa);

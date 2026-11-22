@@ -17,12 +17,15 @@ export type PublicMatch = {
   sources: PublicSource[];
 };
 export type PublicLeague = PublicMatch['league'] & { matches: number; finished: number; withHt: number; seasons: string[]; latestDate: string; sources: PublicSource[] };
+export type PublicTeam = { slug: string; name: string; country: string; leagues: string[]; seasons: string[]; matches: number; finished: number };
+export type PublicPair = { first: PublicTeam; second: PublicTeam; leagues: string[]; matches: number; finished: number; latestDate: string };
+export type PublicTeamSummary = { played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; home: number; away: number; madeComebacks: number; concededComebacks: number; htftSample: number; form5: PublicForm; form10: PublicForm };
 export type PublicSnapshot = { matches: PublicMatch[]; leagues: PublicLeague[]; loadedAt: string; lastUpdatedAt: string | null; truncated: boolean; excluded: number };
 export type PublicForm = { sample: number; expected: number; pointsPercent: number | null; results: string[]; averageFor: number | null; averageAgainst: number | null; over25: number | null; btts: number | null; htftSample: number; comebacks: number };
 export type FinderFilters = { from: string; to: string; league: string; form: number | null; over25: number | null; btts: number | null; comeBacks: number | null; sample: number; offset: number; search: string };
 export type PublicMatchPreview = { match: PublicMatch; home: PublicForm; away: PublicForm; missing: string[] };
 export type PublicFootballPageData = {
-  page: 'overview' | 'finder' | 'league' | 'match';
+  page: 'overview' | 'finder' | 'league' | 'match' | 'teams' | 'team' | 'h2h' | 'pair' | 'today';
   today: string;
   filters: FinderFilters;
   leagues: PublicLeague[];
@@ -42,4 +45,11 @@ export type PublicFootballPageData = {
   truncated: boolean;
   unavailableLeagues: string[];
   coverageWarnings: string[];
+  teams?: PublicTeam[];
+  team?: PublicTeam | null;
+  teamSummary?: PublicTeamSummary | null;
+  pairs?: PublicPair[];
+  pair?: PublicPair | null;
+  directoryTotal?: number;
+  directoryMore?: boolean;
 };

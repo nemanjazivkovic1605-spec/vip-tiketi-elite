@@ -1,14 +1,17 @@
 import { MatchResult } from '../types';
 import { footballApiService } from './footballApiService';
+import type { RequestOptions } from '../utils/async';
+
+const todayInBelgrade = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Belgrade' }).format(new Date());
 
 export const resultsProvider = {
-  getMatchesForDate: async (date: string): Promise<MatchResult[]> => {
-    return footballApiService.fetchMatches({ dateFrom: date, dateTo: date });
+  getMatchesForDate: async (date: string, options?: RequestOptions): Promise<MatchResult[]> => {
+    return footballApiService.fetchMatches({ dateFrom: date, dateTo: date }, options);
   },
 
   getTodayMatches: async (): Promise<MatchResult[]> => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayInBelgrade();
       return footballApiService.fetchMatches({ dateFrom: today, dateTo: today });
     } catch (error) {
       console.error('Error fetching today matches:', error);
@@ -41,7 +44,7 @@ export const resultsProvider = {
   },
 
   getAllMatches: async (): Promise<MatchResult[]> => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayInBelgrade();
     return footballApiService.fetchMatches({ dateFrom: '2026-05-01', dateTo: today });
   }
 };

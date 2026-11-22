@@ -1,6 +1,7 @@
 import type { FinderFilters, PublicFootballPageData, PublicMatch, PublicMatchPreview, PublicSnapshot } from '../../src/types/publicFootball.js';
 import { publicAggregate, publicTeamForm } from './stats.js';
 import { addDays, localDate, validDate } from '../sportsApi.js';
+import { isPublicTeamMatch, publicDirectory, publicPairKey, publicTeamSummary } from './directory.js';
 export const PUBLIC_PAGE_SIZE=30;
 export function parseFinderFilters(params:URLSearchParams,now=new Date()):FinderFilters {
   const today=localDate(now),from=params.get('from')||today,to=params.get('to')||addDays(from,6);
@@ -19,14 +20,23 @@ export function publicPreview(matches:PublicMatch[],match:PublicMatch):PublicMat
   return{match,home,away,missing:[...(!match.time?['Vreme početka nije potvrđeno']:[]),...(!match.kickoffAt&&match.time?['Vremenska zona izvornog termina nije potvrđena']:[]),...(home.sample<5?[`Domaćin: uzorak ${home.sample}/5`]:[]),...(away.sample<5?[`Gost: uzorak ${away.sample}/5`]:[]),...(!home.htftSample||!away.htftSample?['Nepotpun HT/FT uzorak']:[])]};
 }
 export function buildPublicFootballPage(snapshot:PublicSnapshot,page:PublicFootballPageData['page'],params:URLSearchParams,now=new Date()):PublicFootballPageData {
-  const today=localDate(now),filters=parseFinderFilters(page==='finder'||page==='overview'?params:new URLSearchParams({offset:params.get('offset')||'0'}),now);
+  const today=localDate(now);
+  const input=page==='finder'||page==='overview'?params:page==='today'?new URLSearchParams({...Object.fromEntries(params),from:today,to:today})
+    :new URLSearchParams({offset:params.get('offset')||'0',search:params.get('search')||'',league:params.get('league')||''});
+  const filters=parseFinderFilters(input,now),directory=publicDirectory(snapshot);
   const league=page==='league'?snapshot.leagues.find(row=>row.slug===params.get('slug'))||null:null;
   const match=page==='match'?snapshot.matches.find(row=>row.id===params.get('id'))||null:null;
+  const team=page==='team'?directory.teamBySlug.get(params.get('slug')||'')||null:null;
+  const pair=page==='pair'?directory.pairByKey.get(publicPairKey(params.get('first')||'',params.get('second')||''))||null:null;
   const season=params.get('season')||'';
-  if(season && (!league || !league.seasons.includes(season)))throw new Error('Izabrana sezona nije dostupna za ovu ligu.');
-  const scope=league?snapshot.matches.filter(row=>row.league.slug===league.slug&&(!season||row.season===season)):snapshot.matches;
-  let candidates=scope.filter(row=>upcoming(row,now)&&row.date>=filters.from&&row.date<=filters.to&&(!filters.league||row.league.slug===filters.league)&&(!filters.search||`${row.homeTeam} ${row.awayTeam}`.toLocaleLowerCase().includes(filters.search.toLocaleLowerCase()))).sort(order);
-  let rows=candidates.map(row=>publicPreview(scope,row));
+  if(season && !(league||team)?.seasons.includes(season))throw new Error('Izabrana sezona nije dostupna za ovaj pregled.');
+  const scope=snapshot.matches.filter(row=>(!league||row.league.slug===league.slug)&&(!season||row.season===season)
+    &&(!team||isPublicTeamMatch(row,team))&&(!pair||isPublicTeamMatch(row,pair.first)&&isPublicTeamMatch(row,pair.second)));
+  const upcomingOffset=['league','team','pair'].includes(page)?Number(params.get('upcomingOffset')||0):filters.offset;
+  if(!Number.isInteger(upcomingOffset)||upcomingOffset<0||upcomingOffset>20000)throw new Error('Neispravna stranica rasporeda.');
+  const candidates=['teams','h2h'].includes(page)?[]:scope.filter(row=>upcoming(row,now)&&row.date>=filters.from&&row.date<=filters.to&&(!filters.league||row.league.slug===filters.league)&&(!filters.search||`${row.homeTeam} ${row.awayTeam}`.toLocaleLowerCase().includes(filters.search.toLocaleLowerCase()))).sort(order);
+  const previewScope=team||pair?snapshot.matches:scope;
+  let rows=(page==='finder'?candidates:candidates.slice(upcomingOffset,upcomingOffset+PUBLIC_PAGE_SIZE)).map(row=>publicPreview(previewScope,row));
   if(page==='finder')rows=rows.filter(row=>{
     const statistical=filters.form!==null||filters.over25!==null||filters.btts!==null||filters.comeBacks!==null;
     if(statistical&&(row.home.sample<filters.sample||row.away.sample<filters.sample))return false;
@@ -35,12 +45,20 @@ export function buildPublicFootballPage(snapshot:PublicSnapshot,page:PublicFootb
       &&(filters.btts===null||row.home.btts!==null&&row.away.btts!==null&&Math.min(row.home.btts,row.away.btts)>=filters.btts)
       &&(filters.comeBacks===null||row.home.htftSample>=filters.sample&&row.away.htftSample>=filters.sample&&row.home.comebacks+row.away.comebacks>=filters.comeBacks);
   });
-  const total=rows.length,offset=page==='finder'||page==='overview'?filters.offset:0;
+  const total=page==='finder'?rows.length:candidates.length;
   const completed=scope.filter(row=>row.status==='finished'&&row.ft.home!==null).sort((a,b)=>-order(a,b));
   const h2h=match?snapshot.matches.filter(row=>row.id!==match.id&&row.league.country===match.league.country&&row.status==='finished'&&row.ft.home!==null&&row.date<match.date&&[row.homeTeam,row.awayTeam].includes(match.homeTeam)&&[row.homeTeam,row.awayTeam].includes(match.awayTeam)).sort((a,b)=>-order(a,b)).slice(0,10):[];
-  return{page,today,filters,leagues:snapshot.leagues,league,match,aggregate:publicAggregate(scope),rows:rows.slice(offset,offset+PUBLIC_PAGE_SIZE),results:completed.slice(page==='league'?filters.offset:0,(page==='league'?filters.offset:0)+30),resultsTotal:completed.length,resultsMore:completed.length>(page==='league'?filters.offset:0)+30,h2h,
+  const resultOffset=['league','team','pair'].includes(page)?filters.offset:0;
+  const resultScope=page==='today'?completed.filter(row=>row.date===today):completed;
+  const search=filters.search.toLocaleLowerCase();
+  const teams=page==='teams'?directory.teams.filter(row=>(!filters.league||row.leagues.includes(filters.league))&&(!search||row.name.toLocaleLowerCase().includes(search))):[];
+  const pairs=page==='h2h'?directory.pairs.filter(row=>(!filters.league||row.leagues.includes(filters.league))&&(!search||`${row.first.name} ${row.second.name}`.toLocaleLowerCase().includes(search))):[];
+  const directoryTotal=page==='teams'?teams.length:pairs.length;
+  return{page,today,filters,leagues:snapshot.leagues,league,match,aggregate:publicAggregate(scope),rows:page==='finder'?rows.slice(filters.offset,filters.offset+PUBLIC_PAGE_SIZE):rows,results:resultScope.slice(resultOffset,resultOffset+30),resultsTotal:resultScope.length,resultsMore:resultScope.length>resultOffset+30,h2h,
     home10:match?publicTeamForm(snapshot.matches,match.homeTeam,match,10):null,away10:match?publicTeamForm(snapshot.matches,match.awayTeam,match,10):null,
-    total,hasMore:total>offset+PUBLIC_PAGE_SIZE,lastUpdatedAt:snapshot.lastUpdatedAt,truncated:snapshot.truncated,
+    total,hasMore:total>upcomingOffset+PUBLIC_PAGE_SIZE,lastUpdatedAt:snapshot.lastUpdatedAt,truncated:snapshot.truncated,
+    teams:teams.slice(filters.offset,filters.offset+PUBLIC_PAGE_SIZE),team,teamSummary:team?publicTeamSummary(scope,team,now):null,
+    pairs:pairs.slice(filters.offset,filters.offset+PUBLIC_PAGE_SIZE),pair,directoryTotal,directoryMore:directoryTotal>filters.offset+PUBLIC_PAGE_SIZE,
     unavailableLeagues:['National League North / South','Isthmian Premier','Northern Premier','Southern Premier Central / South'],
     coverageWarnings:snapshot.leagues.filter(row=>!row.seasons.some(season=>season.startsWith(String(Number(today.slice(0,4))-(Number(today.slice(5,7))<7?1:0))))).map(row=>`${row.name}: nema potvrđenih podataka za tekuću sezonu.`)};
 }

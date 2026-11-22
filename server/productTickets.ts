@@ -2,8 +2,8 @@ import { TicketStatus, TipPublicationStatus, type DailyAnalysisItem, type Match,
 import { calculateTotalOdds, generateTicketCode, getDefaultUnitsStake, getTicketKind, unitsToRsd } from '../src/utils/tickets.js';
 import { evaluateFullTimePrediction } from '../src/utils/predictionResults.js';
 import { getAutomaticProductTicketId } from '../src/utils/ticketProduct.js';
-import { buildCandidates } from './dailyPickSelection.js';
-import { buildDailyProposals, loadDailyMarketData, proposalIdentity } from './dailyProposalProvider.js';
+import { buildCandidates, type Fixture, type Odds } from './dailyPickSelection.js';
+import { bestProposalOffer, buildDailyProposals, loadDailyMarketData, proposalIdentity, proposalOffers } from './dailyProposalProvider.js';
 import { freeFixturesForDate, historicalModel, teamKey } from './freeFootballFeeds.js';
 import { loadDailyCandidates } from './dailyPickProvider.js';
 import { getSportsKey, localDate } from './sportsApi.js';
@@ -12,9 +12,21 @@ import { isFreshOddsTimestamp } from './oddsPolicy.js';
 export const PRODUCT_AUTOMATION = 'product-tickets' as const;
 export const AUTOMATED_PRODUCTS = ['elite_ticket', 'safe_pick'] as const;
 export type AutomatedProduct = typeof AUTOMATED_PRODUCTS[number];
-export type ProductPick = DailyAnalysisItem & { statisticsAvailable?: boolean; oddsUpdatedAt?: string };
+export type ProductPick = DailyAnalysisItem & { statisticsAvailable?: boolean; oddsUpdatedAt?: string; safePickOnly?: boolean };
+const SAFE_PICK_MAX_LEG_ODDS = 1.75;
 const timeInBelgrade = (date: Date) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit' }).format(date);
 export const productTicketId = getAutomaticProductTicketId;
+
+export function safeProductMarketPicks(pick: ProductPick, fixture: Fixture, odds: Odds[], now = new Date()): ProductPick[] {
+  const offers = proposalOffers(fixture, odds, now);
+  return [...new Set(offers.map(item => item.prediction))]
+    .map(prediction => bestProposalOffer(offers, prediction)!)
+    .filter(item => item.odds >= 1.2 && item.odds <= SAFE_PICK_MAX_LEG_ODDS
+      && evaluateFullTimePrediction(item.prediction, 0, 0) !== undefined)
+    .sort((a, b) => a.odds - b.odds || a.prediction.localeCompare(b.prediction))
+    .map(offer => ({ ...pick, prediction: offer.prediction, odds: offer.odds, confidence: undefined,
+      statisticsAvailable: false, oddsUpdatedAt: offer.updatedAt, safePickOnly: true }));
+}
 
 export function productMatchKickoff(match: Match, date: string): number {
   const day = match.eventDate || date, time = match.eventTime || match.time;
@@ -34,6 +46,11 @@ export async function loadProductPicks(date: string, now = new Date(), deadline 
   const proposals = buildDailyProposals(data.fixtures, data.odds, now);
   const picks: ProductPick[] = proposals.filter((item) => item.analysis.odds > 1)
     .map((item) => ({ ...item.analysis, oddsUpdatedAt: item.oddsUpdatedAt }));
+  const safePicks = new Map<string, ProductPick[]>();
+  for (const pick of picks) {
+    const fixture = data.fixtures.find(item => item.fixture.id === pick.fixtureId);
+    if (fixture) safePicks.set(pick.id, safeProductMarketPicks(pick, fixture, data.odds, now));
+  }
   // Reuse existing basic results/statistics only. No AI, H2H database or additional paid provider.
   if (picks.length && Date.now() < deadline - 15000) {
     try {
@@ -56,6 +73,10 @@ export async function loadProductPicks(date: string, now = new Date(), deadline 
         const best = candidates[0];
         if (best) Object.assign(pick, { prediction: best.prediction, odds: best.odds, confidence: best.confidence, statisticsAvailable: true,
           oddsUpdatedAt: best.oddsUpdatedAt, source: fixture.sourceProvider, fixtureId: fixture.fixture.id, providerFixtureId: fixture.providerId });
+        const safer = candidates.filter(item => item.odds <= SAFE_PICK_MAX_LEG_ODDS).map(item => ({ ...pick,
+          prediction: item.prediction, odds: item.odds, confidence: item.confidence, statisticsAvailable: true,
+          oddsUpdatedAt: item.oddsUpdatedAt, safePickOnly: true }));
+        safePicks.set(pick.id, [...safer, ...safePicks.get(pick.id) || []]);
       }
     } catch { data.warnings.push('Osnovna statistika nije dostupna; koriste se provereni trzisni podaci bez izmisljanja statistike.'); }
   }
@@ -64,38 +85,64 @@ export async function loadProductPicks(date: string, now = new Date(), deadline 
     picks.push(...modeled.candidates.map((item) => ({ ...item, statisticsAvailable: true })));
     data.warnings.push(...modeled.warnings);
   }
-  return { picks, fixtures: data.fixtures.length, warnings: data.warnings };
+  return { picks: [...picks, ...[...safePicks.values()].flat()], fixtures: data.fixtures.length, warnings: data.warnings };
 }
 
 const totalPrice = (picks: ProductPick[]) => Number(picks.reduce((total, pick) => total * pick.odds, 1).toFixed(2));
 
 export function selectProductPicks(pool: ProductPick[], type: AutomatedProduct, date: string, now = new Date()): ProductPick[] {
+  const safe = type === 'safe_pick';
+  const confidence = (pick: ProductPick) => pick.statisticsAvailable && Number.isFinite(pick.confidence)
+    && pick.confidence! > 0 && pick.confidence! <= 100 ? pick.confidence! : 0;
   const unique = new Map<string, ProductPick>();
   for (const pick of pool) {
+    if (safe ? pick.odds > SAFE_PICK_MAX_LEG_ODDS : pick.safePickOnly) continue;
     if (pick.date !== date || pick.sport !== 'football' || pick.status !== 'ACTIVE' || !pick.homeTeam || !pick.awayTeam || !pick.league || !pick.prediction?.trim()
       || !Number.isFinite(pick.odds) || pick.odds < 1.2 || pick.odds > 3 || !isFreshOddsTimestamp(pick.oddsUpdatedAt, now) || !Number.isFinite(Date.parse(pick.kickoffAt || ''))
       || Date.parse(pick.kickoffAt!) < now.getTime() + 30 * 60000 || localDate(new Date(pick.kickoffAt!)) !== date
       || timeInBelgrade(new Date(pick.kickoffAt!)) !== (pick.kickoffTime || pick.time)
       || evaluateFullTimePrediction(pick.prediction, 0, 0) === undefined) continue;
-    const key = proposalIdentity(pick.homeTeam, pick.awayTeam, pick.kickoffAt!);
+    const fixtureKey = proposalIdentity(pick.homeTeam, pick.awayTeam, pick.kickoffAt!);
+    const key = safe ? `${fixtureKey}:${pick.prediction.trim().toLowerCase()}` : fixtureKey;
     const previous = unique.get(key);
-    if (!previous || Number(Boolean(pick.statisticsAvailable)) > Number(Boolean(previous.statisticsAvailable))) unique.set(key, pick);
+    const betterStatistics = !previous || Number(Boolean(pick.statisticsAvailable)) > Number(Boolean(previous.statisticsAvailable))
+      || (safe && Boolean(pick.statisticsAvailable) === Boolean(previous.statisticsAvailable) && confidence(pick) > confidence(previous));
+    if (safe && previous) {
+      const quote = pick.odds > previous.odds ? pick : previous;
+      unique.set(key, { ...(betterStatistics ? pick : previous), odds: quote.odds, oddsUpdatedAt: quote.oddsUpdatedAt });
+    } else if (betterStatistics) unique.set(key, pick);
   }
-  const candidates = [...unique.values()].slice(0, 10);
-  const minimum = type === 'safe_pick' ? 1 : 2, maximum = type === 'safe_pick' ? 3 : 6;
   let best: ProductPick[] = [], bestScore = -Infinity;
-  // At most 1,023 combinations from the existing ten-match discovery pool.
-  for (let mask = 1; mask < 2 ** candidates.length; mask++) {
-    const chosen = candidates.filter((_, index) => mask & 2 ** index);
-    if (chosen.length < minimum || chosen.length > maximum) continue;
+  const consider = (chosen: ProductPick[]) => {
     const price = totalPrice(chosen);
-    if (type === 'safe_pick' ? price < 1.5 || price > 3 : price < 2.5 || price > 15) continue;
+    if (safe ? price < 1.5 || price > 3 : price < 2.5 || price > 15) return;
     const statistics = chosen.filter((pick) => pick.statisticsAvailable).length / chosen.length;
     const diversity = new Set(chosen.map((pick) => pick.league)).size / chosen.length;
-    const target = type === 'safe_pick' ? 1.8 : 5;
+    const target = safe ? 1.8 : 5;
     const score = statistics * 20 + diversity - Math.abs(Math.log(price / target)) * 3
-      - chosen.length * (type === 'safe_pick' ? 1 : 0.12);
+      - chosen.length * (safe ? 1 : 0.12)
+      + (safe ? Math.min(...chosen.map(confidence)) / 20 - Math.abs(chosen[0].odds - chosen[1].odds) : 0);
     if (score > bestScore) { best = chosen; bestScore = score; }
+  };
+  if (safe) {
+    const byFixture = new Map<string, ProductPick[]>();
+    for (const pick of unique.values()) {
+      const key = proposalIdentity(pick.homeTeam, pick.awayTeam, pick.kickoffAt!);
+      if (!byFixture.has(key)) { if (byFixture.size === 10) continue; byFixture.set(key, []); }
+      byFixture.get(key)!.push(pick);
+    }
+    // Compare markets across distinct fixtures; never combine two legs from the same match.
+    const fixtures = [...byFixture.values()];
+    for (let first = 0; first < fixtures.length; first++) for (let second = first + 1; second < fixtures.length; second++) {
+      for (const home of fixtures[first]) for (const away of fixtures[second]) consider([home, away]);
+    }
+  } else {
+    const candidates = [...unique.values()].slice(0, 10);
+    // At most 1,023 combinations from the existing ten-match discovery pool.
+    for (let mask = 1; mask < 2 ** candidates.length; mask++) {
+      const chosen = candidates.filter((_, index) => mask & 2 ** index);
+      if (chosen.length >= 2 && chosen.length <= 6) consider(chosen);
+    }
   }
   return best;
 }

@@ -1,5 +1,6 @@
 import type { MatchResult } from '../types';
 import { resultsProvider } from './resultsProvider';
+import { withRequestTimeout, type RequestOptions } from '../utils/async';
 
 type PitchMatch = MatchResult & { pitchMatchId: string };
 type PitchDateResponse = { source: 'pitchapi'; matches: PitchMatch[] };
@@ -19,16 +20,18 @@ const sameFixture = (a: MatchResult, b: MatchResult) =>
   && Math.abs(minutes(a.time) - minutes(b.time)) <= 30;
 
 export const pitchMatchesService = {
-  async getMatchesForDate(date: string): Promise<{ matches: MatchResult[]; pitchAvailable: boolean }> {
+  async getMatchesForDate(date: string, options: RequestOptions = {}): Promise<{ matches: MatchResult[]; pitchAvailable: boolean }> {
     const [pitch, legacy] = await Promise.allSettled([
-      fetch('/api/pitch-matches?date=' + encodeURIComponent(date)).then(async (response) => {
+      withRequestTimeout(async signal => {
+        const response = await fetch('/api/pitch-matches?date=' + encodeURIComponent(date), { signal });
         if (!response.ok) throw new Error('PitchAPI unavailable');
         const data = await response.json() as PitchDateResponse;
         if (!Array.isArray(data.matches)) throw new Error('Invalid PitchAPI data');
         return data.matches;
-      }),
-      resultsProvider.getMatchesForDate(date),
+      }, options),
+      resultsProvider.getMatchesForDate(date, options),
     ]);
+    if (options.signal?.aborted) throw options.signal.reason;
     if (pitch.status === 'rejected' && legacy.status === 'rejected') throw new Error('Izvori fudbalskih utakmica trenutno nisu dostupni.');
     const primary = pitch.status === 'fulfilled' ? pitch.value : [];
     const fallback = legacy.status === 'fulfilled' ? legacy.value : [];
@@ -37,11 +40,17 @@ export const pitchMatchesService = {
     return { matches: merged, pitchAvailable: pitch.status === 'fulfilled' };
   },
 
-  async getMatchXg(matchId: string): Promise<{ home: number; away: number } | null> {
+  async getMatchXg(matchId: string, options: RequestOptions = {}): Promise<{ home: number; away: number } | null> {
     if (!/^m_[A-Za-z0-9]{6}$/.test(matchId)) throw new Error('Neispravan ID utakmice.');
-    const response = await fetch('/api/pitch-matches?matchId=' + encodeURIComponent(matchId));
-    if (!response.ok) throw new Error('xG trenutno nije dostupan.');
-    const body = await response.json() as { xg: { home: number; away: number } | null };
-    return body.xg || null;
+    return withRequestTimeout(async signal => {
+      const response = await fetch('/api/pitch-matches?matchId=' + encodeURIComponent(matchId), { signal });
+      if (!response.ok) throw new Error('xG trenutno nije dostupan.');
+      const body = await response.json() as { xg: { home: number; away: number } | null };
+      if (body.xg === null) return null;
+      if (!body.xg || ![body.xg.home, body.xg.away].every(value => typeof value === 'number' && Number.isFinite(value) && value >= 0)) {
+        throw new Error('xG trenutno nije dostupan.');
+      }
+      return body.xg;
+    }, options);
   },
 };
