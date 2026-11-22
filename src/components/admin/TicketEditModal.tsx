@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Plus, Trash2, X } from 'lucide-react';
 import { Match, TicketStatus, Tip, TipPublicationStatus, type TicketProductType } from '../../types';
@@ -20,6 +20,7 @@ import {
 } from '../../utils/tickets';
 import { formatLeagueName } from '../../utils/leagueMapper';
 import { getTicketProductType } from '../../utils/ticketProduct';
+import { mockTipsService } from '../../services/mockTips';
 
 type TicketKind = 'SINGL' | 'DUBL' | 'COMBO';
 
@@ -87,6 +88,14 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
   const [selectedKind, setSelectedKind] = useState<TicketKind>(() => kindFromCount(tip.matches.length));
   const [totalOddsInput, setTotalOddsInput] = useState(String(tip.totalOdds || '1.00'));
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!tip.adminImportRef || tip.historicalImport) return;
+    let active = true;
+    void mockTipsService.getAdminTipById(tip.id).then(full => {
+      if (active && full?.historicalImport) setDraft(current => ({ ...current, historicalImport: full.historicalImport }));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [tip.id, tip.adminImportRef]);
 
   const autoTotalOdds = useMemo(() => calculateTotalOdds(draft.matches), [draft.matches]);
   const displayedTotalOdds = draft.totalOddsOverride ? Number(totalOddsInput) || 1 : autoTotalOdds;
@@ -276,6 +285,15 @@ export default function TicketEditModal({ tip, onClose, onSave, onDelete }: Tick
         <div className="mb-8 pr-12">
           <div className="text-[10px] text-gold-500 font-black uppercase tracking-[0.24em] mb-2">Admin tiket</div>
           <h2 className="text-3xl font-display font-bold">Izmeni tiket</h2>
+          {tip.historicalImport && (
+            <details className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-neutral-400">
+              <summary className="cursor-pointer text-gold-300">Uvoz iz CSV-a · {draft.historicalImport.verification === 'confirmed' ? 'Rezultat potvrđen' : 'Rezultat nije nezavisno potvrđen'}</summary>
+              <p className="mt-3">{draft.historicalImport.fileName} · red {draft.historicalImport.row}</p>
+              <p className="mt-2">{draft.historicalImport.verificationNote}</p>
+              <p className="mt-2">Vreme objave je dodeljeno prilikom uvoza i nije dokaz ranije objave. Potvrda se odnosi na originalni CSV red; ručne izmene zahtevaju novu proveru.</p>
+              <dl className="mt-3 grid grid-cols-2 gap-2 break-words">{Object.entries(draft.historicalImport.original).map(([key, value]) => <React.Fragment key={key}><dt>{key}</dt><dd className="text-neutral-200">{value}</dd></React.Fragment>)}</dl>
+            </details>
+          )}
         </div>
 
         <div className="grid lg:grid-cols-[1fr_340px] gap-6">

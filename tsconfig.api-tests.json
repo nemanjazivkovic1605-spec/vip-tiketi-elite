@@ -1,4 +1,5 @@
 {
   "extends": "./tsconfig.json",
+  "files": ["server/historyImport/csv.ts", "server/historyImport/planner.ts", "server/historyImport/verification.ts", "server/historyImport/firestore.ts", "scripts/import-historical-tips.ts"],
   "include": ["api", "vite.config.ts", "src/vite-env.d.ts", "server/seo/prerender.tsx", "server/publicFootball", "tests/api-consolidation.test.ts", "tests/gemini-analysis.test.ts", "tests/pitchapi-endpoint.test.ts", "tests/football-loading.test.ts", "tests/product-automation.test.ts", "tests/public-football-seo.test.ts"]
 }

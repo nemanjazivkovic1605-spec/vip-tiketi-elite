@@ -1,6 +1,11 @@
 import { type Tip, TicketStatus, TipPublicationStatus } from '../../types.js';
 
 export const mapTicketForPublic = (tip: Tip): Tip => {
+  // Import provenance/original rows are admin-only, including on settled tickets.
+  if (tip.historicalImport || tip.adminImportRef) {
+    const { historicalImport: _privateImport, adminImportRef: _privateReference, ...publicTip } = tip;
+    return mapTicketForPublic(publicTip);
+  }
   if (tip.status === TicketStatus.PENDING || tip.status === TicketStatus.POSTPONED) {
     return {
       ...tip,
@@ -38,9 +43,12 @@ export const mapTicketForPublic = (tip: Tip): Tip => {
 };
 
 export const mapTicketForFree = (tip: Tip): Tip =>
-  tip.isVip ? mapTicketForPublic(tip) : tip;
+  tip.isVip ? mapTicketForPublic(tip) : mapTicketForVip(tip);
 
-export const mapTicketForVip = (tip: Tip): Tip => tip;
+export const mapTicketForVip = (tip: Tip): Tip => {
+  const { historicalImport: _privateImport, adminImportRef: _privateReference, ...visibleTip } = tip;
+  return visibleTip;
+};
 
 export const mapTicketForAdmin = (tip: Tip): Tip => tip;
 

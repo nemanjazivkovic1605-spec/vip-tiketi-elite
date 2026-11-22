@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "import:history:csv": "tsx scripts/import-historical-tips.ts",
     "football:public": "tsx scripts/public-football.ts",
     "analytics:archive": "tsx scripts/football-data-archive.ts",
     "analytics:archive:check": "tsc --noEmit -p tsconfig.archive.json",
