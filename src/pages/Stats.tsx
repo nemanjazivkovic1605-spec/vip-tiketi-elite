@@ -183,8 +183,8 @@ export default function Stats() {
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="text-center mb-10">
-        <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">GLOBALNA <span className="gold-text">STATISTIKA</span></h1>
-        <p className="text-neutral-400">Profesionalni tipsterski pregled kroz yield, hit rate i units profit.</p>
+        <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">Naše <span className="gold-text">performanse</span></h1>
+        <p className="text-neutral-400">Transparentan pregled uspešnosti naših objavljenih tipova.</p>
       </div>
 
       <div className="mb-6 flex flex-wrap justify-center gap-2">
