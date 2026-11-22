@@ -81,6 +81,27 @@ test('new SSR pages include real names, statistics, canonical/breadcrumb metadat
   assert.ok(matchPage.body.includes('/h2h/england-arsenal/england-chelsea'));
 });
 
+test('public page names and SEO copy stay consistent without changing routes or indexing rules', async () => {
+  const performance = siteMetadata('/stats');
+  assert.equal(performance.title, 'Naše performanse | Elite VIP Tips');
+  assert.equal(performance.description, 'Transparentan pregled uspešnosti naših objavljenih tipova.');
+  assert.equal(performance.canonical, 'https://eliteviptips.com/stats');
+  assert.equal(performance.noindex, false);
+  const alias = siteMetadata('/statistics');
+  assert.equal(alias.title, performance.title);
+  assert.equal(alias.description, performance.description);
+  assert.equal(alias.noindex, true);
+  const response = await call('/fudbal');
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /<h1>Fudbalska statistika<\/h1>/);
+  assert.match(response.body, /<title>Fudbalska statistika \| Elite VIP Tips<\/title>/);
+  assert.match(response.body, /name="description" content="Detaljna statistika utakmica, klubova i liga\."/);
+  assert.match(response.body, /property="og:description" content="Detaljna statistika utakmica, klubova i liga\."/);
+  assert.equal((response.body.match(/href="\/fudbal"(?: aria-current="page")?>Fudbalska statistika<\/a>/g) || []).length, 2);
+  assert.ok(response.body.includes('Detaljna statistika utakmica, klubova i liga.</p>'));
+  assert.ok(response.body.includes('https://eliteviptips.com/fudbal'));
+});
+
 test('H2H is restricted to recorded pairs and reversed URLs redirect to one canonical page', async () => {
   const response = await call('/h2h/england-arsenal/england-chelsea');
   assert.equal(response.statusCode, 200);

@@ -275,7 +275,7 @@ export default function DailyAnalysis() {
               Pridruži se VIP timu
             </Link>
             <Link to="/stats" className="rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-xs font-black uppercase tracking-widest text-neutral-200 transition-all hover:border-gold-500/40 hover:text-gold-400">
-              Pogledaj statistiku
+              Pogledaj naše performanse
             </Link>
             <Link to="/faq" className="rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-xs font-black uppercase tracking-widest text-neutral-200 transition-all hover:border-gold-500/40 hover:text-gold-400">
               Saznaj kako funkcioniše naš sistem

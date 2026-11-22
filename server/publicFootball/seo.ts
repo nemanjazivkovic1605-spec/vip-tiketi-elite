@@ -2,7 +2,7 @@ import type { PublicFootballPageData } from '../../src/types/publicFootball.js';
 import { PUBLIC_ORIGIN, leaguePath, matchPath, pairPath, teamPath } from './paths.js';
 
 export function publicPageSeo(data: PublicFootballPageData, params: URLSearchParams) {
-  let path = '/fudbal', title = 'Fudbalska statistika: raspored, rezultati i HT/FT';
+  let path = '/fudbal', title = 'Fudbalska statistika';
   let description = 'Raspoloživi fudbalski rezultati, HT/FT prelazi i forma timova. Pretražite predstojeće utakmice uz jasno označen uzorak i nedostajuće podatke.';
   const crumbs = [{ name: 'Početna', path: '/' }, { name: 'Fudbalska statistika', path: '/fudbal' }];
   let entity: Record<string, unknown> | null = null;
@@ -42,6 +42,7 @@ export function publicPageSeo(data: PublicFootballPageData, params: URLSearchPar
     path = '/match-finder'; title = 'Match Finder: pretraga fudbalskih utakmica';
     crumbs.push({ name: 'Match Finder', path });
   }
+  if (data.page === 'overview') description = 'Detaljna statistika utakmica, klubova i liga.';
   const noindex = data.page === 'finder' || !!data.pair && !data.pair.finished
     || ['from', 'to', 'league', 'form', 'over25', 'btts', 'comebacks', 'sample', 'offset', 'upcomingOffset', 'search', 'season'].some(key => params.has(key));
   const structured = { '@context': 'https://schema.org', '@graph': [

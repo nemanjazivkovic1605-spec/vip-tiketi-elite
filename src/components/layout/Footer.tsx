@@ -55,7 +55,7 @@ export default function Footer() {
             <ul className="space-y-3 text-sm font-medium text-neutral-500">
               <li><Link to="/daily-tips" className="transition-colors hover:text-gold-500">Aktivni tipovi</Link></li>
               <li><Link to="/history" className="transition-colors hover:text-gold-500">Istorija</Link></li>
-              <li><Link to="/stats" className="transition-colors hover:text-gold-500">Statistika</Link></li>
+              <li><Link to="/stats" className="transition-colors hover:text-gold-500">Naše performanse</Link></li>
               <li><a href="/timovi" className="transition-colors hover:text-gold-500">Statistika timova</a></li>
               <li><a href="/h2h" className="transition-colors hover:text-gold-500">H2H rezultati</a></li>
               <li><a href="/analize-danas" className="transition-colors hover:text-gold-500">Analize danas</a></li>

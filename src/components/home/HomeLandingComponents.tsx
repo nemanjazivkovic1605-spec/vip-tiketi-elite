@@ -51,7 +51,7 @@ export function TopNoticeBar({
   ].filter((item): item is { label: string; value: string; target: string } => Boolean(item));
   const items = [
     ...offerItems,
-    ...(statsItems.length ? statsItems : [{ label: 'STATISTIKA', value: 'Uskoro', target: '/stats' }]),
+    ...(statsItems.length ? statsItems : [{ label: 'NAŠE PERFORMANSE', value: 'Uskoro', target: '/stats' }]),
   ];
 
   const tickerGroup = (hidden = false) => (
