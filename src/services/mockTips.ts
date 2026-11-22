@@ -372,6 +372,11 @@ const removeUndefined = <T>(value: T): T => {
   return value;
 };
 
+const storedTicketData = (tip: Tip) => {
+  const { historicalImport: _adminOnly, ...stored } = tip;
+  return removeUndefined(stored);
+};
+
 const syncPublicTicket = async (tip: Tip) => {
   const normalized = normalizeTip(tip);
 
@@ -581,11 +586,15 @@ export const mockTipsService = {
   getAdminTipById: async (id: string): Promise<Tip | null> => {
     const snapshot = await getDoc(getTicketDoc(id));
     if (!snapshot.exists()) return null;
-
-    return mapTicketForAdmin(normalizeTip({
+    const ticket = normalizeTip({
       ...snapshot.data(),
       id: snapshot.id,
-    } as Tip));
+    } as Tip);
+    if (ticket.adminImportRef && /^[a-f0-9]{64}-[a-f0-9]{24}$/.test(ticket.adminImportRef)) {
+      const audit = await getDoc(doc(db, 'historyImportRuns', ticket.adminImportRef));
+      ticket.historicalImport = audit.data()?.ticketMetadata?.[id];
+    }
+    return mapTicketForAdmin(ticket);
   },
 
   getAllTips: async (): Promise<Tip[]> => {
@@ -741,7 +750,7 @@ export const mockTipsService = {
       source: 'admin',
       publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT,
     });
-    await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
+    await setDoc(getTicketDoc(normalized.id), storedTicketData(normalized));
     await syncPublicTicket(normalized);
   },
 
@@ -759,7 +768,7 @@ export const mockTipsService = {
 
     await Promise.all(uniqueTips.map(async (tip) => {
       const normalized = normalizeTip({ ...tip, source: 'admin', publicationStatus: tip.publicationStatus || TipPublicationStatus.DRAFT });
-      await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
+      await setDoc(getTicketDoc(normalized.id), storedTicketData(normalized));
       await syncPublicTicket(normalized);
     }));
   },
@@ -815,7 +824,7 @@ export const mockTipsService = {
     normalized = preserveProductAdminEdits(previous, normalized);
     if (updatedTip.type && previous && updatedTip.type !== getTicketProductType(previous)) normalized.categoryManualOverride = true;
 
-    await setDoc(getTicketDoc(normalized.id), removeUndefined(normalized));
+    await setDoc(getTicketDoc(normalized.id), storedTicketData(normalized));
     await syncPublicTicket(normalized);
   },
 
@@ -856,7 +865,7 @@ export const mockTipsService = {
         publicationStatus: TipPublicationStatus.PUBLISHED,
       } as Tip;
       const normalized = normalizeTip(existingTip);
-      await setDoc(getTicketDoc(id), removeUndefined(normalized));
+      await setDoc(getTicketDoc(id), storedTicketData(normalized));
       await syncPublicTicket(normalized);
     }
   },

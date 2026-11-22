@@ -37,6 +37,7 @@ export interface Match {
   time: string;
   eventDate?: string;
   eventTime?: string;
+  eventTimeUnknown?: boolean;
   result?: string;
   status?: TicketStatus;
   analysis?: string;
@@ -139,6 +140,19 @@ export interface Tip {
   resultReviewRequired?: boolean;
   nextResultCheckAt?: string | null;
   resultCheckAttempts?: number;
+  historicalImport?: {
+    fileHash: string;
+    fileName: string;
+    row: number;
+    identity: string;
+    importedAt: string;
+    original: Record<string, string>;
+    verification: 'confirmed' | 'unconfirmed';
+    verificationNote: string;
+    evidence?: { source: string; matchId: string; checkedAt: string };
+    assignedPublicationTime: boolean;
+  };
+  adminImportRef?: string;
 }
 
 export interface User {

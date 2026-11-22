@@ -112,12 +112,13 @@ export const getMatchEventDate = (match: Partial<Match>, fallbackDate?: string) 
 export const getMatchEventTime = (match: Partial<Match>) => {
   if (hasClockTime(match.eventTime)) return normalizePublishedTime(match.eventTime);
   if (hasClockTime(match.time)) return normalizePublishedTime(match.time);
+  if (match.eventTimeUnknown) return '';
   return '20:00';
 };
 
 export const getFirstMatchStartAt = (tip: Pick<Tip, 'date' | 'matches'>) => {
   const starts = (tip.matches || [])
-    .map((match) => new Date(buildEventAt(getMatchEventDate(match, tip.date), getMatchEventTime(match))))
+    .flatMap((match) => getMatchEventTime(match) ? [new Date(buildEventAt(getMatchEventDate(match, tip.date), getMatchEventTime(match)))] : [])
     .filter((date) => Number.isFinite(date.getTime()))
     .sort((a, b) => a.getTime() - b.getTime());
 
@@ -160,10 +161,12 @@ export const getCorrectedPublicationMetaIfInvalid = (tip: Tip) => {
   };
 };
 
-export const isPublishedBeforeFirstMatch = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date' | 'createdAt' | 'matches'>) => {
+export const isPublishedBeforeFirstMatch = (tip: Pick<Tip, 'publishedAt' | 'publishedDate' | 'publishedTime' | 'date' | 'createdAt' | 'matches'> & Partial<Pick<Tip, 'status' | 'historicalImport'>>) => {
   const published = getTicketPublishedDate(tip);
   const firstMatchStart = getFirstMatchStartAt(tip);
-  if (!published || !firstMatchStart) return false;
+  if (!published) return false;
+  if (!firstMatchStart) return Boolean(tip.historicalImport && tip.matches.length && tip.matches.every(match => match.eventTimeUnknown)
+    && [TicketStatus.WON, TicketStatus.LOST, TicketStatus.REFUND].includes(tip.status));
   return published.getTime() < firstMatchStart.getTime();
 };
 
@@ -190,6 +193,7 @@ export const formatTicketPublishedAt = (tip: Pick<Tip, 'publishedAt' | 'publishe
 
 export const formatFirstMatchStartAt = (tip: Pick<Tip, 'date' | 'matches'>) => {
   const firstMatchStart = getFirstMatchStartAt(tip);
+  if (!firstMatchStart && tip.matches.some(match => match.eventTimeUnknown)) return `${normalizePublishedDate(tip.date)} · Vreme nije potvrđeno`;
   return firstMatchStart ? formatDateTimeForDisplay(firstMatchStart.toISOString()) : 'Nije podeseno';
 };
 

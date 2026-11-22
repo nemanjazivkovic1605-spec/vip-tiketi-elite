@@ -123,6 +123,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Original CSV values and result-verification notes are only for administrators.
+    match /historyImportRuns/{runId} {
+      allow read, write: if isAdmin();
+    }
+
     // Full daily analysis data is limited to VIP/admin clients.
     match /dailyAnalyses/{analysisId} {
       allow read: if isAdmin() || hasVipAccess();

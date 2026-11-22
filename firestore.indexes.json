@@ -1,0 +1,10 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "historyImportRuns",
+      "fieldPath": "ticketMetadata",
+      "indexes": []
+    }
+  ]
+}
