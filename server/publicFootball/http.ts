@@ -4,14 +4,28 @@ import { readPublicSnapshot,publicSnapshotCache } from './store.js';
 import { buildPublicFootballPage,parseFinderFilters } from './model.js';
 import { renderPublicFootball,renderPublicError } from './view.js';
 import type { PublicSnapshot,PublicFootballPageData } from '../../src/types/publicFootball.js';
+import type { PublicSnapshotRead } from './store.js';
 import { leaguePath,matchPath,pairPath,publicSlug } from './paths.js';
 import { publicFootballRoute } from './routes.js';
+import { buildLocalOpenFootballFallback } from './localOpenFootballFallback.js';
 import { publicFootballSitemap,publicSitemapIndex } from './sitemaps.js';
 export { publicFootballSitemap } from './sitemaps.js';
 
-const snapshot=publicSnapshotCache(async()=>readPublicSnapshot(await getAnalyticsDatabase()));
+async function readCurrentPublicSnapshot() {
+  try {
+    return await readPublicSnapshot(await getAnalyticsDatabase());
+  } catch (error) {
+    const value = error && typeof error === 'object' ? error as { name?: unknown; code?: unknown } : {};
+    const errorName = typeof value.name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,48}$/.test(value.name) ? value.name : 'UnknownError';
+    const errorCode = typeof value.code === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(value.code) ? value.code : undefined;
+    console.warn('[public-football] snapshot read failed', { errorName, errorCode });
+    throw error;
+  }
+}
+const snapshot=publicSnapshotCache(readCurrentPublicSnapshot,15*60_000,30_000,buildLocalOpenFootballFallback());
 export const clearPublicFootballCache=()=>snapshot.clear();
-export const createPublicFootballHandler=(load=()=>snapshot.read(),clock=()=>new Date())=>async(request:IncomingMessage,response:ServerResponse)=>{
+export const publicFootballCacheStats=()=>snapshot.stats();
+export const createPublicFootballHandler=(load:()=>Promise<PublicSnapshot|PublicSnapshotRead>=()=>snapshot.readWithStatus(),clock=()=>new Date())=>async(request:IncomingMessage,response:ServerResponse)=>{
   response.setHeader('X-Content-Type-Options','nosniff');response.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
   const url=new URL(request.url||'/','https://eliteviptips.com');
   const route=publicFootballRoute(url.pathname);
@@ -31,8 +45,12 @@ export const createPublicFootballHandler=(load=()=>snapshot.read(),clock=()=>new
   const now=clock();
   try{parseFinderFilters(action==='overview'||action==='finder'?url.searchParams:new URLSearchParams(),now);}catch(value){return error(400,(value as Error).message);}
   try{
-    const value=await load();
-    response.setHeader('Cache-Control','public, max-age=0, s-maxage=300, stale-while-revalidate=1800');
+    const loaded=await load();
+    const freshness='snapshot'in loaded&&'stale'in loaded?loaded:null;
+    const value=freshness?freshness.snapshot:loaded as PublicSnapshot;
+    response.setHeader('Cache-Control','public, max-age=0, s-maxage=900, stale-while-revalidate=21600, stale-if-error=86400');
+    response.setHeader('X-Data-Freshness',freshness?.stale?'stale':'fresh');
+    if(freshness?.stale)response.setHeader('Warning','110 - "Response is stale because the database is unavailable"');
     if(action==='sitemap'){
       const segment=url.searchParams.get('segment');
       const xml=segment?publicFootballSitemap(value,now,segment):publicSitemapIndex(value);
@@ -49,7 +67,7 @@ export const createPublicFootballHandler=(load=()=>snapshot.read(),clock=()=>new
       return match?redirect(matchPath(match)):error(404,'Utakmica nije pronađena u javnom pregledu.');
     }
     let data:PublicFootballPageData;
-    try{data=buildPublicFootballPage(value,action as PublicFootballPageData['page'],url.searchParams,now);}catch(value){return error(400,(value as Error).message);}
+    try{data=buildPublicFootballPage(value,action as PublicFootballPageData['page'],url.searchParams,now);data.dataStale=Boolean(freshness?.stale);data.dataSnapshotAt=freshness?.snapshot.loadedAt;}catch(value){return error(400,(value as Error).message);}
     if(action==='league'&&!data.league||action==='match'&&!data.match||action==='team'&&!data.team||action==='pair'&&!data.pair)return error(404,'Za ovaj izbor nema javno dostupnih podataka.');
     if(html&&data.pair&&route&&url.pathname!==pairPath(data.pair.first,data.pair.second))return redirect(pairPath(data.pair.first,data.pair.second));
     if(html){

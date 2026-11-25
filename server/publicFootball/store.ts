@@ -61,10 +61,65 @@ export async function savePublicSnapshot(db:AnalyticsDatabase,snapshot:PublicSna
   await db.query('INSERT INTO fa_public_snapshots(id,version,updated_at,payload) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET version=excluded.version,updated_at=excluded.updated_at,payload=excluded.payload',
     [PUBLIC_SNAPSHOT_ID,publicSnapshotVersion(snapshot),new Date().toISOString(),payload]);
 }
-export function publicSnapshotCache(load:()=>Promise<PublicSnapshot>,ttl=5*60000) {
-  let cached: {task:Promise<PublicSnapshot>;expires:number}|undefined;
-  return { read:()=>{if(cached && cached.expires>Date.now())return cached.task;
-    const entry={task:load(),expires:Date.now()+ttl};cached=entry;
-    entry.task.catch(()=>{if(cached===entry)cached=undefined;});return entry.task;
-  },clear:()=>{cached=undefined;}};
+export type PublicSnapshotRead = { snapshot: PublicSnapshot; stale: boolean; ageMs: number };
+
+export function publicSnapshotCache(load:()=>Promise<PublicSnapshot>,ttl=5*60000,retryBaseMs=15_000,fallback?:PublicSnapshot) {
+  const fallbackEntry = fallback
+    ? { snapshot: fallback, loadedAt: Date.parse(fallback.loadedAt) || 0 }
+    : undefined;
+  let lastGood = fallbackEntry;
+  let inFlight: Promise<PublicSnapshot> | undefined;
+  let retryAt = 0;
+  let failures = 0;
+  let lastError: unknown;
+  let reads = 0, freshHits = 0, staleHits = 0, loadFailures = 0;
+  const result = (stale: boolean, now: number): PublicSnapshotRead => ({
+    snapshot: lastGood!.snapshot,
+    stale,
+    ageMs: Math.max(0, now - lastGood!.loadedAt),
+  });
+  const readWithStatus = async (): Promise<PublicSnapshotRead> => {
+    reads += 1;
+    const now = Date.now();
+    if (lastGood && now - lastGood.loadedAt < ttl) { freshHits += 1; return result(false, now); }
+    if (inFlight) {
+      try {
+        await inFlight;
+        freshHits += 1; return result(false, Date.now());
+      } catch {
+        if (lastGood) { staleHits += 1; return result(true, Date.now()); }
+        throw lastError;
+      }
+    }
+    if (now < retryAt) {
+      if (lastGood) { staleHits += 1; return result(true, now); }
+      throw lastError || new Error('Baza analitike je privremeno nedostupna.');
+    }
+    const task = load();
+    inFlight = task;
+    try {
+      const snapshot = await task;
+      lastGood = { snapshot, loadedAt: Date.now() };
+      failures = 0;
+      retryAt = 0;
+      lastError = undefined;
+      freshHits += 1;
+      return result(false, Date.now());
+    } catch (error) {
+      failures += 1;
+      loadFailures += 1;
+      retryAt = Date.now() + Math.min(5 * 60_000, retryBaseMs * 2 ** Math.min(failures - 1, 5));
+      lastError = error;
+      if (lastGood) { staleHits += 1; return result(true, Date.now()); }
+      throw error;
+    } finally {
+      if (inFlight === task) inFlight = undefined;
+    }
+  };
+  return {
+    readWithStatus,
+    read: async () => (await readWithStatus()).snapshot,
+    stats: () => ({ scope: 'this-serverless-instance', reads, freshHits, staleHits, loadFailures, hasSnapshot: Boolean(lastGood), snapshotAgeMs: lastGood ? Math.max(0, Date.now()-lastGood.loadedAt) : null, circuitOpen: Date.now()<retryAt }),
+    clear: () => { lastGood = fallbackEntry; inFlight = undefined; retryAt = 0; failures = 0; lastError = undefined; reads = 0; freshHits = 0; staleHits = 0; loadFailures = 0; },
+  };
 }

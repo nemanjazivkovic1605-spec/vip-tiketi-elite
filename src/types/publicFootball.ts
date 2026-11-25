@@ -42,6 +42,8 @@ export type PublicFootballPageData = {
   total: number;
   hasMore: boolean;
   lastUpdatedAt: string | null;
+  dataSnapshotAt?: string;
+  dataStale?: boolean;
   truncated: boolean;
   unavailableLeagues: string[];
   coverageWarnings: string[];
