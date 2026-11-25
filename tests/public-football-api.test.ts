@@ -8,7 +8,18 @@ const now=new Date('2026-11-18T12:00:00Z');
 const fields={'home.name':'Home <script>alert(1)</script>','away.name':'Away','league.name':'League','league.country':'England',season:'2026/27',matchDate:'2026-11-20',status:'unknown'};
 const fixture=mapPublicFootballMatch('a'.repeat(32),{environment:'real',fields,provenance:Object.fromEntries(PUBLIC_FIELDS.map(key=>[key,{provider:'openfootball'}]))},now)!;
 const snapshot=snapshotFromMatches([fixture],now);
-async function call(url:string,method='GET',load=async()=>snapshot){const response:any={statusCode:0,headers:{},body:'',setHeader(name:string,value:string){this.headers[name]=value;},end(value:string){this.body=value;}};await createPublicFootballHandler(load,()=>now)({url,method}as any,response);return response;}
+async function call(url:string,method='GET',load=async()=>snapshot,headers:Record<string,string>={}){const response:any={statusCode:0,headers:{},body:'',setHeader(name:string,value:string){this.headers[name]=value;},end(value:string){this.body=value;}};await createPublicFootballHandler(load,()=>now)({url,method,headers}as any,response);return response;}
+
+test('public pages expose validators and bounded CDN caching',async()=>{
+  const first=await call('/api/public-football?page=overview');
+  assert.equal(first.statusCode,200);
+  assert.match(first.headers['Cache-Control'],/s-maxage=3600/);
+  assert.match(first.headers['Cache-Control'],/stale-while-revalidate=86400/);
+  assert.equal(first.headers['X-Snapshot-Records'],String(snapshot.matches.length));
+  const cached=await call('/api/public-football?page=overview','GET',async()=>snapshot,{'if-none-match':first.headers.ETag});
+  assert.equal(cached.statusCode,304);
+  assert.equal(cached.body,undefined);
+});
 
 test('shared Vercel function keeps the public projection read-only and cannot route public requests into admin actions',async()=>{
   let privateReads=0,publicReads=0;

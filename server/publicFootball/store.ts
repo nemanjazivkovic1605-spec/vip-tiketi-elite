@@ -1,6 +1,6 @@
 import type { AnalyticsDatabase } from '../footballAnalytics/database.js';
 import { PUBLIC_FIELDS, mapPublicFootballMatch, type PublicInput } from './policy.js';
-import type { PublicLeague, PublicSnapshot, PublicMatch } from '../../src/types/publicFootball.js';
+import type { PublicLeague, PublicSnapshot, PublicMatch, PublicSnapshotProvenance } from '../../src/types/publicFootball.js';
 import { publicSource } from './policy.js';
 import { localDate } from '../sportsApi.js';
 import { createHash } from 'node:crypto';
@@ -24,7 +24,7 @@ export async function preparePublicFootball(db: AnalyticsDatabase, now = new Dat
   const matches = rows.slice(0,MAX_ROWS).map(row=>mapPublicFootballMatch(row.id, (typeof row.projected === 'string' ? JSON.parse(row.projected) : row.projected) as PublicInput,now)).filter((row):row is NonNullable<typeof row>=>!!row);
   return snapshotFromMatches(matches,now,rows.length>MAX_ROWS,Math.min(rows.length,MAX_ROWS)-matches.length);
 }
-export function snapshotFromMatches(matches: PublicSnapshot['matches'], now=new Date(), truncated=false, excluded=0):PublicSnapshot {
+export function snapshotFromMatches(matches: PublicSnapshot['matches'], now=new Date(), truncated=false, excluded=0, provenance?: PublicSnapshotProvenance[]):PublicSnapshot {
   const leagues = new Map<string,PublicLeague>();
   for (const match of matches) {
     const league = leagues.get(match.league.slug) || {...match.league,matches:0,finished:0,withHt:0,seasons:[],latestDate:'',sources:[]};
@@ -34,21 +34,51 @@ export function snapshotFromMatches(matches: PublicSnapshot['matches'], now=new 
     if(match.date>league.latestDate)league.latestDate=match.date;
     leagues.set(league.slug,league);
   }
-  return {matches,leagues:[...leagues.values()].map(league=>({...league,seasons:league.seasons.sort().reverse()})).sort((a,b)=>a.country.localeCompare(b.country)||a.name.localeCompare(b.name)),loadedAt:now.toISOString(),lastUpdatedAt:matches.map(match=>match.checkedAt||'').sort().at(-1)||null,truncated,excluded};
+  return {matches,leagues:[...leagues.values()].map(league=>({...league,seasons:league.seasons.sort().reverse()})).sort((a,b)=>a.country.localeCompare(b.country)||a.name.localeCompare(b.name)),loadedAt:now.toISOString(),lastUpdatedAt:matches.map(match=>match.checkedAt||'').sort().at(-1)||null,truncated,excluded,...(provenance?.length?{provenance}:{})};
 }
-export const publicSnapshotVersion=(snapshot:PublicSnapshot)=>createHash('sha256').update(JSON.stringify(snapshot.matches)).digest('hex');
+export const publicSnapshotVersion=(snapshot:PublicSnapshot)=>createHash('sha256').update(JSON.stringify({
+  matches:snapshot.matches,
+  files:snapshot.provenance?.flatMap(source=>source.files.map(file=>({repository:source.repository,path:file.path,blobSha:file.blobSha})))||[],
+})).digest('hex');
 export const PUBLIC_SNAPSHOT_ID='football-v1';
-export async function readPublicSnapshot(db:AnalyticsDatabase):Promise<PublicSnapshot> {
-  const row=(await db.query('SELECT payload FROM fa_public_snapshots WHERE id=$1',[PUBLIC_SNAPSHOT_ID]))[0];
-  if(!row)throw new Error('Javni fudbalski pregled još nije pripremljen.');
-  const value=JSON.parse(row.payload) as PublicSnapshot;
-  if(!Array.isArray(value.matches)||value.matches.length>MAX_ROWS||!Array.isArray(value.leagues))throw new Error('Javni pregled trenutno nije dostupan.');
-  const matches=value.matches.map((row:any):PublicMatch=>{
+export type PublicSnapshotRead = { snapshot: PublicSnapshot; stale: boolean; ageMs: number };
+export function parsePublicSnapshotPayload(payload: unknown): PublicSnapshot {
+  const value = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  if (!value || typeof value !== 'object') throw new Error('Javni pregled trenutno nije dostupan.');
+  const candidate = value as PublicSnapshot;
+  if (!Array.isArray(candidate.matches) || candidate.matches.length > MAX_ROWS || !Array.isArray(candidate.leagues))
+    throw new Error('Javni pregled trenutno nije dostupan.');
+  const matches=candidate.matches.map((row:any):PublicMatch=>{
     if(!/^[a-f0-9]{32}$/.test(row.id)||!Array.isArray(row.sources)||!row.sources.length||!row.sources.every(publicSource))throw new Error('Neispravan javni pregled.');
     return{id:row.id,league:{slug:String(row.league.slug),name:String(row.league.name),country:String(row.league.country)},season:String(row.season),date:String(row.date),time:row.time||null,kickoffAt:row.kickoffAt||null,
       homeTeam:String(row.homeTeam),awayTeam:String(row.awayTeam),status:row.status,ht:{home:row.ht.home,away:row.ht.away},ft:{home:row.ft.home,away:row.ft.away},checkedAt:row.checkedAt||null,sources:row.sources};
   });
-  return snapshotFromMatches(matches,new Date(value.loadedAt),Boolean(value.truncated),Number(value.excluded)||0);
+  const provenance = Array.isArray(candidate.provenance) ? candidate.provenance.slice(0, 8).map((source: any): PublicSnapshotProvenance => {
+    if (!source || typeof source.source !== 'string' || typeof source.repository !== 'string' || typeof source.license !== 'string'
+      || typeof source.licenseUrl !== 'string' || !Array.isArray(source.files)) throw new Error('Neispravno poreklo javnog pregleda.');
+    return {
+      source: source.source.slice(0, 100), repository: source.repository.slice(0, 300), license: source.license.slice(0, 80),
+      licenseUrl: source.licenseUrl.slice(0, 500), retrievedAt: typeof source.retrievedAt === 'string' ? source.retrievedAt.slice(0, 40) : '',
+      asOf: typeof source.asOf === 'string' ? source.asOf.slice(0, 40) : '',
+      files: source.files.slice(0, 200).map((file: any) => {
+        if (!file || typeof file.path !== 'string' || !/^[a-f0-9]{40}$/i.test(file.blobSha)) throw new Error('Neispravan identifikator OpenFootball fajla.');
+        return { path:file.path.slice(0,300),blobSha:file.blobSha.toLowerCase(),season:String(file.season||'').slice(0,10),records:Number(file.records)||0,
+          finished:Number(file.finished)||0,withHt:Number(file.withHt)||0,...(typeof file.commitSha==='string'?{commitSha:file.commitSha.slice(0,40)}:{}),
+          ...(typeof file.committedAt==='string'||file.committedAt===null?{committedAt:file.committedAt}: {}) };
+      }),
+    };
+  }) : undefined;
+  return snapshotFromMatches(matches,new Date(candidate.loadedAt),Boolean(candidate.truncated),Number(candidate.excluded)||0,provenance);
+}
+export async function readPublicSnapshot(db:AnalyticsDatabase):Promise<PublicSnapshot> {
+  const load = (reader: AnalyticsDatabase) => reader.query('SELECT payload FROM fa_public_snapshots WHERE id=$1',[PUBLIC_SNAPSHOT_ID]);
+  const rows = db.kind === 'postgres' ? await db.transaction(async tx => {
+    await tx.query('SET TRANSACTION READ ONLY');
+    return load(tx);
+  }) : await load(db);
+  const row=rows[0];
+  if(!row)throw new Error('Javni fudbalski pregled još nije pripremljen.');
+  return parsePublicSnapshotPayload(row.payload);
 }
 export async function savePublicSnapshot(db:AnalyticsDatabase,snapshot:PublicSnapshot) {
   if(snapshot.matches.length>MAX_ROWS)throw new Error('Javni pregled prelazi dozvoljen obim.');
@@ -61,10 +91,8 @@ export async function savePublicSnapshot(db:AnalyticsDatabase,snapshot:PublicSna
   await db.query('INSERT INTO fa_public_snapshots(id,version,updated_at,payload) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET version=excluded.version,updated_at=excluded.updated_at,payload=excluded.payload',
     [PUBLIC_SNAPSHOT_ID,publicSnapshotVersion(snapshot),new Date().toISOString(),payload]);
 }
-export type PublicSnapshotRead = { snapshot: PublicSnapshot; stale: boolean; ageMs: number };
-
 export function publicSnapshotCache(load:()=>Promise<PublicSnapshot>,ttl=5*60000,retryBaseMs=15_000,fallback?:PublicSnapshot) {
-  const fallbackEntry = fallback
+  const fallbackEntry: { snapshot: PublicSnapshot; loadedAt: number } | undefined = fallback
     ? { snapshot: fallback, loadedAt: Date.parse(fallback.loadedAt) || 0 }
     : undefined;
   let lastGood = fallbackEntry;

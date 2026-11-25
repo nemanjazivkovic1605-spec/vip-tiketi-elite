@@ -6,6 +6,7 @@
   "scripts": {
     "import:history:csv": "tsx scripts/import-historical-tips.ts",
     "football:public": "tsx scripts/public-football.ts",
+    "football:public:turso-migrate": "tsx scripts/migrate-public-snapshot-to-turso.ts",
     "analytics:archive": "tsx scripts/football-data-archive.ts",
     "analytics:archive:check": "tsc --noEmit -p tsconfig.archive.json",
     "typecheck:api": "tsc --noEmit -p tsconfig.api-tests.json",
@@ -69,6 +70,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
+    "@libsql/client": "0.18.0",
     "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-react": "^6.0.2",
     "clsx": "^2.1.1",

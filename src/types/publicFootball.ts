@@ -20,7 +20,26 @@ export type PublicLeague = PublicMatch['league'] & { matches: number; finished: 
 export type PublicTeam = { slug: string; name: string; country: string; leagues: string[]; seasons: string[]; matches: number; finished: number };
 export type PublicPair = { first: PublicTeam; second: PublicTeam; leagues: string[]; matches: number; finished: number; latestDate: string };
 export type PublicTeamSummary = { played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; home: number; away: number; madeComebacks: number; concededComebacks: number; htftSample: number; form5: PublicForm; form10: PublicForm };
-export type PublicSnapshot = { matches: PublicMatch[]; leagues: PublicLeague[]; loadedAt: string; lastUpdatedAt: string | null; truncated: boolean; excluded: number };
+export type PublicSnapshotSourceFile = {
+  path: string;
+  blobSha: string;
+  season: string;
+  records: number;
+  finished: number;
+  withHt: number;
+  commitSha?: string;
+  committedAt?: string | null;
+};
+export type PublicSnapshotProvenance = {
+  source: string;
+  repository: string;
+  license: string;
+  licenseUrl: string;
+  retrievedAt: string;
+  asOf: string;
+  files: PublicSnapshotSourceFile[];
+};
+export type PublicSnapshot = { matches: PublicMatch[]; leagues: PublicLeague[]; loadedAt: string; lastUpdatedAt: string | null; truncated: boolean; excluded: number; provenance?: PublicSnapshotProvenance[] };
 export type PublicForm = { sample: number; expected: number; pointsPercent: number | null; results: string[]; averageFor: number | null; averageAgainst: number | null; over25: number | null; btts: number | null; htftSample: number; comebacks: number };
 export type FinderFilters = { from: string; to: string; league: string; form: number | null; over25: number | null; btts: number | null; comeBacks: number | null; sample: number; offset: number; search: string };
 export type PublicMatchPreview = { match: PublicMatch; home: PublicForm; away: PublicForm; missing: string[] };
@@ -42,9 +61,9 @@ export type PublicFootballPageData = {
   total: number;
   hasMore: boolean;
   lastUpdatedAt: string | null;
+  truncated: boolean;
   dataSnapshotAt?: string;
   dataStale?: boolean;
-  truncated: boolean;
   unavailableLeagues: string[];
   coverageWarnings: string[];
   teams?: PublicTeam[];

@@ -1,7 +1,8 @@
 import archive from '../../data/match-history/england.json' with { type: 'json' };
-import { ENGLISH_PYRAMID, englishClubName } from '../footballAnalytics/englishPyramid.js';
+import { ENGLISH_PYRAMID } from '../footballAnalytics/englishPyramid.js';
+import { englishClubName } from '../footballAnalytics/englishPyramid.js';
 import { hashId, nameKey } from '../footballAnalytics/normalization.js';
-import type { PublicMatch, PublicSnapshot } from '../../src/types/publicFootball.js';
+import type { PublicMatch, PublicSnapshot, PublicSnapshotProvenance } from '../../src/types/publicFootball.js';
 import { snapshotFromMatches } from './store.js';
 
 type ArchiveMatch = {
@@ -39,7 +40,7 @@ export function buildLocalOpenFootballFallback(): PublicSnapshot {
       const ft = score(row.score?.ft);
       const ht = score(row.score?.ht);
       const finished = row.date <= asOf && ft.home !== null;
-      matches.push({
+      const match: PublicMatch = {
         id: hashId('openfootball-local', seasonData.sourceBlob, seasonData.sourcePath, row.date, nameKey(homeTeam), nameKey(awayTeam)),
         league: { slug: `england-${league.id}`, name: league.name, country: 'England' },
         season,
@@ -53,9 +54,33 @@ export function buildLocalOpenFootballFallback(): PublicSnapshot {
         ft: finished ? ft : { home: null, away: null },
         checkedAt: null,
         sources: ['openfootball'],
-      });
+      };
+      matches.push(match);
     }
   }
 
-  return snapshotFromMatches(matches, new Date(`${asOf}T00:00:00.000Z`), false, 0);
+  const loadedAt = `${asOf}T00:00:00.000Z`;
+  const provenance: PublicSnapshotProvenance[] = [{
+    source: 'OpenFootball historical archive',
+    repository: 'https://github.com/openfootball/football.json',
+    license: 'CC0 1.0',
+    licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    retrievedAt: `${asOf}T00:00:00.000Z`,
+    asOf,
+    files: data.seasons.map((entry) => {
+      const tier = Number(entry.sourcePath.match(/(?:^|\/)en\.(\d+)\.json$/)?.[1]);
+      const league = ENGLISH_PYRAMID.find((item) => item.tier === tier);
+      const seasonMatches = matches.filter((match) => match.season === entry.season.replace('-', '/')
+        && match.league.slug === `england-${league?.id}`);
+      return { path:entry.sourcePath,blobSha:entry.sourceBlob,season:entry.season.replace('-', '/'),records:entry.matches.length,
+        finished:seasonMatches.filter((match)=>match.status==='finished').length,withHt:seasonMatches.filter((match)=>match.ht.home!==null).length };
+    }),
+  }];
+  return snapshotFromMatches(matches, new Date(loadedAt), false, 0, provenance);
 }
+
+export const localOpenFootballArchiveInfo = () => ({
+  source: data.source,
+  asOf: data.asOf,
+  matchCount: buildLocalOpenFootballFallback().matches.length,
+});
