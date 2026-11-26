@@ -61,7 +61,51 @@ stvarne lige/rezultate, ETag, history/stats/home, zakljucavanje i SEO putanje.
 
 Kod regresije: `vercel rollback <prethodni-deployment-id>` iz istog projekta/tima.
 Prethodni poznati deployment: `dpl_GxijDeM5Z5uJfs1S5Kpm1RnD8SvP`.
-Pre rollback-a potvrditi poslednji aktivni deployment. Ovo vraca aplikaciju,
+Pre rollback-a potvrditi poslednji aktivni deployment i rollback candidacy.
+Ako stara verzija vise nije rollback kandidat, `vercel promote` moze vratiti
+eksplicitno izabrani, postojeci READY produkcioni deployment bez rebuild-a.
+Rollback nije izvrsavan nad aktivnom produkcijom tokom provere. Ovo vraca aplikaciju,
 ne opozvane tokene. Ne vracati kompromitovane tokene, ne brisati snapshot niti
 ukljucivati blokirani Neon radi automatskog fallback-a. Sema/podaci drugih baza
 nisu menjani ovim release-om.
+
+## Zavrsna produkciona verifikacija, 26.11.2026.
+
+- GitHub `main` i `codex/turso-public-recovery`: `36434864aef559daded000634d55bc73be66b305`.
+- Staged deployment `dpl_4L8NFXfTbt9wxbN6esL8YqfLHrmU` je prvo proveravan
+  bez promene domena, zatim promovisan. Posle fast-forward-a GitHub main-a,
+  Vercel je iz istog commita napravio aktivni Git deployment
+  `dpl_HVbGpubVMFAJ4MGPkM2WHTd1TvHx` (READY).
+- Aktivni domen `eliteviptips.com` potvrdjen je na tom deploymentu.
+- Stvarni remote build ima 9 lambda funkcija, 3 slobodna mesta do Hobby limita 12;
+  `api/football-analytics` bundle staged builda je 5,17 MB.
+- Lokalni Vercel builder nije prosao zbog Windows EPERM symlink zabrane u CLI
+  kesu. Ne predstavljati ovu proveru kao PASS; remote build jeste PASS.
+- Production `/fudbal` i public API imaju `X-Data-Provider: turso`,
+  `X-Snapshot-Records: 3636`, verziju
+  `16644f8ae9b5766663fa79b35ca35fe6cd583837f487753dd610156e18281391`.
+- Stvarne lige: Championship 1.630, League One 813, League Two 813,
+  Premier League 380. Nepoznati HT/FT ostaju null; uzorci nisu kompletni.
+- `/fudbal`, public API, pocetna, `/history`, `/stats`, robots i sitemap
+  vracaju odgovarajuci sadrzaj. `/fudbal` nema public noindex zaglavlje;
+  JSON API namerno ostaje noindex. Istorija/performanse ucitane su i u browseru.
+- Anonymous private analytics status zahtevi su 403/private,no-store.
+- CDN HIT i If-None-Match 304/0 bajtova potvrdjeni su na glavnom domenu.
+- Development token je posle rotacije stvarno proveravan: konekcija, jedna
+  tabela/cetiri kolone/jedan indeks, jedan snapshot, 149.269 bajtova, ista verzija.
+  Izolovani TEMP TABLE write/read test je PASS, persistentDataChanged=false.
+- Ciljani testovi u originalnom worktree-u nakon prenosa popravki: 21 PASS.
+- U posmatranom 30-minutnom produkcionom prozoru nema error/fatal runtime logova;
+  to nije garancija odsustva svih gresaka ili potvrda celog meseca.
+- Nisu izvrsene probne kupovine, admin ticket writes, Neon eksporti, Firestore
+  migracije niti menjanje rules. Browser sesija je kasnije bila admin; ne
+  predstavljati tu daily-tips proveru kao novi guest lock test.
+
+## Preostale granice
+
+Privatna napredna analitika i dalje zavisi od Neona. Javna projekcija nije
+migracija cele istorijske baze. Izvor nema sveze rezultate posle septembra 2026,
+a nizi engleski rangovi nisu potpuno pokriveni. CSV prava ostaju blokada za javni
+uvoz arhive. Mesecna Turso potrosnja nije izmerena: dokazani su payload velicina,
+kes i ograniceni broj poziva, a ne garantovana mesecna usteda. Nije bilo placenih
+aktivacija niti DNS izmena.
