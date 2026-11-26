@@ -335,9 +335,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Admins collection (optional but good practice)
+    // Admin registry is private; writes remain console-only.
     match /admins/{userId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow write: if false; // Only manageable via console
     }
   }
