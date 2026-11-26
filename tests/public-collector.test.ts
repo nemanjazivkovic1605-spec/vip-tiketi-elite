@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import { englishLeague } from '../server/footballAnalytics/englishPyramid.ts';
 import { hashId } from '../server/footballAnalytics/normalization.ts';
-import { buildTursoCollectorSnapshot, filterStaleCollectorDatasets, parseCollectorDatasets, validateCollectorFreshness } from '../server/publicFootball/collector.ts';
+import { buildTursoCollectorSnapshot, filterStaleCollectorDatasets, parseCollectorDatasets, shouldWritePublicCollector, validateCollectorFreshness } from '../server/publicFootball/collector.ts';
 import { createPublicCollectorHandler } from '../server/publicFootball/collectorHandler.ts';
 import { snapshotFromMatches, publicSnapshotVersion } from '../server/publicFootball/store.ts';
 import type { MatchObservation } from '../src/types/footballAnalytics.ts';
@@ -78,6 +78,16 @@ test('collector rejects stale feeds and unresolved matches in the past before wr
   const plan = buildTursoCollectorSnapshot(snapshotFromMatches([], fixedDate), dataset(...recentResults(), pastWithoutResult, observation()), fixedDate);
   assert.equal(plan.summary.rejected, 1);
   assert.equal(plan.snapshot.matches.some(match => match.date === '2026-11-25' && match.homeTeam === 'Arsenal'), false);
+});
+
+test('daily automation writes only after the one-time schedule gate; manual dispatch defaults to dry-run', () => {
+  assert.equal(shouldWritePublicCollector('schedule', undefined, 'true'), true);
+  assert.equal(shouldWritePublicCollector('schedule', 'true', 'false'), false);
+  assert.equal(shouldWritePublicCollector('schedule', undefined, undefined), false);
+  assert.equal(shouldWritePublicCollector('workflow_dispatch', 'true', undefined), true);
+  assert.equal(shouldWritePublicCollector('workflow_dispatch', 'false', 'true'), false);
+  assert.equal(shouldWritePublicCollector('push', 'true', 'true'), false);
+  assert.equal(shouldWritePublicCollector(undefined, undefined, undefined), false);
 });
 
 const makeResponse = () => ({

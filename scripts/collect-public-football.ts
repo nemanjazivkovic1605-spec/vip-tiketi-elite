@@ -1,15 +1,20 @@
 import { loadOpenPublicDatasets } from '../server/publicFootball/sync.js';
-import { COLLECTOR_BACKFILL_DAYS, COLLECTOR_LOOKAHEAD_DAYS, filterStaleCollectorDatasets, validateCollectorFreshness } from '../server/publicFootball/collector.js';
+import { COLLECTOR_BACKFILL_DAYS, COLLECTOR_LOOKAHEAD_DAYS, filterStaleCollectorDatasets, shouldWritePublicCollector, validateCollectorFreshness } from '../server/publicFootball/collector.js';
 import { addDays, localDate } from '../server/sportsApi.js';
 
 const baseUrl = process.env.ELITE_COLLECTOR_URL || 'https://eliteviptips.com/api/football-analytics';
 const audience = 'https://eliteviptips.com/api/football-analytics';
 const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-if (!requestUrl || !requestToken) throw new Error('GitHub Actions OIDC kredencijali nisu dostupni.');
+const writeEnabled = shouldWritePublicCollector(
+  process.env.GITHUB_EVENT_NAME,
+  process.env.ELITE_COLLECTOR_CONFIRM_WRITE,
+  process.env.ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED,
+);
 
 async function getOidcToken() {
-  const url = new URL(requestUrl!);
+  if (!requestUrl || !requestToken) throw new Error('GitHub Actions OIDC kredencijali nisu dostupni.');
+  const url = new URL(requestUrl);
   url.searchParams.set('audience', audience);
   const response = await fetch(url, { headers: { Authorization: `Bearer ${requestToken}` }, signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`OIDC token nije izdat (HTTP ${response.status}).`);
@@ -18,14 +23,17 @@ async function getOidcToken() {
   return body.value;
 }
 
-const token = await getOidcToken();
-const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
-const statusResponse = await fetch(`${baseUrl}?action=public-sync-status`, { headers, signal: AbortSignal.timeout(20_000) });
-if (!statusResponse.ok) throw new Error(`Turso sync status nije dostupan (HTTP ${statusResponse.status}).`);
-const status = await statusResponse.json() as { alreadySynced?: boolean; snapshotVerified?: boolean };
-if (status.alreadySynced && status.snapshotVerified) {
-  console.log('Javni snapshot je već uspešno sinhronizovan za današnji datum; preskačem izvore.');
-  process.exit(0);
+let headers: Record<string, string> = { Accept: 'application/json' };
+if (writeEnabled) {
+  const token = await getOidcToken();
+  headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+  const statusResponse = await fetch(`${baseUrl}?action=public-sync-status`, { headers, signal: AbortSignal.timeout(20_000) });
+  if (!statusResponse.ok) throw new Error(`Turso sync status nije dostupan (HTTP ${statusResponse.status}).`);
+  const status = await statusResponse.json() as { alreadySynced?: boolean; snapshotVerified?: boolean };
+  if (status.alreadySynced && status.snapshotVerified) {
+    console.log('Javni snapshot je već uspešno sinhronizovan za današnji datum; preskačem izvore.');
+    process.exit(0);
+  }
 }
 
 const now = new Date();
@@ -53,10 +61,20 @@ const windowed = datasets.map(dataset => ({
   }),
 }));
 const filtered = filterStaleCollectorDatasets(windowed, now);
-const freshness = validateCollectorFreshness(filtered, now);
+let freshness: ReturnType<typeof validateCollectorFreshness> | null = null;
+let freshnessError: string | null = null;
+try { freshness = validateCollectorFreshness(filtered, now); }
+catch (error) { freshnessError = error instanceof Error ? error.message : 'Izvor nema potvrđenu svežinu.'; }
 const transmittedMatches = filtered.reduce((total, dataset) => total + dataset.records.length, 0);
 const body = JSON.stringify({ datasets: filtered });
 if (Buffer.byteLength(body) > 1_900_000) throw new Error('Collector paket je prevelik; ništa nije poslato.');
+
+if (!writeEnabled) {
+  console.log(JSON.stringify({ mode: 'dry-run', window: { from, to }, providerRequests, datasets: filtered.map(({ name, state, records, reason }) => ({ name, state, records: records.length, reason })),
+    freshness, eligibleToWrite: !freshnessError, reason: freshnessError, transmittedMatches, payloadBytes: Buffer.byteLength(body), writes: 0 }));
+  process.exit(0);
+}
+if (freshnessError) throw new Error(freshnessError);
 
 const response = await fetch(`${baseUrl}?action=public-sync-ingest`, {
   method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body,

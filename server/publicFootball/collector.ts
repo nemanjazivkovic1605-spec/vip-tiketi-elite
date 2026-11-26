@@ -14,6 +14,16 @@ export const COLLECTOR_LOOKAHEAD_DAYS = 14;
 export const COLLECTOR_MAX_RESULT_AGE_DAYS = 10;
 export const COLLECTOR_MIN_RECENT_RESULTS = 3;
 
+export function shouldWritePublicCollector(
+  eventName: string | undefined,
+  manualConfirmation: string | undefined,
+  dailyAutomationEnabled: string | undefined,
+) {
+  if (eventName === 'schedule') return dailyAutomationEnabled === 'true';
+  if (eventName === 'workflow_dispatch') return manualConfirmation === 'true';
+  return false;
+}
+
 export type CollectorDataset = { name: string; state: 'available' | 'unavailable' | 'error'; records: MatchObservation[]; reason?: string };
 
 const complete = (score: { home: number | null; away: number | null }) => Number.isInteger(score.home) && Number.isInteger(score.away)
