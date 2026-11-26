@@ -27,6 +27,8 @@ import { htftRanking, htftTransitions, readHtftTeam, readHtftMatch, htftSchedule
 import type { HtftFilters, HtftCode } from '../src/types/htftAnalytics.js';
 import { planPublicSync,applyPublicSync,runPublicDailySync } from '../server/publicFootball/sync.js';
 import { sportsHealthReport } from '../server/publicFootball/audit.js';
+import { publicCollectorHandler } from '../server/publicFootball/collectorHandler.js';
+import { publicFootballReadConfig } from '../server/runtimeEnvironment.js';
 
 export const maxDuration = 240;
 const send = (response: ServerResponse, status: number, data: unknown) => {
@@ -50,6 +52,7 @@ export const createAnalyticsHandler =
     database = getAnalyticsDatabase,
     cron = isCronRequest,
     publicHandler = async (request:IncomingMessage,response:ServerResponse) => (await import('../server/publicFootball/http.js')).default(request,response),
+    collectorHandler = publicCollectorHandler,
   ) =>
   async (request: IncomingMessage, response: ServerResponse) => {
     response.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -59,6 +62,8 @@ export const createAnalyticsHandler =
     if(url.searchParams.get('public')==='1')return publicHandler(request,response);
     const action =
       url.searchParams.get("action") || (cron(request) ? "sync" : "status");
+    if (action === 'public-sync-status' || action === 'public-sync-ingest')
+      return collectorHandler(request, response, action);
     const scheduled = action === "sync" && cron(request);
     if (!scheduled && !(await authorize(request)))
       return send(response, 403, {
@@ -130,7 +135,9 @@ export const createAnalyticsHandler =
         return send(response, 200, {
           results: process.env.ANALYTICS_SYNC_ENABLED === 'true' ? await refreshAnalytics(db) : [],
           historical: await syncHistoricalCurrentSeason(db),
-          publicFootball: await runPublicDailySync(db),
+          publicFootball: publicFootballReadConfig().provider === 'turso'
+            ? { skipped: true, reason: 'Turso javni snapshot osvežava GitHub Actions collector; preskačem dupli Neon sync.' }
+            : await runPublicDailySync(db),
         });
       if(action==='public-sync-plan'||action==='public-sync-write') {
         if(request.method!=='POST')return send(response,405,{error:'Sinhronizacija zahteva eksplicitnu admin POST akciju.'});

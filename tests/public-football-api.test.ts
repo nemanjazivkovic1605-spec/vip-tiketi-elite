@@ -6,7 +6,7 @@ import { snapshotFromMatches } from '../server/publicFootball/store.ts';
 import { mapPublicFootballMatch,PUBLIC_FIELDS } from '../server/publicFootball/policy.ts';
 const now=new Date('2026-11-18T12:00:00Z');
 const fields={'home.name':'Home <script>alert(1)</script>','away.name':'Away','league.name':'League','league.country':'England',season:'2026/27',matchDate:'2026-11-20',status:'unknown'};
-const fixture=mapPublicFootballMatch('a'.repeat(32),{environment:'real',fields,provenance:Object.fromEntries(PUBLIC_FIELDS.map(key=>[key,{provider:'openfootball'}]))},now)!;
+const fixture=mapPublicFootballMatch('a'.repeat(32),{environment:'real',fields,provenance:Object.fromEntries(PUBLIC_FIELDS.map(key=>[key,{provider:'openfootball',observedAt:now.toISOString()}]))},now)!;
 const snapshot=snapshotFromMatches([fixture],now);
 async function call(url:string,method='GET',load=async()=>snapshot,headers:Record<string,string>={}){const response:any={statusCode:0,headers:{},body:'',setHeader(name:string,value:string){this.headers[name]=value;},end(value:string){this.body=value;}};await createPublicFootballHandler(load,()=>now)({url,method,headers}as any,response);return response;}
 
@@ -19,6 +19,21 @@ test('public pages expose validators and bounded CDN caching',async()=>{
   const cached=await call('/api/public-football?page=overview','GET',async()=>snapshot,{'if-none-match':first.headers.ETag});
   assert.equal(cached.statusCode,304);
   assert.equal(cached.body,undefined);
+});
+
+test('old source observations are visibly stale even while the database is reachable',async()=>{
+  const oldDate=new Date('2026-09-22T09:33:49.000Z');
+  const oldFixture=mapPublicFootballMatch('b'.repeat(32),{environment:'real',fields,provenance:Object.fromEntries(PUBLIC_FIELDS.map(key=>[key,{provider:'openfootball',observedAt:oldDate.toISOString()}]))},oldDate)!;
+  const oldSnapshot=snapshotFromMatches([oldFixture],oldDate);
+  const html=await call('/api/public-football?page=overview','GET',async()=>oldSnapshot);
+  assert.equal(html.headers['X-Data-Freshness'],'stale');
+  assert.equal(html.headers['X-Data-Stale-Reason'],'source');
+  assert.match(html.body,/Izvor nije osvežen poslednjih 10 dana/);
+  const api=await call('/api/public-football?action=overview','GET',async()=>oldSnapshot);
+  const data=JSON.parse(api.body);
+  assert.equal(data.dataStale,true);
+  assert.equal(data.dataStaleReason,'source');
+  assert.equal(data.rows.length,0,'unverified stale fixtures must not appear in upcoming schedules');
 });
 
 test('shared Vercel function keeps the public projection read-only and cannot route public requests into admin actions',async()=>{

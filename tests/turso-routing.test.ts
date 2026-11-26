@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicFootballReadConfig, tursoConnectionConfig } from '../server/runtimeEnvironment.ts';
+import { environmentReadiness, publicFootballReadConfig, tursoConnectionConfig, tursoSnapshotWriteConfig } from '../server/runtimeEnvironment.ts';
 import { createPublicSnapshotLoader } from '../server/publicFootball/databaseRouter.ts';
 import { snapshotFromMatches } from '../server/publicFootball/store.ts';
-import { runTursoIsolatedSelfTest } from '../server/publicFootball/tursoSnapshot.ts';
+import { createTursoPublicSnapshotSchema, readTursoPublicSnapshotRecord, runTursoIsolatedSelfTest, writeTursoPublicSnapshotIfUnchanged } from '../server/publicFootball/tursoSnapshot.ts';
 
 test('Turso self-test keeps temporary DDL, write and read inside one transaction batch', async () => {
   let calls = 0;
@@ -105,6 +105,42 @@ test('explicit Turso routing fails closed and does not fall back to Neon', async
   await assert.rejects(loader(), /Turso is unavailable/);
   assert.equal(tursoCalls, 1);
   assert.equal(neonCalls, 0);
+});
+
+test('Turso snapshot writer credentials are isolated from the public read token by deployment', () => {
+  const env = {
+    VERCEL_ENV: 'production',
+    TURSO_DATABASE_URL: 'libsql://elite-eu.turso.io', TURSO_AUTH_TOKEN: 'read-token',
+    TURSO_SNAPSHOT_WRITE_DATABASE_URL: 'libsql://elite-eu.turso.io', TURSO_SNAPSHOT_WRITE_AUTH_TOKEN: 'write-token',
+  } as NodeJS.ProcessEnv;
+  const writer = tursoSnapshotWriteConfig(env);
+  assert.equal(writer.configured, true);
+  assert.equal(writer.url, 'libsql://elite-eu.turso.io');
+  assert.equal(writer.authToken, 'write-token');
+  assert.equal(tursoSnapshotWriteConfig({ VERCEL_ENV: 'preview', TURSO_SNAPSHOT_WRITE_DATABASE_URL: env.TURSO_DATABASE_URL,
+    TURSO_SNAPSHOT_WRITE_AUTH_TOKEN: 'production-only' } as NodeJS.ProcessEnv).configured, false);
+  assert.equal(environmentReadiness(env).publicFootballDatabase.snapshotWriterConfigured, true);
+});
+
+test('Turso snapshot compare-and-swap allows one update and rejects a stale writer without replacing the payload', async () => {
+  const config = { deployment: 'development', configured: true, url: 'file::memory:', authToken: 'isolated-test' } as const;
+  const snapshot = snapshotFromMatches([]);
+  await createTursoPublicSnapshotSchema(config);
+  await writeTursoPublicSnapshotIfUnchanged(snapshot, { version: null, updatedAt: null }, config, config);
+  const original = await readTursoPublicSnapshotRecord(config);
+  assert.ok(original);
+  const updated = { ...snapshot, collectorSync: { date: '2026-11-26', completedAt: '2026-11-26T12:00:00.000Z',
+    source: 'openfootball' as const, status: 'partial' as const, freshestFinishedDate: '2026-11-25', freshnessDays: 1,
+    recentFinishedMatches: 3, lookaheadFixtures: 4, received: 3, created: 0, updated: 0, unchanged: 0, conflicts: 0, rejected: 0 } };
+  await assert.rejects(writeTursoPublicSnapshotIfUnchanged(updated, { version: original.version, updatedAt: 'stale-revision' }, config, config), /snapshot je promenjen/);
+  assert.equal((await readTursoPublicSnapshotRecord(config))?.snapshot.collectorSync, undefined);
+  await writeTursoPublicSnapshotIfUnchanged(updated, { version: original.version, updatedAt: original.updatedAt }, config, config);
+  const persisted = (await readTursoPublicSnapshotRecord(config))?.snapshot.collectorSync;
+  assert.equal(persisted?.date, '2026-11-26');
+  assert.equal(persisted?.status, 'partial');
+  assert.equal(persisted?.freshestFinishedDate, '2026-11-25');
+  assert.equal(persisted?.recentFinishedMatches, 3);
+  assert.equal(persisted?.lookaheadFixtures, 4);
 });
 
 test('public snapshot read remains routed to Neon until Turso is explicitly selected', async () => {

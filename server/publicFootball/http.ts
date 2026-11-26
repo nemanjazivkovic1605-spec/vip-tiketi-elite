@@ -10,6 +10,7 @@ import { leaguePath,matchPath,pairPath,publicSlug } from './paths.js';
 import { publicFootballRoute } from './routes.js';
 import { buildLocalOpenFootballFallback } from './localOpenFootballFallback.js';
 import { publicFootballSitemap,publicSitemapIndex } from './sitemaps.js';
+import { COLLECTOR_MAX_RESULT_AGE_DAYS } from './collector.js';
 export { publicFootballSitemap } from './sitemaps.js';
 
 const snapshot=publicSnapshotCache(loadPublicSnapshot,60*60_000,30_000,buildLocalOpenFootballFallback());
@@ -47,14 +48,20 @@ export const createPublicFootballHandler=(load:()=>Promise<PublicSnapshot|Public
     const isReadResult=(value:PublicSnapshot|PublicSnapshotRead):value is PublicSnapshotRead=>'snapshot'in value&&'stale'in value;
     const freshness=isReadResult(loaded)?loaded:null;
     const value=freshness?freshness.snapshot:loaded as PublicSnapshot;
+    const sourceUpdatedAt=value.lastUpdatedAt?Date.parse(value.lastUpdatedAt):NaN;
+    const sourceFresh=Number.isFinite(sourceUpdatedAt)&&sourceUpdatedAt<=now.getTime()+5*60_000
+      &&now.getTime()-sourceUpdatedAt<=COLLECTOR_MAX_RESULT_AGE_DAYS*86_400_000;
+    const staleReason=freshness?.stale?'database':sourceFresh?undefined:'source';
+    const dataStale=Boolean(staleReason);
     response.setHeader('Cache-Control','public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800');
-    response.setHeader('X-Data-Freshness',freshness?.stale?'stale':'fresh');
+    response.setHeader('X-Data-Freshness',dataStale?'stale':'fresh');
+    response.setHeader('X-Data-Stale-Reason',staleReason||'none');
     response.setHeader('X-Data-Provider',freshness?.stale?'last-good-fallback':publicFootballReadConfig().provider);
     response.setHeader('X-Snapshot-Version',publicSnapshotVersion(value));
     response.setHeader('X-Snapshot-Records',String(value.matches.length));
     response.setHeader('X-Snapshot-Loaded-At',value.loadedAt);
     if(value.lastUpdatedAt)response.setHeader('X-Snapshot-Source-Updated-At',value.lastUpdatedAt);
-    if(freshness?.stale)response.setHeader('Warning','110 - "Response is stale because the database is unavailable"');
+    if(dataStale)response.setHeader('Warning','110 - "Response contains stale public football data"');
     if(action==='sitemap'){
       const segment=url.searchParams.get('segment');
       const xml=segment?publicFootballSitemap(value,now,segment):publicSitemapIndex(value);
@@ -71,7 +78,7 @@ export const createPublicFootballHandler=(load:()=>Promise<PublicSnapshot|Public
       return match?redirect(matchPath(match)):error(404,'Utakmica nije pronađena u javnom pregledu.');
     }
     let data:PublicFootballPageData;
-    try{data=buildPublicFootballPage(value,action as PublicFootballPageData['page'],url.searchParams,now);data.dataStale=Boolean(freshness?.stale);data.dataSnapshotAt=value.loadedAt;}catch(value){return error(400,(value as Error).message);}
+    try{data=buildPublicFootballPage(value,action as PublicFootballPageData['page'],url.searchParams,now);data.dataStale=dataStale;data.dataStaleReason=staleReason;data.dataSnapshotAt=value.loadedAt;}catch(value){return error(400,(value as Error).message);}
     if(action==='league'&&!data.league||action==='match'&&!data.match||action==='team'&&!data.team||action==='pair'&&!data.pair)return error(404,'Za ovaj izbor nema javno dostupnih podataka.');
     if(html&&data.pair&&route&&url.pathname!==pairPath(data.pair.first,data.pair.second))return redirect(pairPath(data.pair.first,data.pair.second));
     if(html){

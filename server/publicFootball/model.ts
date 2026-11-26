@@ -2,6 +2,7 @@ import type { FinderFilters, PublicFootballPageData, PublicMatch, PublicMatchPre
 import { publicAggregate, publicTeamForm } from './stats.js';
 import { addDays, localDate, validDate } from '../sportsApi.js';
 import { isPublicTeamMatch, publicDirectory, publicPairKey, publicTeamSummary } from './directory.js';
+import { COLLECTOR_MAX_RESULT_AGE_DAYS } from './collector.js';
 export const PUBLIC_PAGE_SIZE=30;
 export function parseFinderFilters(params:URLSearchParams,now=new Date()):FinderFilters {
   const today=localDate(now),from=params.get('from')||today,to=params.get('to')||addDays(from,6);
@@ -13,7 +14,11 @@ export function parseFinderFilters(params:URLSearchParams,now=new Date()):Finder
   if(!Number.isInteger(sample)||sample<1||sample>5||!Number.isInteger(offset)||offset<0||offset>20000||comeBacks!==null&&(!Number.isInteger(comeBacks)||comeBacks<0||comeBacks>5))throw new Error('Neispravan uzorak ili stranica.');
   return{from,to,league,form:percent('form'),over25:percent('over25'),btts:percent('btts'),comeBacks,sample,offset,search:(params.get('search')||'').trim().slice(0,60)};
 }
-const upcoming=(match:PublicMatch,now:Date)=>['scheduled','unknown','live'].includes(match.status)&&match.ft.home===null&&match.date>=localDate(now)&&(!match.kickoffAt||match.status==='live'||Date.parse(match.kickoffAt)>now.getTime());
+const recentlyVerified=(match:PublicMatch,now:Date)=>{
+  const checkedAt=match.checkedAt?Date.parse(match.checkedAt):NaN;
+  return Number.isFinite(checkedAt)&&checkedAt<=now.getTime()+5*60_000&&now.getTime()-checkedAt<=COLLECTOR_MAX_RESULT_AGE_DAYS*86_400_000;
+};
+const upcoming=(match:PublicMatch,now:Date)=>recentlyVerified(match,now)&&['scheduled','unknown','live'].includes(match.status)&&match.ft.home===null&&match.date>=localDate(now)&&(!match.kickoffAt||match.status==='live'||Date.parse(match.kickoffAt)>now.getTime());
 const order=(a:PublicMatch,b:PublicMatch)=>a.date.localeCompare(b.date)||(a.time||'99:99').localeCompare(b.time||'99:99')||a.id.localeCompare(b.id);
 export function publicPreview(matches:PublicMatch[],match:PublicMatch):PublicMatchPreview {
   const home=publicTeamForm(matches,match.homeTeam,match),away=publicTeamForm(matches,match.awayTeam,match);

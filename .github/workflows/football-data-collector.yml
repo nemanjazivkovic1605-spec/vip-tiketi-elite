@@ -1,0 +1,40 @@
+name: Collect permitted public football data
+
+on:
+  schedule:
+    - cron: '11 5 * * *'
+  workflow_dispatch:
+    inputs:
+      confirm_write:
+        description: 'Potvrdi produkcioni Turso upis; bez potvrde se radi samo dry-run'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: public-football-collector-production
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    if: github.event_name != 'schedule' || vars.ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Fetch permitted datasets and submit incremental window
+        env:
+          ELITE_COLLECTOR_URL: https://eliteviptips.com/api/football-analytics
+          ELITE_COLLECTOR_EVENT_NAME: ${{ github.event_name }}
+          ELITE_COLLECTOR_CONFIRM_WRITE: ${{ inputs.confirm_write || false }}
+          ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED: ${{ vars.ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED }}
+        run: node --import tsx scripts/collect-public-football.ts

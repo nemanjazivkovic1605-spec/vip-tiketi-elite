@@ -39,7 +39,31 @@ export type PublicSnapshotProvenance = {
   asOf: string;
   files: PublicSnapshotSourceFile[];
 };
-export type PublicSnapshot = { matches: PublicMatch[]; leagues: PublicLeague[]; loadedAt: string; lastUpdatedAt: string | null; truncated: boolean; excluded: number; provenance?: PublicSnapshotProvenance[] };
+export type PublicSnapshot = {
+  matches: PublicMatch[];
+  leagues: PublicLeague[];
+  loadedAt: string;
+  lastUpdatedAt: string | null;
+  truncated: boolean;
+  excluded: number;
+  provenance?: PublicSnapshotProvenance[];
+  collectorSync?: {
+    date: string;
+    completedAt: string;
+    source: 'openfootball';
+    status?: 'complete' | 'partial';
+    freshestFinishedDate?: string;
+    freshnessDays?: number;
+    recentFinishedMatches?: number;
+    lookaheadFixtures?: number;
+    received: number;
+    created: number;
+    updated: number;
+    unchanged: number;
+    conflicts: number;
+    rejected: number;
+  };
+};
 export type PublicForm = { sample: number; expected: number; pointsPercent: number | null; results: string[]; averageFor: number | null; averageAgainst: number | null; over25: number | null; btts: number | null; htftSample: number; comebacks: number };
 export type FinderFilters = { from: string; to: string; league: string; form: number | null; over25: number | null; btts: number | null; comeBacks: number | null; sample: number; offset: number; search: string };
 export type PublicMatchPreview = { match: PublicMatch; home: PublicForm; away: PublicForm; missing: string[] };
@@ -64,6 +88,7 @@ export type PublicFootballPageData = {
   truncated: boolean;
   dataSnapshotAt?: string;
   dataStale?: boolean;
+  dataStaleReason?: 'database' | 'source';
   unavailableLeagues: string[];
   coverageWarnings: string[];
   teams?: PublicTeam[];
