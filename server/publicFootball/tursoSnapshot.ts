@@ -215,7 +215,7 @@ export async function writeTursoPublicSnapshotIfUnchanged(
   if (!checked || publicSnapshotVersion(checked.snapshot) !== version || checked.snapshot.matches.length !== snapshot.matches.length
     || checked.snapshot.collectorSync?.date !== snapshot.collectorSync?.date)
     throw new Error('Turso collector snapshot nije potvrđen nakon upisa.');
-  return { version, matchCount: checked.snapshot.matches.length, payloadBytes: encoded.payloadBytes,
+  return { provider: 'turso', verified: true, version, matchCount: checked.snapshot.matches.length, payloadBytes: encoded.payloadBytes,
     uncompressedPayloadBytes: encoded.uncompressedPayloadBytes,
     compressionRatio: Number((encoded.uncompressedPayloadBytes / Math.max(1, encoded.payloadBytes)).toFixed(2)) };
 }

@@ -11,16 +11,66 @@ const MAX_DATASETS = 24;
 const MAX_MATCHES = 5_000;
 export const COLLECTOR_BACKFILL_DAYS = 30;
 export const COLLECTOR_LOOKAHEAD_DAYS = 14;
+export const COLLECTOR_MAX_RESULT_AGE_DAYS = 10;
+export const COLLECTOR_MIN_RECENT_RESULTS = 3;
 
 export type CollectorDataset = { name: string; state: 'available' | 'unavailable' | 'error'; records: MatchObservation[]; reason?: string };
 
 const complete = (score: { home: number | null; away: number | null }) => Number.isInteger(score.home) && Number.isInteger(score.away)
   && score.home !== null && score.away !== null && score.home >= 0 && score.away >= 0;
 const identity = (match: PublicMatch) => [match.league.slug, match.season.slice(0, 4), nameKey(match.homeTeam), nameKey(match.awayTeam), match.date].join(':');
+const observationIdentity = (row: MatchObservation, date: string) => {
+  const league = englishLeague(row.league.name);
+  return hashId('openfootball-freshness', league?.id || nameKey(row.league.name), row.season, nameKey(row.home.name), nameKey(row.away.name), date);
+};
 const facts = (match: PublicMatch) => JSON.stringify({ ...match, checkedAt: null });
 const isScorePair = (value: unknown) => !!value && typeof value === 'object' && !Array.isArray(value)
   && ['home', 'away'].every(key => (value as Record<string, unknown>)[key] === null
     || Number.isInteger((value as Record<string, unknown>)[key]) && Number((value as Record<string, unknown>)[key]) >= 0 && Number((value as Record<string, unknown>)[key]) < 100);
+
+export function filterStaleCollectorDatasets(datasets: CollectorDataset[], now = new Date()) {
+  const today = localDate(now);
+  const earliestFreshDate = addDays(today, -COLLECTOR_MAX_RESULT_AGE_DAYS);
+  return datasets.map(dataset => {
+    if (dataset.state !== 'available') return dataset;
+    const recentFixtures = new Set(dataset.records.flatMap(row => {
+      if (row.provider !== 'openfootball' || row.environment !== 'real' || row.status !== 'finished' || !complete(row.ft)) return [];
+      const date = row.kickoffAt ? localDate(new Date(row.kickoffAt)) : row.matchDate || '';
+      return date >= earliestFreshDate && date <= today ? [observationIdentity(row, date)] : [];
+    }));
+    return recentFixtures.size > 0 ? dataset : { ...dataset, state: 'unavailable' as const, records: [],
+      reason: `Skup isključen: nema rezultata u poslednjih ${COLLECTOR_MAX_RESULT_AGE_DAYS} dana.` };
+  });
+}
+
+export function validateCollectorFreshness(datasets: CollectorDataset[], now = new Date()) {
+  const today = localDate(now);
+  const earliestFreshDate = addDays(today, -COLLECTOR_MAX_RESULT_AGE_DAYS);
+  const lookaheadEnd = addDays(today, COLLECTOR_LOOKAHEAD_DAYS);
+  const recentFinishedByFixture = new Map<string, string>();
+  const lookaheadFixtureIds = new Set<string>();
+
+  for (const dataset of datasets) {
+    if (dataset.state !== 'available') continue;
+    for (const row of dataset.records) {
+      if (row.provider !== 'openfootball' || row.environment !== 'real') continue;
+      const date = row.kickoffAt ? localDate(new Date(row.kickoffAt)) : row.matchDate || '';
+      if (row.status === 'finished' && complete(row.ft) && date >= earliestFreshDate && date <= today)
+        recentFinishedByFixture.set(observationIdentity(row, date), date);
+      if (date >= today && date <= lookaheadEnd && !['postponed', 'canceled'].includes(row.status) && !complete(row.ft))
+        lookaheadFixtureIds.add(observationIdentity(row, date));
+    }
+  }
+
+  const freshestFinishedDate = [...recentFinishedByFixture.values()].sort().at(-1) || null;
+  if (recentFinishedByFixture.size < COLLECTOR_MIN_RECENT_RESULTS || !freshestFinishedDate) {
+    throw new Error(`Dozvoljeni izvor nema sveže završene rezultate u poslednjih ${COLLECTOR_MAX_RESULT_AGE_DAYS} dana; Turso snapshot nije promenjen.`);
+  }
+  if (lookaheadFixtureIds.size === 0) throw new Error('Dozvoljeni izvor nema proverljive predstojeće utakmice u periodu za osvežavanje; Turso snapshot nije promenjen.');
+
+  const freshnessDays = Math.max(0, Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${freshestFinishedDate}T00:00:00Z`)) / 86_400_000));
+  return { freshestFinishedDate, freshnessDays, recentFinishedMatches: recentFinishedByFixture.size, lookaheadFixtures: lookaheadFixtureIds.size };
+}
 
 export function parseCollectorDatasets(value: unknown): CollectorDataset[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Neispravan collector payload.');
@@ -81,8 +131,11 @@ export function buildTursoCollectorSnapshot(
   datasets: CollectorDataset[],
   now = new Date(),
 ) {
-  if (!datasets.some(dataset => dataset.state === 'available'))
+  const safeDatasets = filterStaleCollectorDatasets(datasets, now);
+  if (!safeDatasets.some(dataset => dataset.state === 'available'))
     throw new Error('Nijedan dozvoljeni OpenFootball skup nije uspešno preuzet; snapshot nije promenjen.');
+
+  const freshness = validateCollectorFreshness(safeDatasets, now);
 
   const base = previous || buildLocalOpenFootballFallback();
   const today = localDate(now);
@@ -93,11 +146,12 @@ export function buildTursoCollectorSnapshot(
   const seen = new Set<string>();
   let received = 0, created = 0, updated = 0, unchanged = 0, conflicts = 0, rejected = 0;
 
-  for (const dataset of datasets) for (const observation of dataset.records) {
+  for (const dataset of safeDatasets) for (const observation of dataset.records) {
     received++;
     if (observation.provider !== 'openfootball' || observation.environment !== 'real') { rejected++; continue; }
     const date = observation.kickoffAt ? localDate(new Date(observation.kickoffAt)) : observation.matchDate || '';
     if (date < from || date > to) continue;
+    if (date < today && !complete(observation.ft)) { rejected++; continue; }
     const league = englishLeague(observation.league.name);
     if (!league || league.tier > 5) { rejected++; continue; }
     const id = hashId('openfootball-public', league.id, observation.season, nameKey(observation.home.name), nameKey(observation.away.name));
@@ -123,11 +177,14 @@ export function buildTursoCollectorSnapshot(
   }
 
   if (next.size > 20_000) throw new Error('Collector bi prešao ograničenje snapshot-a od 20.000 utakmica.');
+  const completeSourceSet = safeDatasets.every(dataset => dataset.state === 'available');
   const collectorSync = { date: today, completedAt: now.toISOString(), source: 'openfootball' as const,
+    status: completeSourceSet ? 'complete' as const : 'partial' as const, ...freshness,
     received, created, updated, unchanged, conflicts, rejected };
   const snapshot = snapshotFromMatches([...next.values()].sort((a, b) => a.id.localeCompare(b.id)), now,
     base.truncated, base.excluded, base.provenance, collectorSync);
   const version = publicSnapshotVersion(snapshot);
-  return { snapshot, version, summary: { date: today, from, to, received, created, updated, unchanged, conflicts, rejected,
-    baseMatches: base.matches.length, finalMatches: snapshot.matches.length, version } };
+  return { snapshot, version, summary: { date: today, from, to, ...freshness, status: collectorSync.status, received, created, updated, unchanged, conflicts, rejected,
+    baseMatches: base.matches.length, finalMatches: snapshot.matches.length, version,
+    datasets: safeDatasets.map(({ name, state, records }) => ({ name, state, records: records.length })) } };
 }

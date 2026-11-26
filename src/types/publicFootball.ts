@@ -51,6 +51,11 @@ export type PublicSnapshot = {
     date: string;
     completedAt: string;
     source: 'openfootball';
+    status?: 'complete' | 'partial';
+    freshestFinishedDate?: string;
+    freshnessDays?: number;
+    recentFinishedMatches?: number;
+    lookaheadFixtures?: number;
     received: number;
     created: number;
     updated: number;
