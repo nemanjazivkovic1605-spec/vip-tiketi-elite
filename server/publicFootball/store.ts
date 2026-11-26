@@ -24,7 +24,7 @@ export async function preparePublicFootball(db: AnalyticsDatabase, now = new Dat
   const matches = rows.slice(0,MAX_ROWS).map(row=>mapPublicFootballMatch(row.id, (typeof row.projected === 'string' ? JSON.parse(row.projected) : row.projected) as PublicInput,now)).filter((row):row is NonNullable<typeof row>=>!!row);
   return snapshotFromMatches(matches,now,rows.length>MAX_ROWS,Math.min(rows.length,MAX_ROWS)-matches.length);
 }
-export function snapshotFromMatches(matches: PublicSnapshot['matches'], now=new Date(), truncated=false, excluded=0, provenance?: PublicSnapshotProvenance[]):PublicSnapshot {
+export function snapshotFromMatches(matches: PublicSnapshot['matches'], now=new Date(), truncated=false, excluded=0, provenance?: PublicSnapshotProvenance[], collectorSync?: PublicSnapshot['collectorSync']):PublicSnapshot {
   const leagues = new Map<string,PublicLeague>();
   for (const match of matches) {
     const league = leagues.get(match.league.slug) || {...match.league,matches:0,finished:0,withHt:0,seasons:[],latestDate:'',sources:[]};
@@ -34,7 +34,7 @@ export function snapshotFromMatches(matches: PublicSnapshot['matches'], now=new 
     if(match.date>league.latestDate)league.latestDate=match.date;
     leagues.set(league.slug,league);
   }
-  return {matches,leagues:[...leagues.values()].map(league=>({...league,seasons:league.seasons.sort().reverse()})).sort((a,b)=>a.country.localeCompare(b.country)||a.name.localeCompare(b.name)),loadedAt:now.toISOString(),lastUpdatedAt:matches.map(match=>match.checkedAt||'').sort().at(-1)||null,truncated,excluded,...(provenance?.length?{provenance}:{})};
+  return {matches,leagues:[...leagues.values()].map(league=>({...league,seasons:league.seasons.sort().reverse()})).sort((a,b)=>a.country.localeCompare(b.country)||a.name.localeCompare(b.name)),loadedAt:now.toISOString(),lastUpdatedAt:matches.map(match=>match.checkedAt||'').sort().at(-1)||null,truncated,excluded,...(provenance?.length?{provenance}:{}),...(collectorSync?{collectorSync}:{})};
 }
 export const publicSnapshotVersion=(snapshot:PublicSnapshot)=>createHash('sha256').update(JSON.stringify({
   matches:snapshot.matches,
@@ -68,7 +68,14 @@ export function parsePublicSnapshotPayload(payload: unknown): PublicSnapshot {
       }),
     };
   }) : undefined;
-  return snapshotFromMatches(matches,new Date(candidate.loadedAt),Boolean(candidate.truncated),Number(candidate.excluded)||0,provenance);
+  const sync = candidate.collectorSync;
+  const collectorSync = sync && /^\d{4}-\d\d-\d\d$/.test(sync.date) && typeof sync.completedAt === 'string'
+    && Number.isFinite(Date.parse(sync.completedAt)) && sync.source === 'openfootball'
+    && ['received','created','updated','unchanged','conflicts','rejected'].every(key => Number.isInteger((sync as any)[key]) && (sync as any)[key] >= 0)
+    ? { date: sync.date, completedAt: sync.completedAt, source: 'openfootball' as const, received: sync.received, created: sync.created,
+      updated: sync.updated, unchanged: sync.unchanged, conflicts: sync.conflicts, rejected: sync.rejected }
+    : undefined;
+  return snapshotFromMatches(matches,new Date(candidate.loadedAt),Boolean(candidate.truncated),Number(candidate.excluded)||0,provenance,collectorSync);
 }
 export async function readPublicSnapshot(db:AnalyticsDatabase):Promise<PublicSnapshot> {
   const load = (reader: AnalyticsDatabase) => reader.query('SELECT payload FROM fa_public_snapshots WHERE id=$1',[PUBLIC_SNAPSHOT_ID]);

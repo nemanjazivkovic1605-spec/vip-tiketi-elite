@@ -1,4 +1,4 @@
-import { tursoConnectionConfig } from '../runtimeEnvironment.js';
+import { tursoConnectionConfig, tursoSnapshotWriteConfig } from '../runtimeEnvironment.js';
 import { parsePublicSnapshotPayload, PUBLIC_SNAPSHOT_ID, publicSnapshotVersion } from './store.js';
 import type { PublicSnapshot } from '../../src/types/publicFootball.js';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -123,14 +123,21 @@ export async function runTursoIsolatedSelfTest(config = tursoConnectionConfig(),
 }
 
 export async function readTursoPublicSnapshotIfPresent(config = tursoConnectionConfig()): Promise<PublicSnapshot | null> {
+  return (await readTursoPublicSnapshotRecord(config))?.snapshot || null;
+}
+
+export type TursoPublicSnapshotRecord = { snapshot: PublicSnapshot; version: string; updatedAt: string };
+export type TursoSnapshotRevision = { version: string | null; updatedAt: string | null };
+
+export async function readTursoPublicSnapshotRecord(config = tursoConnectionConfig()): Promise<TursoPublicSnapshotRecord | null> {
   const client = await getClient(requireTursoConfig(config));
   const result = await client.execute({
-    sql: 'SELECT payload FROM fa_public_snapshots WHERE id = ?',
+    sql: 'SELECT version, updated_at, payload FROM fa_public_snapshots WHERE id = ?',
     args: [PUBLIC_SNAPSHOT_ID],
   });
-  const payload = result.rows[0]?.payload;
-  if (typeof payload !== 'string') return null;
-  return decodeTursoSnapshotPayload(payload);
+  const row = result.rows[0];
+  if (!row || typeof row.payload !== 'string') return null;
+  return { snapshot: decodeTursoSnapshotPayload(row.payload), version: String(row.version), updatedAt: String(row.updated_at) };
 }
 
 export async function readTursoPublicSnapshot(config = tursoConnectionConfig()): Promise<PublicSnapshot> {
@@ -164,4 +171,51 @@ export async function writeTursoPublicSnapshot(snapshot: PublicSnapshot, config 
     throw new Error('Provera Turso snapshot-a nije uspela; objavljeni prikaz nije potvrđen.');
   return { version, matchCount: checked.matches.length, payloadBytes: encoded.payloadBytes,
     uncompressedPayloadBytes:encoded.uncompressedPayloadBytes,compressionRatio:Number((encoded.uncompressedPayloadBytes/Math.max(1,encoded.payloadBytes)).toFixed(2)) };
+}
+
+export async function writeTursoPublicSnapshotIfUnchanged(
+  snapshot: PublicSnapshot,
+  expected: TursoSnapshotRevision,
+  writeConfig = tursoSnapshotWriteConfig(),
+  readConfig = tursoConnectionConfig(),
+) {
+  if (!readConfig.configured || !readConfig.url)
+    throw new Error(readConfig.message || 'Turso javno čitanje nije konfigurisano.');
+  const writer = requireTursoConfig(writeConfig);
+  if (writer.url !== readConfig.url)
+    throw new Error('Turso write profil ne cilja javni read snapshot bazu.');
+
+  const encoded = encodeTursoSnapshot(snapshot);
+  const version = publicSnapshotVersion(snapshot);
+  const client = await getClient(writer);
+  const transaction = await client.transaction('write');
+  try {
+    const current = await transaction.execute({
+      sql: 'SELECT version, updated_at FROM fa_public_snapshots WHERE id = ?',
+      args: [PUBLIC_SNAPSHOT_ID],
+    });
+    const row = current.rows[0];
+    const currentVersion = row ? String(row.version) : null;
+    const currentUpdatedAt = row ? String(row.updated_at) : null;
+    if (currentVersion !== expected.version || currentUpdatedAt !== expected.updatedAt)
+      throw new Error('Turso snapshot je promenjen nakon čitanja; ponovite collector sinhronizaciju.');
+    await transaction.execute({
+      sql: `INSERT INTO fa_public_snapshots(id, version, updated_at, payload)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET version = excluded.version, updated_at = excluded.updated_at, payload = excluded.payload`,
+      args: [PUBLIC_SNAPSHOT_ID, version, new Date().toISOString(), encoded.payload],
+    });
+    await transaction.commit();
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* Preserve the original transaction error. */ }
+    throw error;
+  }
+
+  const checked = await readTursoPublicSnapshotRecord(readConfig);
+  if (!checked || publicSnapshotVersion(checked.snapshot) !== version || checked.snapshot.matches.length !== snapshot.matches.length
+    || checked.snapshot.collectorSync?.date !== snapshot.collectorSync?.date)
+    throw new Error('Turso collector snapshot nije potvrđen nakon upisa.');
+  return { version, matchCount: checked.snapshot.matches.length, payloadBytes: encoded.payloadBytes,
+    uncompressedPayloadBytes: encoded.uncompressedPayloadBytes,
+    compressionRatio: Number((encoded.uncompressedPayloadBytes / Math.max(1, encoded.payloadBytes)).toFixed(2)) };
 }

@@ -1,0 +1,30 @@
+name: Collect permitted public football data
+
+on:
+  schedule:
+    - cron: '11 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: public-football-collector-production
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Fetch permitted datasets and submit incremental window
+        env:
+          ELITE_COLLECTOR_URL: https://eliteviptips.com/api/football-analytics
+        run: node --import tsx scripts/collect-public-football.ts

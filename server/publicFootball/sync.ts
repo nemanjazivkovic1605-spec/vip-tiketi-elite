@@ -11,13 +11,13 @@ import { PUBLIC_FIELDS,mapPublicFootballMatch,publicSource,type PublicInput } fr
 import { PUBLIC_SNAPSHOT_ID,readPublicSnapshot,savePublicSnapshot,snapshotFromMatches,publicSnapshotVersion } from './store.js';
 
 type Dataset={name:string;state:'available'|'unavailable'|'error';records:MatchObservation[];reason?:string};
-export type PublicSyncLoader=(now:Date)=>Promise<Dataset[]>;
+export type PublicSyncLoader=(now:Date,options?:{includeOpenLigaDB?:boolean})=>Promise<Dataset[]>;
 const facts=(match:PublicMatch)=>JSON.stringify({...match,checkedAt:null});
 const identity=(match:PublicMatch)=>[match.league.slug,match.season.slice(0,4),nameKey(match.homeTeam),nameKey(match.awayTeam),match.date].join(':');
 export function observationPublicInput(observation:MatchObservation):PublicInput {
   return{environment:observation.environment,fields:Object.fromEntries(PUBLIC_FIELDS.map(field=>[field,field.split('.').reduce((value:any,key)=>value?.[key],observation)])),provenance:Object.fromEntries(PUBLIC_FIELDS.map(field=>[field,{provider:observation.provider,observedAt:observation.observedAt}]))};
 }
-export const loadOpenPublicDatasets:PublicSyncLoader=async now=>{
+export const loadOpenPublicDatasets:PublicSyncLoader=async(now,options={})=>{
   const year=Number(localDate(now).slice(0,4))-(Number(localDate(now).slice(5,7))<7?1:0),season=`${year}/${String(year+1).slice(-2)}`;
   const datasets:Dataset[]=[];
   // Leave time for the SQL plan and atomic commit inside the 240-second function.
@@ -29,7 +29,8 @@ export const loadOpenPublicDatasets:PublicSyncLoader=async now=>{
       datasets.push({name:league.name,state:value.state==='available'?'available':value.state==='error'?'error':'unavailable',records:value.records,reason:value.warnings.join(' ').slice(0,250)});
     }catch{datasets.push({name:league.name,state:'error',records:[],reason:'Isteklo je vreme za proveru izvora; sačuvani podaci ostaju dostupni.'});}
   }
-  for(const [sourceId,name] of [['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']]){
+  const additionalLeagues:Array<[string,string]>=options.includeOpenLigaDB===false?[]:[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
+  for(const [sourceId,name] of additionalLeagues){
     try{
       signal.throwIfAborted();
       const context={provider:'openligadb',sourceId,season:`${year}/${year+1}`,leagueName:name,country:'Germany',environment:'real'} as CoverageRow;

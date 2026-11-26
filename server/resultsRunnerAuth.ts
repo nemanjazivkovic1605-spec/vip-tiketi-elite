@@ -4,10 +4,12 @@ import type { IncomingMessage } from 'node:http';
 const ISSUER = 'https://token.actions.githubusercontent.com';
 const REPOSITORY = 'nemanjazivkovic1605-spec/vip-tiketi-elite';
 const AUDIENCE = 'https://eliteviptips.com/api/daily-results';
+const COLLECTOR_AUDIENCE = 'https://eliteviptips.com/api/football-analytics';
+const COLLECTOR_WORKFLOW = `${REPOSITORY}/.github/workflows/football-data-collector.yml@refs/heads/main`;
 type SigningKey = JsonWebKey & { kid?: string };
 let cachedKeys: { expiresAt: number; keys: SigningKey[] } | undefined;
 
-export function verifyResultsRunnerToken(token: string, keys: SigningKey[], now = Math.floor(Date.now() / 1000)) {
+function verifyRunnerToken(token: string, keys: SigningKey[], audience: string, workflowRef: string, events: string[], now: number) {
   try {
     if (token.length > 20000) return false;
     const [headerPart, payloadPart, signaturePart, extra] = token.split('.');
@@ -15,10 +17,10 @@ export function verifyResultsRunnerToken(token: string, keys: SigningKey[], now 
     const header = JSON.parse(Buffer.from(headerPart, 'base64url').toString());
     const claims = JSON.parse(Buffer.from(payloadPart, 'base64url').toString());
     if (header.alg !== 'RS256' || typeof header.kid !== 'string'
-      || claims.iss !== ISSUER || claims.aud !== AUDIENCE || claims.repository !== REPOSITORY
+      || claims.iss !== ISSUER || claims.aud !== audience || claims.repository !== REPOSITORY
       || claims.ref !== 'refs/heads/main' || claims.sub !== `repo:${REPOSITORY}:ref:refs/heads/main`
-      || claims.workflow_ref !== `${REPOSITORY}/.github/workflows/daily-results.yml@refs/heads/main`
-      || !['schedule', 'workflow_dispatch', 'push'].includes(claims.event_name)
+      || claims.workflow_ref !== workflowRef
+      || !events.includes(claims.event_name)
       || !Number.isFinite(claims.exp) || claims.exp <= now || !Number.isFinite(claims.iat) || claims.iat > now + 30
       || claims.exp - claims.iat > 600 || claims.nbf && claims.nbf > now + 30) return false;
     const key = keys.find((value) => value.kid === header.kid && value.kty === 'RSA');
@@ -26,7 +28,15 @@ export function verifyResultsRunnerToken(token: string, keys: SigningKey[], now 
   } catch { return false; }
 }
 
-export async function isResultsRunnerRequest(request: IncomingMessage) {
+export function verifyResultsRunnerToken(token: string, keys: SigningKey[], now = Math.floor(Date.now() / 1000)) {
+  return verifyRunnerToken(token, keys, AUDIENCE, `${REPOSITORY}/.github/workflows/daily-results.yml@refs/heads/main`, ['schedule', 'workflow_dispatch', 'push'], now);
+}
+
+export function verifyFootballCollectorToken(token: string, keys: SigningKey[], now = Math.floor(Date.now() / 1000)) {
+  return verifyRunnerToken(token, keys, COLLECTOR_AUDIENCE, COLLECTOR_WORKFLOW, ['schedule', 'workflow_dispatch'], now);
+}
+
+async function isRunnerRequest(request: IncomingMessage, verifyToken: (token: string, keys: SigningKey[]) => boolean) {
   const token = request.headers.authorization?.match(/^Bearer\s+(.+)$/)?.[1];
   if (!token || !token.includes('.')) return false;
   try {
@@ -38,6 +48,12 @@ export async function isResultsRunnerRequest(request: IncomingMessage) {
       const result = await response.json() as { keys: SigningKey[] };
       cachedKeys = { keys: result.keys || [], expiresAt: Date.now() + 10 * 60000 };
     }
-    return verifyResultsRunnerToken(token, cachedKeys.keys);
+    return verifyToken(token, cachedKeys.keys);
   } catch { return false; }
 }
+
+export const isResultsRunnerRequest = (request: IncomingMessage) =>
+  isRunnerRequest(request, (token, keys) => verifyResultsRunnerToken(token, keys));
+
+export const isFootballCollectorRequest = (request: IncomingMessage) =>
+  isRunnerRequest(request, (token, keys) => verifyFootballCollectorToken(token, keys));

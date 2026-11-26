@@ -48,6 +48,19 @@ export function tursoConnectionConfig(env: NodeJS.ProcessEnv = process.env) {
     message: configured ? undefined : `Turso nije potpuno konfigurisan za ${deployment}; proverite ${urlName} i ${tokenName}.` };
 }
 
+export function tursoSnapshotWriteConfig(env: NodeJS.ProcessEnv = process.env) {
+  const deployment = getServerDeployment(env);
+  const vercelDevelopment = deployment === 'development' && env.VERCEL_ENV === 'development';
+  const prefix = deployment === 'production' || vercelDevelopment ? '' : deployment === 'preview' ? 'PREVIEW_' : 'LOCAL_';
+  const urlName = `${prefix}TURSO_SNAPSHOT_WRITE_DATABASE_URL`;
+  const tokenName = `${prefix}TURSO_SNAPSHOT_WRITE_AUTH_TOKEN`;
+  const url = env[urlName]?.trim();
+  const authToken = env[tokenName]?.trim();
+  const configured = Boolean(url && /^(libsql|https?):\/\//i.test(url) && authToken);
+  return { deployment, configured, url: configured ? url : undefined, authToken: configured ? authToken : undefined,
+    message: configured ? undefined : `Nedostaje zaseban Turso snapshot write profil za ${deployment}; proverite ${urlName} i ${tokenName}.` };
+}
+
 export function publicFootballReadConfig(env: NodeJS.ProcessEnv = process.env): {
   deployment: ServerDeployment;
   provider: PublicFootballReadProvider | 'invalid';
@@ -83,7 +96,7 @@ export function environmentReadiness(env: NodeJS.ProcessEnv = process.env) {
     analyticsDatabaseConfigured: Boolean(analyticsDatabaseUrl(env)),
     publicFootballDatabase: (() => {
       const { deployment: _deployment, url: _url, authToken: _authToken, ...safe } = publicFootballReadConfig(env);
-      return safe;
+      return { ...safe, snapshotWriterConfigured: tursoSnapshotWriteConfig(env).configured };
     })(),
     firebaseWritesAllowed: canWriteFirebaseData(env),
     cronAllowed: deployment === 'production' || deployment === 'development' && hasFirestoreEmulator(env),
