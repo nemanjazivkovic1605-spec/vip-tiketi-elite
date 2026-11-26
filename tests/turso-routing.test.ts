@@ -130,11 +130,17 @@ test('Turso snapshot compare-and-swap allows one update and rejects a stale writ
   const original = await readTursoPublicSnapshotRecord(config);
   assert.ok(original);
   const updated = { ...snapshot, collectorSync: { date: '2026-11-26', completedAt: '2026-11-26T12:00:00.000Z',
-    source: 'openfootball' as const, received: 0, created: 0, updated: 0, unchanged: 0, conflicts: 0, rejected: 0 } };
+    source: 'openfootball' as const, status: 'partial' as const, freshestFinishedDate: '2026-11-25', freshnessDays: 1,
+    recentFinishedMatches: 3, lookaheadFixtures: 4, received: 3, created: 0, updated: 0, unchanged: 0, conflicts: 0, rejected: 0 } };
   await assert.rejects(writeTursoPublicSnapshotIfUnchanged(updated, { version: original.version, updatedAt: 'stale-revision' }, config, config), /snapshot je promenjen/);
   assert.equal((await readTursoPublicSnapshotRecord(config))?.snapshot.collectorSync, undefined);
   await writeTursoPublicSnapshotIfUnchanged(updated, { version: original.version, updatedAt: original.updatedAt }, config, config);
-  assert.equal((await readTursoPublicSnapshotRecord(config))?.snapshot.collectorSync?.date, '2026-11-26');
+  const persisted = (await readTursoPublicSnapshotRecord(config))?.snapshot.collectorSync;
+  assert.equal(persisted?.date, '2026-11-26');
+  assert.equal(persisted?.status, 'partial');
+  assert.equal(persisted?.freshestFinishedDate, '2026-11-25');
+  assert.equal(persisted?.recentFinishedMatches, 3);
+  assert.equal(persisted?.lookaheadFixtures, 4);
 });
 
 test('public snapshot read remains routed to Neon until Turso is explicitly selected', async () => {

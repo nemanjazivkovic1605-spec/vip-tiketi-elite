@@ -69,11 +69,20 @@ export function parsePublicSnapshotPayload(payload: unknown): PublicSnapshot {
     };
   }) : undefined;
   const sync = candidate.collectorSync;
+  const freshnessDate = typeof sync?.freshestFinishedDate === 'string' && /^\d{4}-\d\d-\d\d$/.test(sync.freshestFinishedDate)
+    && Number.isFinite(Date.parse(`${sync.freshestFinishedDate}T00:00:00.000Z`))
+    && new Date(`${sync.freshestFinishedDate}T00:00:00.000Z`).toISOString().slice(0, 10) === sync.freshestFinishedDate
+    ? sync.freshestFinishedDate : undefined;
   const collectorSync = sync && /^\d{4}-\d\d-\d\d$/.test(sync.date) && typeof sync.completedAt === 'string'
     && Number.isFinite(Date.parse(sync.completedAt)) && sync.source === 'openfootball'
     && ['received','created','updated','unchanged','conflicts','rejected'].every(key => Number.isInteger((sync as any)[key]) && (sync as any)[key] >= 0)
     ? { date: sync.date, completedAt: sync.completedAt, source: 'openfootball' as const, received: sync.received, created: sync.created,
-      updated: sync.updated, unchanged: sync.unchanged, conflicts: sync.conflicts, rejected: sync.rejected }
+      updated: sync.updated, unchanged: sync.unchanged, conflicts: sync.conflicts, rejected: sync.rejected,
+      ...(sync.status === 'complete' || sync.status === 'partial' ? { status: sync.status } : {}),
+      ...(freshnessDate ? { freshestFinishedDate: freshnessDate } : {}),
+      ...(Number.isInteger(sync.freshnessDays) && Number(sync.freshnessDays) >= 0 ? { freshnessDays: Number(sync.freshnessDays) } : {}),
+      ...(Number.isInteger(sync.recentFinishedMatches) && Number(sync.recentFinishedMatches) >= 0 ? { recentFinishedMatches: Number(sync.recentFinishedMatches) } : {}),
+      ...(Number.isInteger(sync.lookaheadFixtures) && Number(sync.lookaheadFixtures) >= 0 ? { lookaheadFixtures: Number(sync.lookaheadFixtures) } : {}) }
     : undefined;
   return snapshotFromMatches(matches,new Date(candidate.loadedAt),Boolean(candidate.truncated),Number(candidate.excluded)||0,provenance,collectorSync);
 }

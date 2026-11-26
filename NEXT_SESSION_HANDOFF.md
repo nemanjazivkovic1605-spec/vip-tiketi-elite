@@ -14,19 +14,21 @@ Updated: 2026-11-26
 - Require at least three distinct recent finished fixtures (maximum age: 10 days) and one distinct upcoming fixture before writing a snapshot. A stale available dataset is excluded rather than merged into the new snapshot.
 - Refuse unresolved past fixtures and preserve existing finished scores on conflicts.
 - Require a matching Turso read-back receipt before reporting a successful sync.
+- Preserve the collector freshness/status metadata through the Turso payload parser so cron status checks can validate a stored write and skip redundant ingestion.
 - The scheduled workflow is gated by the repository variable `ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED`; it must remain unset/false until the first verified production sync.
 
 ## Verified source state
 
 - Live OpenFootball loader on 2026-11-26: Premier League and Championship returned schedules, but the latest finished result was 2026-09-20; League One, League Two, and National League current-season datasets were unavailable.
 - The collector must not write this feed as current. No production sync or database write has been attempted.
+- Preview's existing snapshot also contained upcoming fixtures last checked on `2026-09-22`. Public API/page responses now mark source observations older than 10 days as stale, warn that upcoming times were not re-confirmed, and omit those stale fixtures from upcoming schedules.
+- Repeated live read-only evaluation at `2026-11-26T20:40:36Z`: PL 380 and Championship 552 rows, both latest finished `2026-09-20`; League One/Two/National League 0 current rows. All five datasets were excluded by the 10-day gate; validation threw before any collector POST.
 - Football-data.org's public documentation says the free tier is non-commercial; do not add it to the public snapshot without an explicit commercial licence. Other candidate feeds were also excluded where terms prohibit commercial use or reserve third-party rights.
 
 ## Validation and next actions
 
-- `npm test`: 256/256 passed after the distinct-fixture guard.
-- `npm run lint`: passed after the distinct-fixture guard.
-- `npm run typecheck:api`: passed after the distinct-fixture guard.
-- `npm run build`: passed after the distinct-fixture guard; existing Vite native config warnings remain.
-- GitHub CLI is not installed. Git HTTPS read access to the PR branch works; GitHub MCP previously returned 404 on merge. Investigate authenticated PR/API access before any merge.
-- Next: finish the source/license decision, commit only the collector files in this worktree, push to refresh Preview, verify Preview, and keep production automation disabled until a permitted, fresh source can produce a verified sync.
+- `npm test`: 257/257 passed, including source-age response labels, stale-upcoming suppression, and Turso freshness-metadata read-back.
+- `npm run lint`, `npm run typecheck:api`, `npm run build`, and `git diff --check`: passed after all current code changes. Build retains the existing Vite native-config warnings about `__dirname` and a missing import extension.
+- Vercel Preview for prior collector commit `e7bf048` was READY. Protected HTTP was verified with Vercel's authenticated fetch: `/fudbal` returned SSR content and the public overview API returned actual records. That preview exposed stale upcoming records checked on 2026-09-22; this is why the source-age disclosure/suppression was added. A new Preview must be checked after the next push.
+- Authenticated GitHub REST confirmed PR #17 is open, based on `main`, mergeable, and head `e7bf048`; Git HTTPS push works. GitHub MCP's earlier 404 is connector-specific, not a repository permission issue. `gh` is not installed and is not needed for the authenticated REST route.
+- Next: commit and push the stale-source display guard, verify the new Preview including `/fudbal` and its public API, then keep production sync/cron disabled until a permitted fresh source can produce a verified Turso sync. Do not merge while the source gate is unsatisfied.

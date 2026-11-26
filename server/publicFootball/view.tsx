@@ -26,7 +26,10 @@ function FreshnessNotice({data}:{data:PublicFootballPageData}) {
   if(!data.dataStale)return null;
   const snapshotDate=data.dataSnapshotAt?new Date(data.dataSnapshotAt).toLocaleDateString('sr-Latn-RS',{timeZone:'Europe/Belgrade'}):null;
   const updated=data.lastUpdatedAt?new Date(data.lastUpdatedAt).toLocaleString('sr-Latn-RS',{timeZone:'Europe/Belgrade'}):null;
-  return <aside className="fp-stale-notice" role="status"><strong>Prikaz poslednjih sačuvanih podataka</strong><span>Baza analitike je trenutno nedostupna.{updated?` Poslednji potvrđeni podatak: ${updated}.`:snapshotDate?` Dostupna arhiva obuhvata podatke do ${snapshotDate}; vreme poslednje sinhronizacije nije poznato.`:' Datum poslednje sinhronizacije nije poznat.'}</span></aside>;
+  const message=data.dataStaleReason==='database'
+    ? `Baza analitike je trenutno nedostupna.${updated?` Poslednji potvrđeni podatak: ${updated}.`:snapshotDate?` Dostupna arhiva je učitana ${snapshotDate}; vreme poslednje sinhronizacije nije poznato.`:' Datum poslednje sinhronizacije nije poznat.'}`
+    : `Izvor nije osvežen poslednjih 10 dana. Predstojeći termini nisu ponovo potvrđeni i mogu biti zastareli.${updated?` Poslednji izvorni podatak: ${updated}.`:' Datum poslednje provere izvora nije poznat.'}`;
+  return <aside className="fp-stale-notice" role="status"><strong>Prikaz poslednjih sačuvanih podataka</strong><span>{message}</span></aside>;
 }
 function LeagueNav({data}:{data:PublicFootballPageData}) {
   return <aside className="fp-sidebar"><h2>Lige u pregledu</h2><a className={!data.league?'is-current':''} href="/fudbal">Sve dostupne lige<span>{data.leagues.length}</span></a>{data.leagues.map(league=><a key={league.slug} className={league.slug===data.league?.slug?'is-current':''} href={leaguePath(league.slug)}><span><strong>{league.name}</strong><small>{country(league.country)}</small></span><ChevronRight size={13}/></a>)}<details className="fp-coverage"><summary>Pokrivenost nižih liga</summary><p>Potvrđen javni izvor trenutno nije dostupan za:</p><ul>{data.unavailableLeagues.map(name=><li key={name}>{name}</li>)}</ul></details></aside>;

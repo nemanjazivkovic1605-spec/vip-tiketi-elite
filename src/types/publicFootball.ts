@@ -88,6 +88,7 @@ export type PublicFootballPageData = {
   truncated: boolean;
   dataSnapshotAt?: string;
   dataStale?: boolean;
+  dataStaleReason?: 'database' | 'source';
   unavailableLeagues: string[];
   coverageWarnings: string[];
   teams?: PublicTeam[];
