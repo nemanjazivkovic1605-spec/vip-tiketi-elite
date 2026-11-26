@@ -34,7 +34,7 @@ jobs:
       - name: Fetch permitted datasets and submit incremental window
         env:
           ELITE_COLLECTOR_URL: https://eliteviptips.com/api/football-analytics
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          ELITE_COLLECTOR_EVENT_NAME: ${{ github.event_name }}
           ELITE_COLLECTOR_CONFIRM_WRITE: ${{ inputs.confirm_write || false }}
           ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED: ${{ vars.ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED }}
         run: node --import tsx scripts/collect-public-football.ts

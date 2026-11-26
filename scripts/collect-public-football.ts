@@ -7,7 +7,7 @@ const audience = 'https://eliteviptips.com/api/football-analytics';
 const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
 const writeEnabled = shouldWritePublicCollector(
-  process.env.GITHUB_EVENT_NAME,
+  process.env.ELITE_COLLECTOR_EVENT_NAME,
   process.env.ELITE_COLLECTOR_CONFIRM_WRITE,
   process.env.ELITE_PUBLIC_FOOTBALL_DAILY_SYNC_ENABLED,
 );
