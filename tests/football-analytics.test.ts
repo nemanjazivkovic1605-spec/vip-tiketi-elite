@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   openAnalyticsDatabase,
   migrateAnalytics,
+  analyticsSchemaReady,
 } from "../server/footballAnalytics/database.ts";
 import {
   analyticsTotals,
@@ -99,6 +100,20 @@ test("analytics schema is repeatable and persists after reopening a separate SQL
     await db.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+test("schema probe distinguishes a missing schema from an unavailable database", async () => {
+  const sqlite = await openAnalyticsDatabase(":memory:");
+  try {
+    assert.equal(await analyticsSchemaReady(sqlite), false);
+    await migrateAnalytics(sqlite);
+    assert.equal(await analyticsSchemaReady(sqlite), true);
+  } finally {
+    await sqlite.close();
+  }
+  const missing = { kind: "postgres", query: async () => { throw Object.assign(new Error("relation missing"), { code: "42P01" }); } };
+  assert.equal(await analyticsSchemaReady(missing as any), false);
+  const unavailable = { kind: "postgres", query: async () => { throw Object.assign(new Error("connection unavailable"), { code: "08006" }); } };
+  await assert.rejects(analyticsSchemaReady(unavailable as any), { code: "08006" });
 });
 test("source IDs, cross-provider matching and rescheduling keep one internal match, with null-safe corrections", async () => {
   const db = await openAnalyticsDatabase(":memory:");
@@ -489,6 +504,31 @@ test("private routes reject guests and non-admins before opening the analytics d
   assert.equal(status, 403);
   assert.equal(opened, 0);
   assert.ok(payload.error);
+});
+test("admin status reports database outages without offering a schema migration", async () => {
+  const old = process.env.ANALYTICS_DATABASE_URL;
+  process.env.ANALYTICS_DATABASE_URL = "postgresql://unused.invalid/test";
+  try {
+    const handler = createAnalyticsHandler(
+      async () => true,
+      async () => ({ kind: "postgres", query: async () => {
+        throw Object.assign(new Error("connection unavailable"), { code: "08006" });
+      } }) as any,
+      () => false,
+    );
+    let status = 0;
+    let payload: any;
+    await handler(
+      { method: "GET", url: "/api/football-analytics?action=status", headers: {} } as any,
+      { setHeader() {}, set statusCode(value: number) { status = value; }, end(value: string) { payload = JSON.parse(value); } } as any,
+    );
+    assert.equal(status, 503);
+    assert.match(payload.error, /baza.*nisu dostupni/i);
+    assert.equal(payload.database?.ready, undefined);
+  } finally {
+    if (old === undefined) delete process.env.ANALYTICS_DATABASE_URL;
+    else process.env.ANALYTICS_DATABASE_URL = old;
+  }
 });
 test("SQL calendar bounds cover 23/25-hour Serbian days without truncating paginated fixtures", () => {
   const spring = belgradeDayBounds("2026-03-29"),
