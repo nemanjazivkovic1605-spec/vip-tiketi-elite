@@ -29,6 +29,8 @@ import { planPublicSync,applyPublicSync,runPublicDailySync } from '../server/pub
 import { sportsHealthReport } from '../server/publicFootball/audit.js';
 import { publicCollectorHandler } from '../server/publicFootball/collectorHandler.js';
 import { publicFootballReadConfig } from '../server/runtimeEnvironment.js';
+import { isPreviewDeployment } from '../server/runtimeEnvironment.js';
+import { setSourceActivation, sourceRegistry } from '../server/footballAnalytics/sourceRegistry.js';
 
 export const maxDuration = 240;
 const send = (response: ServerResponse, status: number, data: unknown) => {
@@ -45,6 +47,17 @@ async function readHistoricalBody(request: IncomingMessage): Promise<{ options?:
   const value = text ? JSON.parse(text) : {};
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Neispravan zahtev.');
   return value;
+}
+async function readSourcePolicyBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+  let text = '', bytes = 0;
+  for await (const chunk of request) {
+    bytes += Buffer.byteLength(chunk);
+    if (bytes > 8_192) throw new Error('Zahtev za policy je prevelik.');
+    text += chunk.toString();
+  }
+  const value = text ? JSON.parse(text) : {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Neispravan zahtev.');
+  return value as Record<string, unknown>;
 }
 export const createAnalyticsHandler =
   (
@@ -69,6 +82,23 @@ export const createAnalyticsHandler =
       return send(response, 403, {
         error: "Ovaj analizator je dostupan samo administratoru.",
       });
+    if (action === 'source-registry') {
+      if (request.method !== 'GET') return send(response, 405, { error: 'Method not allowed.' });
+      return send(response, 200, { sources: await sourceRegistry(), databaseChecked: false, registryOnly: true });
+    }
+    if (action === 'source-dry-run') {
+      if (request.method !== 'GET') return send(response, 405, { error: 'Method not allowed.' });
+      const sources = await sourceRegistry();
+      return send(response, 200, {
+        dryRun: true, registryOnly: true, databaseWrites: 0, providerRequests: 0,
+        enabledInternal: sources.filter(source => source.enabled.internal).map(source => source.id),
+        enabledPublic: sources.filter(source => source.enabled.public).map(source => source.id),
+        blockedPublic: sources.filter(source => !source.canEnable.public).map(source => ({ id: source.id, reason: source.enableBlockReason.public })),
+        note: 'Policy provera ne poziva fudbalske API-je i ništa ne upisuje.',
+      });
+    }
+    if (action === 'source-policy' && (request.method !== 'POST' || isPreviewDeployment()))
+      return send(response, request.method !== 'POST' ? 405 : 503, { error: request.method !== 'POST' ? 'Promena policy-ja zahteva POST.' : 'Promena policy-ja je isključena u Preview okruženju.' });
     if (!["GET", "POST"].includes(request.method || ""))
       return send(response, 405, { error: "Method not allowed." });
     if(action==='health'&&request.method==='GET')return send(response,200,await sportsHealthReport());
@@ -82,6 +112,7 @@ export const createAnalyticsHandler =
           : {
               database: { ...config, ready: false },
               providers: [],
+              sources: await sourceRegistry(),
               coverage: [],
               totals: {
                 leagues: 0,
@@ -96,6 +127,22 @@ export const createAnalyticsHandler =
       );
     try {
       const db = await database();
+      if (action === 'source-policy') {
+        if (!(await analyticsSchemaReady(db))) return send(response, 409, { error: 'Analitička šema nije spremna; policy nije promenjen.' });
+        let body: Record<string, unknown>;
+        try { body = await readSourcePolicyBody(request); }
+        catch (error) { return send(response, 400, { error: error instanceof Error ? error.message : 'Neispravan zahtev.' }); }
+        if (typeof body.sourceId !== 'string' || !/^[a-z0-9.-]{2,80}$/.test(body.sourceId)
+          || (body.scope !== 'internal' && body.scope !== 'public') || typeof body.enabled !== 'boolean'
+          || (body.acknowledgeConditions !== undefined && typeof body.acknowledgeConditions !== 'boolean'))
+          return send(response, 400, { error: 'Neispravan sourceId, scope ili enabled status.' });
+        try {
+          const source = await setSourceActivation(db, body.sourceId, body.scope, body.enabled, body.acknowledgeConditions === true);
+          return send(response, 200, { source });
+        } catch (error) {
+          return send(response, 409, { error: error instanceof Error ? error.message : 'Policy izvora nije promenjen.' });
+        }
+      }
       if (action === "migrate" && request.method === "POST") {
         await migrateAnalytics(db);
         return send(response, 200, { ready: true });
@@ -106,7 +153,8 @@ export const createAnalyticsHandler =
           error:
             "Analitička šema još nije inicijalizovana. Pokrenite inicijalizaciju baze.",
         });
-      if (action === "status")
+      if (action === "status") {
+        const coverage = ready ? await readCoverage(db) : [];
         return send(response, 200, {
           database: { ...config, ready },
           providers: ready
@@ -114,7 +162,8 @@ export const createAnalyticsHandler =
                 await db.query("SELECT payload FROM fa_providers ORDER BY id")
               ).map((r) => JSON.parse(r.payload))
             : [],
-          coverage: ready ? await readCoverage(db) : [],
+          sources: await sourceRegistry(ready ? db : undefined, coverage),
+          coverage,
           totals: ready
             ? await analyticsTotals(
                 db,
@@ -131,6 +180,7 @@ export const createAnalyticsHandler =
                 unresolved: 0,
               },
         });
+      }
       if (action === "sync" && scheduled)
         return send(response, 200, {
           results: process.env.ANALYTICS_SYNC_ENABLED === 'true' ? await refreshAnalytics(db) : [],

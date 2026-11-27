@@ -24,3 +24,18 @@ test('unavailable or oversized refresh preserves last good public data and canno
     const large={...restricted,summary:{...restricted.summary,changed:201}};await assert.rejects(applyPublicSync(db,large,large.fingerprint,now),/budžet/);
   }finally{if(previous===undefined)delete process.env.PUBLIC_FOOTBALL_SYNC_ENABLED;else process.env.PUBLIC_FOOTBALL_SYNC_ENABLED=previous;await db.close();}
 });
+test('public sync rejects a technically supported source until its display conditions are acknowledged',async()=>{
+  const db=await openAnalyticsDatabase(':memory:');
+  try{
+    await migrateAnalytics(db);
+    await savePublicSnapshot(db,snapshotFromMatches([],now));
+    let allowed:string[]=[];
+    const plan=await planPublicSync(db,now,async(_date,options)=>{
+      allowed=options?.enabledProviders||[];
+      return [{name:'Germany',state:'available',records:[{...record(),provider:'openligadb'}]}];
+    });
+    assert.deepEqual(allowed,['openfootball']);
+    assert.equal(plan.summary.changed,0);
+    assert.equal((await readPublicSnapshot(db)).matches.length,0);
+  }finally{await db.close();}
+});
