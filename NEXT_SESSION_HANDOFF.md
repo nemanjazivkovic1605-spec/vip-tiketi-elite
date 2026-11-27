@@ -2,6 +2,14 @@
 
 Updated: 2026-11-27
 
+## 2026-11-27 production analytics and Turso collector policy
+
+- PR #20 (`e547787`) and PR #21 (`218f881`) are merged and Production deployments `dpl_4TNQvUXEdzzrMFPYZaJAifJpAdQo` and `dpl_EHZ4rSSa5WiLZwrQ59pX9owJKJaZ` reached READY. Authenticated production `/admin/historical-analytics` now shows the database-unavailable message and does not offer schema initialization on HTTP 503. This proves the old missing-schema label was misleading; it does **not** prove whether analytics tables exist. Production Neon SQL access remains blocked/unverified; no migration was run.
+- Clean worktree `elite-analytics-recovery` is on `codex/turso-source-policy-20261127`, based on the merged PR #21. The original `elite-analytics-production` worktree and its 140 dirty paths remain untouched and SHA-256 backed up at `C:\Users\Nemanja\.codex\backups\elitevip-main-worktree-20261127-140path-refresh`.
+- Public Turso ingest now consults the central `DATA_SOURCE_REGISTRY` for every incoming provider. It fails closed unless the server-side `PUBLIC_FOOTBALL_COLLECTOR_SOURCES` allowlist names that provider and its Registry record confirms unconditional public/commercial use. Unknown or conditional sources cannot write. The policy uses no Neon query; OIDC, `PUBLIC_FOOTBALL_SYNC_ENABLED`, Turso writer, freshness, and compare-and-swap gates remain. The allowlist is deliberately unset; no production sync is activated while OpenFootball is stale.
+- Local verification for this isolated branch: `npm test` 269/269; `npm run lint`, `npm run typecheck:api`, `npm run build` pass. `npm run vercel:functions:check` needs `.vercel/output/functions` and cannot run from an ordinary Vite build; check the actual Preview deployment output before merge. No database writes were made.
+- Phase 06 remains partial until a fresh licensed feed supports a verified sync. Phase 14 remains gated. No entire additional master phase can be claimed complete from these changes.
+
 ## 2026-11-27 analytics outage diagnosis
 
 - PR #20 merged as `e547787` and its Production deployment `dpl_4TNQvUXEdzzrMFPYZaJAifJpAdQo` is READY. Authenticated `/admin/historical-analytics` now receives the existing 503 database-unavailable response, proving the earlier "schema uninitialized" message was a masked connectivity failure, not evidence of missing tables. The Production URL remains a non-exportable Vercel Secret; no schema inventory can be claimed while Neon is unavailable.

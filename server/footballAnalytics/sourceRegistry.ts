@@ -267,6 +267,19 @@ const permissionBlock = (definition: SourceDefinition, scope: SourceScope) => {
   return null;
 };
 
+export function collectorSourcePolicy(id: string, allowedSources = process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES) {
+  const definition = DATA_SOURCE_REGISTRY.find(source => source.id === id);
+  if (!definition) return { allowed: false, reason: 'Izvor nije registrovan.' };
+  if (!allowedSources?.trim()) return { allowed: false, reason: 'Collector allowlista nije podešena.' };
+  if (!allowedSources.split(',').map(source => source.trim()).includes(id))
+    return { allowed: false, reason: 'Izvor nije uključen u collector allowlistu.' };
+  if (!definition.defaultPublicEnabled || definition.rights.licenseStatus !== 'confirmed'
+    || definition.rights.publicDisplay !== 'allowed' || definition.rights.commercialUse !== 'allowed'
+    || permissionBlock(definition, 'public'))
+    return { allowed: false, reason: 'Prava za javni komercijalni snapshot nisu bezuslovno potvrđena.' };
+  return { allowed: true, reason: null };
+}
+
 async function readSavedProviders(db?: AnalyticsDatabase) {
   const saved = new Map<string, SavedProvider>();
   if (!db) return saved;

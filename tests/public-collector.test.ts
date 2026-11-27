@@ -123,6 +123,7 @@ test('collector API is OIDC-gated, Neon-independent, and repeated daily ingest p
     },
     fallback: () => empty,
     clock: () => fixedDate,
+    sourcePolicy: () => ({ allowed: true, reason: null }),
   });
   const api = createAnalyticsHandler(async () => false, async () => { neonCalls++; throw new Error('Neon must remain unused'); }, () => false, undefined, collector);
 
@@ -146,6 +147,43 @@ test('collector API is OIDC-gated, Neon-independent, and repeated daily ingest p
   assert.equal(verifiedStatus.json.alreadySynced, true);
   assert.equal(verifiedStatus.json.snapshotVerified, true);
   assert.equal(neonCalls, 0);
+});
+
+test('collector refuses an unapproved source before any Turso write', async () => {
+  let writes = 0;
+  const handler = createPublicCollectorHandler({
+    authorize: async () => true, enabled: () => true, readSelected: () => true,
+    readConfig: () => ({ deployment: 'production', configured: true, url: 'libsql://test.turso.io', authToken: 'read' }),
+    writeConfig: () => ({ deployment: 'production', configured: true, url: 'libsql://test.turso.io', authToken: 'write' }),
+    readSnapshot: async () => null,
+    writeSnapshot: async () => { writes++; throw new Error('Must not write'); },
+    sourcePolicy: () => ({ allowed: false, reason: 'Prava nisu potvrđena.' }),
+  });
+  const result = await call(handler, '/?action=public-sync-ingest', 'POST', { datasets: dataset(...recentResults(), observation()) });
+  assert.equal(result.statusCode, 403);
+  assert.equal(writes, 0);
+});
+
+test('collector fails closed when its source allowlist is not configured', async () => {
+  const old = process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES;
+  delete process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES;
+  let writes = 0;
+  try {
+    const handler = createPublicCollectorHandler({
+      authorize: async () => true, enabled: () => true, readSelected: () => true,
+      readConfig: () => ({ deployment: 'production', configured: true, url: 'libsql://test.turso.io', authToken: 'read' }),
+      writeConfig: () => ({ deployment: 'production', configured: true, url: 'libsql://test.turso.io', authToken: 'write' }),
+      readSnapshot: async () => null,
+      writeSnapshot: async () => { writes++; throw new Error('Must not write'); },
+    });
+    const result = await call(handler, '/?action=public-sync-ingest', 'POST', { datasets: dataset(...recentResults(), observation()) });
+    assert.equal(result.statusCode, 403);
+    assert.match(result.json.error, /allowlista/i);
+    assert.equal(writes, 0);
+  } finally {
+    if (old === undefined) delete process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES;
+    else process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES = old;
+  }
 });
 
 test('collector API rejects duplicate action parameters and non-POST ingest', async () => {

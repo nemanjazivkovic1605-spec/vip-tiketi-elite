@@ -1,8 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DATA_SOURCE_REGISTRY, isSourceEnabled, setSourceActivation, sourceRegistry } from "../server/footballAnalytics/sourceRegistry.js";
+import { DATA_SOURCE_REGISTRY, collectorSourcePolicy, isSourceEnabled, setSourceActivation, sourceRegistry } from "../server/footballAnalytics/sourceRegistry.js";
 import type { AnalyticsDatabase } from "../server/footballAnalytics/database.js";
 
+test('Turso collector requires explicit allowlist and confirmed public rights without Neon', () => {
+  assert.equal(collectorSourcePolicy('openfootball', '').allowed, false);
+  assert.equal(collectorSourcePolicy('openfootball', 'openfootball').allowed, true);
+  assert.equal(collectorSourcePolicy('api-football', 'api-football').allowed, false);
+  assert.equal(collectorSourcePolicy('not-registered', 'not-registered').allowed, false);
+});
 test("source registry describes capabilities and keeps unknown usage rights unapproved", () => {
   const open = DATA_SOURCE_REGISTRY.find((source) => source.id === "openfootball");
   const apiFootball = DATA_SOURCE_REGISTRY.find((source) => source.id === "api-football");
