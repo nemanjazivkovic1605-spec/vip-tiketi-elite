@@ -3,10 +3,11 @@ import { isFootballCollectorRequest } from '../resultsRunnerAuth.js';
 import { publicFootballReadConfig, tursoConnectionConfig, tursoSnapshotWriteConfig } from '../runtimeEnvironment.js';
 import type { PublicSnapshot } from '../../src/types/publicFootball.js';
 import { localDate } from '../sportsApi.js';
-import { buildTursoCollectorSnapshot, COLLECTOR_MAX_RESULT_AGE_DAYS, COLLECTOR_MIN_RECENT_RESULTS, parseCollectorDatasets } from './collector.js';
+import { buildTursoCollectorSnapshot, COLLECTOR_MAX_RESULT_AGE_DAYS, COLLECTOR_MIN_RECENT_RESULTS, parseCollectorDatasets, type CollectorDataset } from './collector.js';
 import { buildLocalOpenFootballFallback } from './localOpenFootballFallback.js';
 import { readTursoPublicSnapshotRecord, writeTursoPublicSnapshotIfUnchanged, type TursoPublicSnapshotRecord, type TursoSnapshotRevision } from './tursoSnapshot.js';
 import { publicSnapshotVersion } from './store.js';
+import { collectorSourcePolicy } from '../footballAnalytics/sourceRegistry.js';
 
 type Action = 'public-sync-status' | 'public-sync-ingest';
 type ReadConfig = ReturnType<typeof tursoConnectionConfig>;
@@ -21,6 +22,7 @@ type Dependencies = {
   writeSnapshot: (snapshot: PublicSnapshot, expected: TursoSnapshotRevision, write: WriteConfig, read: ReadConfig) => Promise<unknown>;
   fallback: () => PublicSnapshot;
   clock: () => Date;
+  sourcePolicy: (provider: string) => { allowed: boolean; reason: string | null };
 };
 
 async function readJson(request: IncomingMessage) {
@@ -50,6 +52,7 @@ export function createPublicCollectorHandler(dependencies: Partial<Dependencies>
     writeSnapshot: writeTursoPublicSnapshotIfUnchanged,
     fallback: buildLocalOpenFootballFallback,
     clock: () => new Date(),
+    sourcePolicy: collectorSourcePolicy,
     ...dependencies,
   };
 
@@ -99,9 +102,13 @@ export function createPublicCollectorHandler(dependencies: Partial<Dependencies>
     if (!writer.configured || !writer.url || !writer.authToken) return send(503, { error: writer.message || 'Turso writer kredencijali nisu podešeni.' });
     if (writer.url !== readConfig.url) return send(503, { error: 'Turso writer ne cilja istu bazu kao javni read profil.' });
 
-    let datasets;
+    let datasets: CollectorDataset[];
     try { datasets = parseCollectorDatasets(await readJson(request)); }
     catch (error) { return send(400, { error: error instanceof Error ? error.message : 'Collector payload nije validan.' }); }
+    for (const provider of new Set(datasets.flatMap(dataset => dataset.records.map(row => row.provider)))) {
+      const policy = deps.sourcePolicy(provider);
+      if (!policy.allowed) return send(403, { error: policy.reason || 'Izvor nije odobren za javni collector.' });
+    }
     const currentSync = current?.snapshot.collectorSync;
     const currentVersionVerified = Boolean(current && current.version === publicSnapshotVersion(current.snapshot) && current.snapshot.matches.length > 0);
     const currentFreshnessVerified = Boolean(currentSync?.freshestFinishedDate && currentSync.freshestFinishedDate <= localDate(now)
