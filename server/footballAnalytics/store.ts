@@ -28,11 +28,15 @@ export async function saveProviderStatus(
   message: string,
   environment = "real",
 ) {
+  const previous = (await db.query("SELECT payload FROM fa_providers WHERE id=$1", [id]))[0];
+  let saved: Record<string, unknown> = {};
+  try { if (previous) saved = JSON.parse(previous.payload); } catch { /* Ignore malformed legacy status. */ }
   await db.query(
     "INSERT INTO fa_providers(id,payload) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
     [
       id,
       JSON.stringify({
+        ...saved,
         id,
         status,
         message,

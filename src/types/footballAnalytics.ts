@@ -1,5 +1,55 @@
 export type AnalyticsEnvironment = "real" | "test";
 export type AnalyticsProvider = "pitchapi" | "football-data.org" | "football-data.co.uk" | "openligadb" | "openfootball" | "manual";
+export type SourceRightsStatus = "confirmed-open" | "attribution-required" | "commercial-display" | "permission-required" | "unverified" | "research-only";
+export type SourcePermission = "allowed" | "allowed_with_conditions" | "not_allowed" | "unknown";
+export type SourceCapability = "supported" | "partial" | "not_supported" | "not_verified";
+export type SourceCapabilityKey = "fixtures" | "ft" | "ht" | "h2h" | "xg" | "xga" | "odds" | "statistics";
+export type SourceRegistryEntry = {
+  id: string;
+  name: string;
+  url: string;
+  format: "api" | "json" | "csv" | "manual";
+  availability: "integrated" | "catalog_only" | "contract_only" | "inactive";
+  fields: string[];
+  tierCoverage: number[];
+  countries: string[];
+  leagueCoverage: string[];
+  seasonCoverage: string[];
+  seasons: string;
+  capabilities: Record<SourceCapabilityKey, SourceCapability>;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+  rateLimit: string | null;
+  freePlanLimit: string;
+  paidPlanLimit: string;
+  cost: "unknown" | "free-feed" | "manual";
+  rightsStatus: SourceRightsStatus;
+  license: string | null;
+  rights: {
+    licenseStatus: "confirmed" | "conditional" | "unverified" | "permission_required";
+    internalUse: SourcePermission;
+    publicDisplay: SourcePermission;
+    commercialUse: SourcePermission;
+    redistribution: SourcePermission;
+    attribution: string | null;
+    conditions: string[];
+    termsUrl: string | null;
+  };
+  priority: number | null;
+  fallback: string | null;
+  qualityNote: string;
+  reliability: "unverified" | "observed";
+  configured: boolean;
+  status: string;
+  checkedAt: string | null;
+  lastSuccessfulSync: string | null;
+  dataAgeHours: number | null;
+  enabled: { internal: boolean; public: boolean };
+  canEnable: { internal: boolean; public: boolean };
+  enableBlockReason: { internal: string | null; public: string | null };
+  usage: { requestsUsed: number | null; requestsRemaining: number | null; checkedAt: string | null };
+  coverage: { matches: number; total: number; finished: number; withHt: number; withXg: number; completenessPct: number | null };
+};
 export type ScorePair = { home: number | null; away: number | null };
 export type SideNumbers = { home: number | null; away: number | null };
 export type AnalyticsEvent = {
@@ -162,6 +212,7 @@ export type AnalyticsOverview = {
     checkedAt: string | null;
     environment?: string;
   }>;
+  sources?: SourceRegistryEntry[];
   coverage: CoverageRow[];
   totals: {
     leagues: number;

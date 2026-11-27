@@ -9,9 +9,10 @@ import { ingestMatch } from '../footballAnalytics/store.js';
 import { localDate,addDays } from '../sportsApi.js';
 import { PUBLIC_FIELDS,mapPublicFootballMatch,publicSource,type PublicInput } from './policy.js';
 import { PUBLIC_SNAPSHOT_ID,readPublicSnapshot,savePublicSnapshot,snapshotFromMatches,publicSnapshotVersion } from './store.js';
+import { sourceRegistry } from '../footballAnalytics/sourceRegistry.js';
 
 type Dataset={name:string;state:'available'|'unavailable'|'error';records:MatchObservation[];reason?:string};
-export type PublicSyncLoader=(now:Date,options?:{includeOpenLigaDB?:boolean})=>Promise<Dataset[]>;
+export type PublicSyncLoader=(now:Date,options?:{includeOpenLigaDB?:boolean;enabledProviders?:string[]})=>Promise<Dataset[]>;
 const facts=(match:PublicMatch)=>JSON.stringify({...match,checkedAt:null});
 const identity=(match:PublicMatch)=>[match.league.slug,match.season.slice(0,4),nameKey(match.homeTeam),nameKey(match.awayTeam),match.date].join(':');
 export function observationPublicInput(observation:MatchObservation):PublicInput {
@@ -20,16 +21,17 @@ export function observationPublicInput(observation:MatchObservation):PublicInput
 export const loadOpenPublicDatasets:PublicSyncLoader=async(now,options={})=>{
   const year=Number(localDate(now).slice(0,4))-(Number(localDate(now).slice(5,7))<7?1:0),season=`${year}/${String(year+1).slice(-2)}`;
   const datasets:Dataset[]=[];
+  const enabled=new Set(options.enabledProviders || ['openfootball','openligadb']);
   // Leave time for the SQL plan and atomic commit inside the 240-second function.
   const signal=AbortSignal.timeout(110000);
-  for(const league of ENGLISH_PYRAMID.filter(row=>row.tier<=5)){
+  for(const league of (enabled.has('openfootball')?ENGLISH_PYRAMID.filter(row=>row.tier<=5):[])){
     try{
       signal.throwIfAborted();
       const value=await loadHistoricalDataset(league.id,season,'openfootball',signal);
       datasets.push({name:league.name,state:value.state==='available'?'available':value.state==='error'?'error':'unavailable',records:value.records,reason:value.warnings.join(' ').slice(0,250)});
     }catch{datasets.push({name:league.name,state:'error',records:[],reason:'Isteklo je vreme za proveru izvora; sačuvani podaci ostaju dostupni.'});}
   }
-  const additionalLeagues:Array<[string,string]>=options.includeOpenLigaDB===false?[]:[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
+  const additionalLeagues:Array<[string,string]>=options.includeOpenLigaDB===false||!enabled.has('openligadb')?[]:[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
   for(const [sourceId,name] of additionalLeagues){
     try{
       signal.throwIfAborted();
@@ -43,11 +45,13 @@ export const loadOpenPublicDatasets:PublicSyncLoader=async(now,options={})=>{
 };
 export async function planPublicSync(db:AnalyticsDatabase,now=new Date(),loader:PublicSyncLoader=loadOpenPublicDatasets) {
   const previous=await readPublicSnapshot(db),version=publicSnapshotVersion(previous),today=localDate(now),from=addDays(today,-7),to=addDays(today,7);
-  const datasets=await loader(now),next=new Map(previous.matches.map(match=>[match.id,match])),byIdentity=new Map(previous.matches.map(match=>[identity(match),match]));
+  const enabledProviders=(await sourceRegistry(db)).filter(source=>source.enabled.public).map(source=>source.id);
+  const enabled=new Set(enabledProviders);
+  const datasets=await loader(now,{enabledProviders}),next=new Map(previous.matches.map(match=>[match.id,match])),byIdentity=new Map(previous.matches.map(match=>[identity(match),match]));
   const changes:Array<{observation:MatchObservation;match:PublicMatch;canonical:string}>=[];
   let unchanged=0;
   for(const dataset of datasets)for(const observation of dataset.records){
-    if(!publicSource(observation.provider)||observation.environment!=='real')continue;
+    if(!publicSource(observation.provider)||!enabled.has(observation.provider)||observation.environment!=='real')continue;
     const sourceId=hashId(observation.provider,observation.sourceId,'real');
     let candidate=mapPublicFootballMatch(sourceId,observationPublicInput(observation),now);
     if(!candidate||candidate.date<from||candidate.date>to)continue;

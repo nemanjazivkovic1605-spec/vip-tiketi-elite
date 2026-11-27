@@ -17,15 +17,21 @@ import {
   saveProviderStatus,
   writeCoverage,
 } from "./store.js";
+import { isSourceEnabled, sourceRegistry } from "./sourceRegistry.js";
 
 export async function discoverAnalyticsCatalog(db: AnalyticsDatabase) {
-  const result: Array<{ provider: string; leagues: number; error?: string }> =
+  const result: Array<{ provider: string; leagues: number; error?: string; skipped?: boolean }> =
     [];
+  const enabled = new Set((await sourceRegistry(db)).filter((source) => source.enabled.internal).map((source) => source.id));
   for (const [provider, catalog] of [
     ["pitchapi", pitchCatalog],
     ["football-data.org", footballDataCatalog],
     ["openligadb", openLigaCatalog],
   ] as const) {
+    if (!enabled.has(provider)) {
+      result.push({ provider, leagues: 0, skipped: true });
+      continue;
+    }
     try {
       const leagues = await catalog();
       await saveCatalog(db, leagues);
@@ -82,6 +88,8 @@ export async function importAnalyticsStep(
             a.provider.localeCompare(b.provider),
         )[0];
   if (!job) return { done: true, processed: 0 };
+  if (!(await isSourceEnabled(db, job.provider, "internal")))
+    return { done: true, processed: 0, skipped: true, reason: "Izvor je isključen za internu obradu." };
   const lease = new Date(Date.now() + 300000).toISOString();
   const claimed = await db.query(
     "UPDATE fa_coverage SET lease_until=$1 WHERE id=$2 AND (lease_until IS NULL OR lease_until < $3) RETURNING id",

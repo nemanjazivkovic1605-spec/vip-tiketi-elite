@@ -21,6 +21,7 @@ import type {
   AnalyticsOverview,
   CoverageRow,
   MatchAnalysis,
+  SourceRegistryEntry,
 } from "../../types/footballAnalytics";
 import { analyticsRequest } from "../../services/admin/footballAnalyticsService";
 import { getDailyAnalysisDates } from "../../utils/dailyDates";
@@ -41,6 +42,16 @@ type FixturePage = {
   highlighted: FixtureSummary[];
   hasMore: boolean;
 };
+type SourceDryRun = {
+  dryRun: true;
+  registryOnly?: boolean;
+  databaseWrites: number;
+  providerRequests: number;
+  enabledInternal: string[];
+  enabledPublic: string[];
+  blockedPublic: Array<{ id: string; reason: string | null }>;
+  note: string;
+};
 const stateNames: Record<CoverageRow["state"], string> = {
   unverified: "Još nije provereno",
   queued: "U redu za uvoz",
@@ -54,6 +65,11 @@ const input =
   "min-w-0 rounded-lg border border-white/15 bg-[#171717] px-3 py-2 text-sm text-neutral-100";
 const command =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold transition hover:border-gold-500/50 disabled:opacity-40";
+const sourceStatusLabel = (source: SourceRegistryEntry) => {
+  if (source.status === "working" || source.status === "available") return "Dostupan pri poslednjoj proveri";
+  if (source.status === "unavailable" || source.status === "error") return "Poslednja provera nije uspela";
+  return source.configured ? "Podešen, konekcija nije potvrđena" : "Nije podešen / nije proveravan";
+};
 
 export default function FootballAnalytics() {
   const days = getDailyAnalysisDates();
@@ -64,6 +80,9 @@ export default function FootballAnalytics() {
   const [environment, setEnvironment] = useState<AnalyticsEnvironment>("real");
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null),
     [fixtures, setFixtures] = useState<FixturePage | null>(null);
+  const [registrySources, setRegistrySources] = useState<SourceRegistryEntry[]>([]),
+    [sourceDryRun, setSourceDryRun] = useState<SourceDryRun | null>(null);
+  const sourcePolicyAvailable = Boolean(overview?.database.ready);
   const [detail, setDetail] = useState<MatchAnalysis | null>(null),
     [selected, setSelected] = useState(""),
     [scope, setScope] = useState<"all" | "league">("all");
@@ -76,18 +95,11 @@ export default function FootballAnalytics() {
     [offset, setOffset] = useState(0);
   const runController = useRef<AbortController | null>(null),
     detailRequest = useRef(0);
-  const loadOverview = useCallback(
-    async (signal?: AbortSignal) =>
-      setOverview(
-        await analyticsRequest<AnalyticsOverview>(
-          "status",
-          { environment },
-          "GET",
-          signal,
-        ),
-      ),
-    [environment],
-  );
+  const loadOverview = useCallback(async (signal?: AbortSignal) => {
+    const result = await analyticsRequest<AnalyticsOverview>("status", { environment }, "GET", signal);
+    setOverview(result);
+    if (result.sources?.length) setRegistrySources(result.sources);
+  }, [environment]);
   useEffect(() => {
     const c = new AbortController();
     setError("");
@@ -96,6 +108,13 @@ export default function FootballAnalytics() {
     });
     return () => c.abort();
   }, [loadOverview]);
+  useEffect(() => {
+    const c = new AbortController();
+    void analyticsRequest<{ sources: SourceRegistryEntry[] }>("source-registry", {}, "GET", c.signal)
+      .then((result) => { if (!c.signal.aborted && result.sources?.length) setRegistrySources((current) => current.length ? current : result.sources); })
+      .catch(() => undefined);
+    return () => c.abort();
+  }, []);
   useEffect(() => {
     setOffset(0);
   }, [date, league, search, environment]);
@@ -195,6 +214,46 @@ export default function FootballAnalytics() {
     } finally {
       setBusy("");
       runController.current = null;
+    }
+  };
+  const runSourceDryRun = async () => {
+    if (busy) return;
+    setBusy("source-dry-run");
+    setError("");
+    try {
+      setSourceDryRun(await analyticsRequest<SourceDryRun>("source-dry-run"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Dry-run izvora nije uspeo.");
+    } finally {
+      setBusy("");
+    }
+  };
+  const toggleSource = async (source: SourceRegistryEntry, scope: "internal" | "public") => {
+    if (busy) return;
+    const enabled = !source.enabled[scope];
+    if (enabled && !source.canEnable[scope]) {
+      setError(source.enableBlockReason[scope] || "Izvor nije odobren za ovu namenu.");
+      return;
+    }
+    const requiresAcknowledgement = enabled && (
+      source.rights[scope === "internal" ? "internalUse" : "publicDisplay"] === "allowed_with_conditions"
+      || (scope === "public" && source.rights.commercialUse === "allowed_with_conditions")
+    );
+    if (requiresAcknowledgement && !window.confirm(`Potvrđujete da su ispunjeni navedeni uslovi licence za ${source.name} (${scope === "public" ? "javni prikaz" : "internu obradu"})?`)) return;
+    setBusy(`source:${source.id}:${scope}`);
+    setError("");
+    try {
+      const result = await analyticsRequest<{ source: SourceRegistryEntry }>(
+        "source-policy", {}, "POST", undefined,
+        { sourceId: source.id, scope, enabled, acknowledgeConditions: requiresAcknowledgement },
+      );
+      setRegistrySources((current) => current.map((row) => row.id === result.source.id ? result.source : row));
+      setMessage(`${source.name}: ${enabled ? "uključen" : "isključen"} za ${scope === "public" ? "javni prikaz" : "internu obradu"}.`);
+      await loadOverview();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Policy izvora nije promenjen.");
+    } finally {
+      setBusy("");
     }
   };
   const leagues = useMemo(
@@ -352,6 +411,76 @@ export default function FootballAnalytics() {
                 PitchAPI
               </p>
             </div>
+          </details>
+        )}
+        {!!registrySources.length && (
+          <details className="border-b border-white/10 pb-3">
+            <summary className="cursor-pointer text-xs text-neutral-400">
+              Registar izvora · pokrivenost, limiti i prava
+            </summary>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] text-neutral-500">Registry ne pokreće provider pozive. Aktivacija važi odvojeno za internu obradu i javni prikaz.</p>
+              <button type="button" disabled={!!busy} onClick={() => void runSourceDryRun()} className={command}>
+                {busy === "source-dry-run" ? "Provera…" : "Dry-run policy-ja"}
+              </button>
+            </div>
+            {!sourcePolicyAvailable && <p className="mt-2 text-xs text-amber-200">SQL policy skladište nije spremno. Prikaz je samo informativan; promene izvora su privremeno onemogućene.</p>}
+            {sourceDryRun && (
+              <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-neutral-300" role="status">
+                <strong>Dry-run · bez provider poziva i upisa</strong>
+                <p className="mt-1">Interno aktivni: {sourceDryRun.enabledInternal.length ? sourceDryRun.enabledInternal.join(", ") : "nema"}</p>
+                <p>Javno aktivni: {sourceDryRun.enabledPublic.length ? sourceDryRun.enabledPublic.join(", ") : "nema"}</p>
+                <p>Blokirani za javni prikaz: {sourceDryRun.blockedPublic.length} · zahtevi: {sourceDryRun.providerRequests} · upisi: {sourceDryRun.databaseWrites}</p>
+                <p className="mt-1 text-neutral-500">{sourceDryRun.note}{sourceDryRun.registryOnly ? " Prikazani su kodni podrazumevani policy-ji jer analitička baza nije proveravana." : ""}</p>
+              </div>
+            )}
+            <div className="mt-3 divide-y divide-white/10">
+              {registrySources.map((source) => (
+                <article key={source.id} className="grid gap-2 py-3 text-xs md:grid-cols-[1.2fr_1fr_1.5fr_1.4fr]">
+                  <div className="min-w-0">
+                    <strong className="text-neutral-100">{source.name}</strong>
+                    <p className="mt-1 text-neutral-500">{sourceStatusLabel(source)}</p>
+                    <p className="mt-1 text-neutral-500">Integracija: {source.availability.replaceAll("_", " ")} · {source.reliability === "observed" ? "zabeleženi podaci" : "bez potvrđenog uzorka"}</p>
+                    <p className="mt-1 text-neutral-500">
+                      Poslednji uspešan sync: {source.lastSuccessfulSync ? analyticDate(source.lastSuccessfulSync) : "nije evidentiran"}
+                    </p>
+                    <p className="mt-1 text-neutral-500">Starost poslednjeg sync-a: {source.dataAgeHours === null ? "nepoznata" : `${source.dataAgeHours}h`}</p>
+                  </div>
+                  <div className="text-neutral-400">
+                    <p>Rangovi: {source.tierCoverage.length ? source.tierCoverage.join(", ") : "nije potvrđeno / nije primenljivo"}</p>
+                    <p className="mt-1">Zemlje/lige: {[...source.countries, ...source.leagueCoverage].join(" · ") || "nije potvrđeno"}</p>
+                    <p className="mt-1">Limit: {source.freePlanLimit}; plaćeni: {source.paidPlanLimit}</p>
+                    <p className="mt-1">Potrošnja API-ja: {source.usage.requestsUsed === null ? "nije merena" : `${source.usage.requestsUsed} zahteva`}{source.usage.requestsRemaining !== null ? ` · preostalo ${source.usage.requestsRemaining}` : ""}</p>
+                  </div>
+                  <div className="text-neutral-400">
+                    <p className="text-neutral-300">Mogućnosti podataka</p>
+                    <p className="mt-1">FT {source.capabilities.ft} · HT {source.capabilities.ht} · H2H {source.capabilities.h2h}</p>
+                    <p>xG {source.capabilities.xg} · xGA {source.capabilities.xga} · kvote {source.capabilities.odds}</p>
+                    <p className="mt-1">Sezone: {source.seasonCoverage.join(", ") || source.seasons}</p>
+                  </div>
+                  <div className="text-neutral-400">
+                    <p>{source.qualityNote}</p>
+                    <p className="mt-1">Uvezeno: {source.coverage.matches}{source.coverage.total ? `/${source.coverage.total}` : ""} · FT {source.coverage.finished} · HT {source.coverage.withHt} · xG {source.coverage.withXg}{source.coverage.completenessPct === null ? "" : ` · kompletno ${source.coverage.completenessPct}%`}</p>
+                    <p className="mt-1">Licenca: {source.rights.licenseStatus} · interno {source.rights.internalUse} · javno {source.rights.publicDisplay} · komercijalno {source.rights.commercialUse}</p>
+                    {source.rights.conditions.length > 0 && <p className="mt-1 text-amber-200">Uslovi: {source.rights.conditions.join("; ")}</p>}
+                    {source.rights.termsUrl && <a className="mt-1 inline-block text-gold-300 underline" href={source.rights.termsUrl} target="_blank" rel="noreferrer">Uslovi izvora</a>}
+                    {source.license && <p className="mt-1 text-neutral-500">{source.license}</p>}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" disabled={!sourcePolicyAvailable || !!busy || (!source.enabled.internal && !source.canEnable.internal)} onClick={() => void toggleSource(source, "internal")} className={`${command} ${source.enabled.internal ? "border-emerald-700/60 text-emerald-300" : ""}`} title={!sourcePolicyAvailable ? "SQL policy skladište nije spremno." : source.enableBlockReason.internal || undefined}>
+                        {source.enabled.internal ? "Isključi interno" : "Uključi interno"}
+                      </button>
+                      <button type="button" disabled={!sourcePolicyAvailable || !!busy || (!source.enabled.public && !source.canEnable.public)} onClick={() => void toggleSource(source, "public")} className={`${command} ${source.enabled.public ? "border-emerald-700/60 text-emerald-300" : ""}`} title={!sourcePolicyAvailable ? "SQL policy skladište nije spremno." : source.enableBlockReason.public || undefined}>
+                        {source.enabled.public ? "Isključi javno" : "Uključi javno"}
+                      </button>
+                    </div>
+                    {source.enableBlockReason.public && <p className="mt-1 text-amber-200">Javna aktivacija blokirana: {source.enableBlockReason.public}</p>}
+                  </div>
+                </article>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-neutral-500">
+              Podešen ključ nije dokaz konekcije ili limita. „Nije mereno“ se ne zamenjuje procenom; nepotvrđena prava blokiraju aktivaciju. Javni collector ostaje pod zasebnim globalnim write gate-om.
+            </p>
           </details>
         )}
         </details>

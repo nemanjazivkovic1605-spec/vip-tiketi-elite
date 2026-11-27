@@ -1,6 +1,40 @@
 # EliteVIPTips Handoff
 
-Updated: 2026-11-26
+Updated: 2026-11-27
+
+## 2026-11-27 isolated Registry continuation
+
+- Original dirty worktree remains on `feature/elite-pro-football-database`. Its 112 status entries expanded to 140 paths; all 140 were copied and SHA-256 verified in `C:\Users\Nemanja\.codex\backups\elitevip-main-worktree-20261127-140path-refresh` (manifest SHA-256 `04F318C96D9CA7F3680EFB590AF9D9EEB3F9D917D71E3A464EDDA8C5150B0E0D`). No original path was reset or deleted.
+- Registry integration is isolated in `codex/data-source-registry-20261127` from `origin/main` `f9283b3`. Reviewed hunks cover only the Registry model, admin display/API, provider activation preservation, importer/public-sync rights gates, and focused tests. Other local work remains outside this branch.
+- Local isolated checks: `npm test` 264/264 after the additional public-sync rights-gate test; `npm run lint`, `npm run typecheck:api`, and `npm run build` pass. The existing separate Firestore emulator suite in the original worktree passes 9/9 with zero skips; it exercises baseline/proposal rules, not a Registry-specific Firestore schema (Registry adds none).
+- No new Vercel API entrypoint was created. The existing API consolidation test checks nine entrypoints. Local `vercel build` failed while Vercel CLI tried to create symlinks in its Windows cache (`EPERM`); artifact-level function counting still requires the Preview build. No production collector activation or database write was performed.
+
+### Original 20 phases: evidence checkpoint
+
+Statuses refer to the named phase as a whole; a working subfeature does not mean the entire phase is finished. Production evidence below comes from the prior verified handoff unless a 2026-11-27 local test is named.
+
+| Phase | Status | Evidence / remaining gap |
+|---|---|---|
+| 01 Audit | Completed locally | Existing audit and phase ledgers; no repeat audit in this continuation. |
+| 02 Stability, backup, rollback | Partial | Verified 140-path backup and 9 emulator tests; full restore/rollback drill remains open. |
+| 03 Infrastructure and costs | Partial | Turso public snapshot and cache are deployed per prior handoff; no current end-to-end cost measurement. |
+| 04 Central football DB | Partial | `server/footballAnalytics/database.ts` and normalization exist; private analytics still depend on Neon. |
+| 05 Python scraping | Blocked | No approved fresh multi-tier source or verified commercial rights; no scraper activated. |
+| 06 Data Source Manager | Completed locally, production pending | Isolated Registry, API/admin gates and tests; Preview and production verification still required. |
+| 07 Historical football DB | Partial / blocked | Historical importers and real archive exist; lower tiers and commercial import rights remain incomplete. |
+| 08 Data quality | Partial | `normalization.ts`, conflict tests and source provenance exist; cross-source quality coverage is incomplete. |
+| 09 Football statistics | Partial | HT/FT, form and H2H calculations have unit tests; production data freshness and full formula audit remain open. |
+| 10 xG/xGA | Blocked | Existing optional fields do not establish a fresh, licensed, complete xG source. |
+| 11 Club Intelligence | Not started | No verified sourced injury/lineup/news pipeline in current main. |
+| 12 AI analysis | Partial | Manual Gemini analysis and tests exist; broader verified-context integration remains open. |
+| 13 Football RAG | Not started | No approved document corpus or demonstrated need for retrieval. |
+| 14 GitHub automation | Partial | Collector workflow is deployed with write gate off; first fresh licensed production sync has not succeeded. |
+| 15 n8n | Not started | No demonstrated requirement beyond existing GitHub Actions. |
+| 16 Match Finder | Partial | `/match-finder` public route exists; usable fresh coverage/filter depth is not verified. |
+| 17 Public football stats | Partial | `/fudbal` Turso path and stale warning deployed; current results remain stale. |
+| 18 SEO | Partial | SSR public routes, sitemap and robots exist; Search Console/indexing verification remains open. |
+| 19 PWA | Not started | No safe public-only offline cache or install flow verified. |
+| 20 Final QA/security | Partial | Local 263-test suite, lint/build/API typecheck and 9 emulator tests pass; Preview and production E2E remain open. |
 
 ## Current work
 
