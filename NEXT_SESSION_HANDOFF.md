@@ -4,6 +4,9 @@ Updated: 2026-11-27
 
 ## 2026-11-27 analytics outage diagnosis
 
+- PR #20 merged as `e547787` and its Production deployment `dpl_4TNQvUXEdzzrMFPYZaJAifJpAdQo` is READY. Authenticated `/admin/historical-analytics` now receives the existing 503 database-unavailable response, proving the earlier "schema uninitialized" message was a masked connectivity failure, not evidence of missing tables. The Production URL remains a non-exportable Vercel Secret; no schema inventory can be claimed while Neon is unavailable.
+- A second isolated branch, `codex/historical-analytics-outage-20261127`, removes the remaining misleading migration button on 503 from the historical admin page. Only the existing 409 missing-schema response can offer initialization. No database write is part of this change. Local checks: 266/266 tests, lint, API typecheck, build pass.
+
 - Isolated branch `codex/analytics-recovery-20261127` starts from merged PR #19 (`acf6525`); the original 140-path dirty worktree and verified backup remain untouched.
 - Production has `ANALYTICS_DATABASE_URL` configured as a Vercel Secret. Preview and Development do not have that variable. Vercel CLI correctly refuses to export the Production secret, so no direct local SQL connection or schema inventory was attempted.
 - Existing `analyticsSchemaReady` swallowed every SQL error and called an unavailable Neon connection an uninitialized schema. It now returns false only for an actual missing `fa_schema` table and propagates connection/quota errors to the existing 503 handler. The admin view clears a stale overview on failure, so it cannot offer migration during an outage.
