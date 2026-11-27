@@ -419,7 +419,7 @@ export default function FootballAnalytics() {
               Registar izvora · pokrivenost, limiti i prava
             </summary>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[11px] text-neutral-500">Registry ne pokreće provider pozive. Aktivacija važi odvojeno za internu obradu i javni prikaz.</p>
+              <p className="text-[11px] text-neutral-500">Registry ne pokreće provider pozive. Aktivacija važi za interni importer i SQL javni sync; postojeći Turso collector ima zaseban write gate i prihvata samo OpenFootball.</p>
               <button type="button" disabled={!!busy} onClick={() => void runSourceDryRun()} className={command}>
                 {busy === "source-dry-run" ? "Provera…" : "Dry-run policy-ja"}
               </button>
@@ -479,7 +479,7 @@ export default function FootballAnalytics() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-neutral-500">
-              Podešen ključ nije dokaz konekcije ili limita. „Nije mereno“ se ne zamenjuje procenom; nepotvrđena prava blokiraju aktivaciju. Javni collector ostaje pod zasebnim globalnim write gate-om.
+              Podešen ključ nije dokaz konekcije ili limita. „Nije mereno“ se ne zamenjuje procenom; nepotvrđena prava blokiraju aktivaciju. Ovaj toggle ne menja zasebni Turso collector ni njegov globalni write gate.
             </p>
           </details>
         )}

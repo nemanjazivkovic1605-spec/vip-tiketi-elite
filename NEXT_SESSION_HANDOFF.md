@@ -7,7 +7,8 @@ Updated: 2026-11-27
 - Original dirty worktree remains on `feature/elite-pro-football-database`. Its 112 status entries expanded to 140 paths; all 140 were copied and SHA-256 verified in `C:\Users\Nemanja\.codex\backups\elitevip-main-worktree-20261127-140path-refresh` (manifest SHA-256 `04F318C96D9CA7F3680EFB590AF9D9EEB3F9D917D71E3A464EDDA8C5150B0E0D`). No original path was reset or deleted.
 - Registry integration is isolated in `codex/data-source-registry-20261127` from `origin/main` `f9283b3`. Reviewed hunks cover only the Registry model, admin display/API, provider activation preservation, importer/public-sync rights gates, and focused tests. Other local work remains outside this branch.
 - Local isolated checks: `npm test` 264/264 after the additional public-sync rights-gate test; `npm run lint`, `npm run typecheck:api`, and `npm run build` pass. The existing separate Firestore emulator suite in the original worktree passes 9/9 with zero skips; it exercises baseline/proposal rules, not a Registry-specific Firestore schema (Registry adds none).
-- No new Vercel API entrypoint was created. The existing API consolidation test checks nine entrypoints. Local `vercel build` failed while Vercel CLI tried to create symlinks in its Windows cache (`EPERM`); artifact-level function counting still requires the Preview build. No production collector activation or database write was performed.
+- No new Vercel API entrypoint was created. Preview deployment `dpl_C6jDf9ymkCa8NygYtFdDDaXdgtJJ` is READY and its inspected build output has exactly nine lambda functions. Local `vercel build` failed while Vercel CLI tried to create symlinks in its Windows cache (`EPERM`); the remote build succeeded. No production collector activation or database write was performed.
+- Registry activation controls the SQL importer and legacy SQL public-sync plan. The current Turso collector remains a separate OpenFootball-only OIDC endpoint behind its own global write gate; it does not read Neon registry policy. Admin UI now states this boundary explicitly. A unified Turso policy needs a separately reviewed, non-Neon design before claiming complete source management.
 
 ### Original 20 phases: evidence checkpoint
 
@@ -20,7 +21,7 @@ Statuses refer to the named phase as a whole; a working subfeature does not mean
 | 03 Infrastructure and costs | Partial | Turso public snapshot and cache are deployed per prior handoff; no current end-to-end cost measurement. |
 | 04 Central football DB | Partial | `server/footballAnalytics/database.ts` and normalization exist; private analytics still depend on Neon. |
 | 05 Python scraping | Blocked | No approved fresh multi-tier source or verified commercial rights; no scraper activated. |
-| 06 Data Source Manager | Completed locally, production pending | Isolated Registry, API/admin gates and tests; Preview and production verification still required. |
+| 06 Data Source Manager | Partial | Isolated Registry, API/admin gates and tests; Turso collector policy remains separate, and production verification is pending. |
 | 07 Historical football DB | Partial / blocked | Historical importers and real archive exist; lower tiers and commercial import rights remain incomplete. |
 | 08 Data quality | Partial | `normalization.ts`, conflict tests and source provenance exist; cross-source quality coverage is incomplete. |
 | 09 Football statistics | Partial | HT/FT, form and H2H calculations have unit tests; production data freshness and full formula audit remain open. |
