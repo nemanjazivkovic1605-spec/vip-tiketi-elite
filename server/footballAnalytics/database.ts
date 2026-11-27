@@ -130,7 +130,11 @@ export async function analyticsSchemaReady(db: AnalyticsDatabase) {
       (await db.query("SELECT version FROM fa_schema WHERE version = $1", [1]))
         .length > 0
     );
-  } catch {
-    return false;
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    const message = error instanceof Error ? error.message : "";
+    if (code === "42P01" || (db.kind === "sqlite" && /no such table: fa_schema\b/i.test(message)))
+      return false;
+    throw error;
   }
 }

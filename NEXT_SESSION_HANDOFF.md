@@ -2,6 +2,13 @@
 
 Updated: 2026-11-27
 
+## 2026-11-27 analytics outage diagnosis
+
+- Isolated branch `codex/analytics-recovery-20261127` starts from merged PR #19 (`acf6525`); the original 140-path dirty worktree and verified backup remain untouched.
+- Production has `ANALYTICS_DATABASE_URL` configured as a Vercel Secret. Preview and Development do not have that variable. Vercel CLI correctly refuses to export the Production secret, so no direct local SQL connection or schema inventory was attempted.
+- Existing `analyticsSchemaReady` swallowed every SQL error and called an unavailable Neon connection an uninitialized schema. It now returns false only for an actual missing `fa_schema` table and propagates connection/quota errors to the existing 503 handler. The admin view clears a stale overview on failure, so it cannot offer migration during an outage.
+- No database migration, import, production write, source activation, or Neon-heavy query has run. Local checks on this branch: 266/266 tests, lint, API typecheck and build pass. Production diagnosis remains pending Preview/Production verification; do not infer that tables are absent from the old message.
+
 ## 2026-11-27 isolated Registry continuation
 
 - Original dirty worktree remains on `feature/elite-pro-football-database`. Its 112 status entries expanded to 140 paths; all 140 were copied and SHA-256 verified in `C:\Users\Nemanja\.codex\backups\elitevip-main-worktree-20261127-140path-refresh` (manifest SHA-256 `04F318C96D9CA7F3680EFB590AF9D9EEB3F9D917D71E3A464EDDA8C5150B0E0D`). No original path was reset or deleted.

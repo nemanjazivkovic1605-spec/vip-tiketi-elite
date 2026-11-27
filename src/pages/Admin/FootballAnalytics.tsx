@@ -104,7 +104,10 @@ export default function FootballAnalytics() {
     const c = new AbortController();
     setError("");
     void loadOverview(c.signal).catch((e) => {
-      if (!c.signal.aborted) setError(e.message);
+      if (!c.signal.aborted) {
+        setOverview(null);
+        setError(e.message);
+      }
     });
     return () => c.abort();
   }, [loadOverview]);
