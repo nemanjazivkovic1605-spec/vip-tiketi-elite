@@ -422,7 +422,7 @@ export default function FootballAnalytics() {
               Registar izvora · pokrivenost, limiti i prava
             </summary>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[11px] text-neutral-500">Registry ne pokreće provider pozive. Aktivacija važi za interni importer i SQL javni sync; postojeći Turso collector ima zaseban write gate i prihvata samo OpenFootball.</p>
+              <p className="text-[11px] text-neutral-500">Registry ne pokreće provider pozive. Prava izvora važe i za Turso collector; SQL aktivacija ne menja njegovu serversku allowlistu, globalni write gate ili proveru svežine.</p>
               <button type="button" disabled={!!busy} onClick={() => void runSourceDryRun()} className={command}>
                 {busy === "source-dry-run" ? "Provera…" : "Dry-run policy-ja"}
               </button>
@@ -465,6 +465,7 @@ export default function FootballAnalytics() {
                     <p>{source.qualityNote}</p>
                     <p className="mt-1">Uvezeno: {source.coverage.matches}{source.coverage.total ? `/${source.coverage.total}` : ""} · FT {source.coverage.finished} · HT {source.coverage.withHt} · xG {source.coverage.withXg}{source.coverage.completenessPct === null ? "" : ` · kompletno ${source.coverage.completenessPct}%`}</p>
                     <p className="mt-1">Licenca: {source.rights.licenseStatus} · interno {source.rights.internalUse} · javno {source.rights.publicDisplay} · komercijalno {source.rights.commercialUse}</p>
+                    <p className={source.collector.sourceAllowed ? "mt-1 text-emerald-300" : "mt-1 text-amber-200"}>Turso collector izvor: {source.collector.sourceAllowed ? "dozvoljen policy-jem" : source.collector.reason || "blokiran"}</p>
                     {source.rights.conditions.length > 0 && <p className="mt-1 text-amber-200">Uslovi: {source.rights.conditions.join("; ")}</p>}
                     {source.rights.termsUrl && <a className="mt-1 inline-block text-gold-300 underline" href={source.rights.termsUrl} target="_blank" rel="noreferrer">Uslovi izvora</a>}
                     {source.license && <p className="mt-1 text-neutral-500">{source.license}</p>}
@@ -482,7 +483,7 @@ export default function FootballAnalytics() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-neutral-500">
-              Podešen ključ nije dokaz konekcije ili limita. „Nije mereno“ se ne zamenjuje procenom; nepotvrđena prava blokiraju aktivaciju. Ovaj toggle ne menja zasebni Turso collector ni njegov globalni write gate.
+              Podešen ključ nije dokaz konekcije ili limita. „Nije mereno“ se ne zamenjuje procenom; nepotvrđena prava blokiraju aktivaciju. Dozvoljen izvor nije dokaz uspešnog sync-a: Turso write gate i svežina se proveravaju zasebno.
             </p>
           </details>
         )}
