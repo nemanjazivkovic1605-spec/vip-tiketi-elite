@@ -27,6 +27,7 @@ export default function HistoricalAnalytics() {
   const [view, setView] = useState<View>('matches');
   const [overview, setOverview] = useState<HistoricalOverview | null>(null);
   const [error, setError] = useState('');
+  const [schemaMissing, setSchemaMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
@@ -35,11 +36,16 @@ export default function HistoricalAnalytics() {
   const refresh = useCallback(() => setRevision(value => value + 1), []);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setSchemaMissing(false);
     const params = Object.fromEntries(Object.entries({ ...filters, offset }).map(([key, value]) => [key, String(value)]));
     analyticsRequest<HistoricalOverview>('historical-overview', params, 'GET', controller.signal)
       .then(value => { if (!controller.signal.aborted) setOverview(value); })
-      .catch(value => { if (!controller.signal.aborted) setError(value instanceof Error ? value.message : 'Baza trenutno nije dostupna.'); })
+      .catch(value => {
+        if (controller.signal.aborted) return;
+        setOverview(null);
+        setSchemaMissing(value instanceof Error && 'status' in value && value.status === 409);
+        setError(value instanceof Error ? value.message : 'Baza trenutno nije dostupna.');
+      })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [filters, offset, revision]);
@@ -62,7 +68,7 @@ export default function HistoricalAnalytics() {
         <div><p className="mb-1 text-[10px] font-semibold uppercase text-gold-400">Fudbal · Engleska</p><h1 className="text-xl font-bold sm:text-2xl">Rezultati i H2H</h1><p className="mt-1 text-xs text-neutral-500">Engleske lige · rangovi 1–7 · sezone 2023/24–2026/27</p></div>
         <button type="button" className={command} onClick={refresh} disabled={loading} title="Osveži pregled"><RefreshCw size={14} className={loading ? 'motion-safe:animate-spin' : ''} /><span className="hidden sm:inline">Osveži</span></button>
       </div>
-      {error && <div role="alert" className="mb-4 space-y-3 rounded-md border border-amber-500/25 p-4 text-sm text-amber-200"><p>{error}</p>{!overview && <button type="button" className={command} disabled={migrating} onClick={() => void migrate()}><Database size={15} />{migrating ? 'Inicijalizacija…' : 'Inicijalizuj odvojenu analitičku šemu'}</button>}</div>}
+      {error && <div role="alert" className="mb-4 space-y-3 rounded-md border border-amber-500/25 p-4 text-sm text-amber-200"><p>{error}</p>{schemaMissing && <button type="button" className={command} disabled={migrating} onClick={() => void migrate()}><Database size={15} />{migrating ? 'Inicijalizacija…' : 'Inicijalizuj odvojenu analitičku šemu'}</button>}</div>}
       <div className="grid min-w-0 gap-5 lg:grid-cols-[216px_minmax(0,1fr)] xl:grid-cols-[232px_minmax(0,1fr)]">
         <aside className="hidden self-start border-r border-[#292929] pr-4 lg:sticky lg:top-4 lg:block">
           <h2 className="mb-3 flex items-center gap-2 px-2 text-[11px] font-semibold uppercase text-neutral-500"><Trophy size={14} />Engleske lige</h2>

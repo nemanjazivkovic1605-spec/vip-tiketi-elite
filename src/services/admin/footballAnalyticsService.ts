@@ -27,7 +27,9 @@ export async function analyticsRequest<T>(
     );
     const data = await response.json();
     if (!response.ok)
-      throw new Error(data.error || "Analizator trenutno nije dostupan.");
+      throw Object.assign(new Error(data.error || "Analizator trenutno nije dostupan."), {
+        status: response.status,
+      });
     return data as T;
   } catch (error) {
     if (controller.signal.aborted)
