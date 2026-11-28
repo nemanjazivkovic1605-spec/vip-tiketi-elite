@@ -8,6 +8,16 @@ type AppErrorBoundaryState = {
   hasError: boolean;
 };
 
+const CHUNK_RETRY_WINDOW_MS = 60_000;
+const CHUNK_ERROR = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk .* failed|ChunkLoadError/i;
+
+export function shouldRetryChunkLoad(error: Error, previousAttempt: string | null, now: number) {
+  if (!CHUNK_ERROR.test(error.message)) return false;
+  if (previousAttempt === null) return true;
+  const attemptedAt = Number(previousAttempt);
+  return !Number.isFinite(attemptedAt) || now - attemptedAt > CHUNK_RETRY_WINDOW_MS;
+}
+
 export default class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
   declare readonly props: AppErrorBoundaryProps;
 
@@ -19,6 +29,15 @@ export default class AppErrorBoundary extends React.Component<AppErrorBoundaryPr
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('Application render error:', error, errorInfo);
+    if (typeof window === 'undefined') return;
+    const key = `elite:chunk-retry:${window.location.pathname}`;
+    try {
+      const now = Date.now();
+      if (shouldRetryChunkLoad(error, window.sessionStorage.getItem(key), now)) {
+        window.sessionStorage.setItem(key, String(now));
+        window.location.reload();
+      }
+    } catch { /* Storage can be unavailable; keep the manual refresh fallback. */ }
   }
 
   render() {

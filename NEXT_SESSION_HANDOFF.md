@@ -1,6 +1,6 @@
 # EliteVIPTips Handoff
 
-Updated: 2026-11-27
+Updated: 2026-11-28
 
 ## 2026-11-27 production analytics and Turso collector policy
 
@@ -9,7 +9,8 @@ Updated: 2026-11-27
 - Public Turso ingest now consults the central `DATA_SOURCE_REGISTRY` for every incoming provider. It fails closed unless the server-side `PUBLIC_FOOTBALL_COLLECTOR_SOURCES` allowlist names that provider and its Registry record confirms unconditional public/commercial use. Unknown or conditional sources cannot write. The policy uses no Neon query; OIDC, `PUBLIC_FOOTBALL_SYNC_ENABLED`, Turso writer, freshness, and compare-and-swap gates remain. The allowlist is deliberately unset; no production sync is activated while OpenFootball is stale.
 - PR #22 merged as `0a8c584`; Preview `dpl_4uTvTAwJJA9sNZ9RHvYuL2ikSEZR` and Production `dpl_Ht5K7cggWegeLjpG285zBp5WSzLH` reached READY. Both build outputs list nine lambda functions. Production has no `PUBLIC_FOOTBALL_COLLECTOR_SOURCES` variable, so collector ingest remains fail-closed. Smoke checks: `/`, `/history`, `/stats`, `/fudbal` returned HTTP 200; unauthenticated collector status returned HTTP 403. Protected Preview returned 302 to anonymous HTTP, so authenticated Preview E2E is not claimed.
 - Local PR #22 checks: `npm test` 269/269; `npm run lint`, `npm run typecheck:api`, `npm run build` passed. `npm run vercel:functions:check` requires a local `.vercel/output/functions`; the actual Vercel Preview and Production outputs were inspected instead. No database writes were made.
-- The next isolated change reports the effective Turso collector source policy in the existing admin Registry. SQL activation does not change the collector allowlist, global write gate or freshness gate.
+- PR #23 merged as `e1629a8`; Preview `dpl_Efr12bXGvVcaJjBL6nHCDcsvoAYV` and Production `dpl_5DrqNrPoe8q5nDUHhdiwqXCpqGGw` reached READY with nine functions. Authenticated production admin Registry displayed `Collector allowlista nije podešena` for OpenFootball; SQL activation cannot change the collector allowlist, global write gate or freshness gate. Local checks: 270/270 tests, lint, API typecheck and build passed. No database write was made.
+- During production admin verification an already-open SPA attempted to load the previous deployment's hashed `FootballAnalytics` chunk and temporarily showed the error boundary. One refresh loaded the current app and the Registry worked. A separate isolated fix adds one bounded automatic reload only for lazy-chunk failures, retaining the manual fallback on repeated failure.
 - Phase 06 remains partial until a fresh licensed feed supports a verified sync. Phase 14 remains gated. No entire additional master phase can be claimed complete from these changes.
 
 ## 2026-11-27 analytics outage diagnosis
