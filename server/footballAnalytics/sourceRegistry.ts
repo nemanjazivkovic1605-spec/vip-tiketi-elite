@@ -18,6 +18,7 @@ type SourceDefinition = Omit<
   | "enabled"
   | "canEnable"
   | "enableBlockReason"
+  | "collector"
   | "usage"
   | "coverage"
   | "reliability"
@@ -321,6 +322,7 @@ export async function sourceRegistry(db?: AnalyticsDatabase, coverageRows: Cover
     const internalAcknowledged = typeof activation.internalAcknowledgedAt === "string" && Boolean(activation.internalAcknowledgedAt);
     const publicAcknowledged = typeof activation.publicAcknowledgedAt === "string" && Boolean(activation.publicAcknowledgedAt);
     const status = current?.status || (configured ? "configured_not_verified" : "not_checked");
+    const collectorPolicy = collectorSourcePolicy(definition.id);
     return {
       id: definition.id, name: definition.name, url: definition.url, format: definition.format,
       availability: definition.availability, fields: definition.fields, tierCoverage: definition.tierCoverage,
@@ -344,6 +346,7 @@ export async function sourceRegistry(db?: AnalyticsDatabase, coverageRows: Cover
         internal: permissionBlock(definition, "internal"),
         public: permissionBlock(definition, "public"),
       },
+      collector: { sourceAllowed: collectorPolicy.allowed, reason: collectorPolicy.reason },
       usage: {
         requestsUsed: typeof usage.requestsUsed === "number" && Number.isFinite(usage.requestsUsed) && usage.requestsUsed >= 0 ? usage.requestsUsed : null,
         requestsRemaining: typeof usage.requestsRemaining === "number" && Number.isFinite(usage.requestsRemaining) && usage.requestsRemaining >= 0 ? usage.requestsRemaining : null,

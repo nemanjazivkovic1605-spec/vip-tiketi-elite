@@ -9,6 +9,21 @@ test('Turso collector requires explicit allowlist and confirmed public rights wi
   assert.equal(collectorSourcePolicy('api-football', 'api-football').allowed, false);
   assert.equal(collectorSourcePolicy('not-registered', 'not-registered').allowed, false);
 });
+test('admin registry reports the effective collector source gate without querying Neon', async () => {
+  const previous = process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES;
+  try {
+    process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES = 'openfootball,api-football';
+    const rows = await sourceRegistry();
+    assert.equal(rows.find(source => source.id === 'openfootball')?.collector.sourceAllowed, true);
+    assert.equal(rows.find(source => source.id === 'api-football')?.collector.sourceAllowed, false);
+    delete process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES;
+    const blocked = await sourceRegistry();
+    assert.match(blocked.find(source => source.id === 'openfootball')?.collector.reason || '', /allowlista/i);
+  } finally {
+    if (previous === undefined) delete process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES;
+    else process.env.PUBLIC_FOOTBALL_COLLECTOR_SOURCES = previous;
+  }
+});
 test("source registry describes capabilities and keeps unknown usage rights unapproved", () => {
   const open = DATA_SOURCE_REGISTRY.find((source) => source.id === "openfootball");
   const apiFootball = DATA_SOURCE_REGISTRY.find((source) => source.id === "api-football");

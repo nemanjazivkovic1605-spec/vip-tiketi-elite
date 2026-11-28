@@ -47,6 +47,7 @@ export type SourceRegistryEntry = {
   enabled: { internal: boolean; public: boolean };
   canEnable: { internal: boolean; public: boolean };
   enableBlockReason: { internal: string | null; public: string | null };
+  collector: { sourceAllowed: boolean; reason: string | null };
   usage: { requestsUsed: number | null; requestsRemaining: number | null; checkedAt: string | null };
   coverage: { matches: number; total: number; finished: number; withHt: number; withXg: number; completenessPct: number | null };
 };
